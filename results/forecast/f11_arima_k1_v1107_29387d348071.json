@@ -1,0 +1,161 @@
+{
+ "config": {
+  "name": "f11_arima_k1_v1107",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": false,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "arima",
+  "model_params": {},
+  "seq_len": 12,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "29387d348071",
+ "model": {
+  "file": "arima",
+  "name": "ARIMA",
+  "input_shape": "series",
+  "params": {
+   "p": 2,
+   "d": 0,
+   "q": 2,
+   "trend": "c",
+   "enforce_stationarity": true,
+   "enforce_invertibility": true,
+   "scale": 100.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "engine_rev": "2026-11-07",
+ "n_folds": 120,
+ "n_features": 0,
+ "feature_names": [],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {
+  "rmse": 0.0035613639861644436,
+  "mae": 0.0021741023439743666,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.8916666666666667,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -5.32089020445846,
+  "dm_vs_zero_p": 1.0326071198107911e-07,
+  "dm_vs_naive": 1.070929479245776,
+  "dm_vs_naive_p": 0.2842011396722688,
+  "level_rmse": 0.2921701863184018,
+  "level_mape": 0.002162377626732819,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_mape_vs_naive": -0.1755807298788543,
+  "dm_ape_vs_naive": 1.8377687080678886,
+  "dm_ape_vs_naive_p": 0.06609649448505506,
+  "skill_vs_naive": -0.08612591592740082
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 12.9,
+ "periods": {
+  "data": [
+   "2009-01-01",
+   "2025-03-01"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2024-01-01"
+  },
+  "embargo": 1,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 120,
+  "first_fold": {
+   "train": [
+    "2009-02-01",
+    "2013-11-01"
+   ],
+   "val": null,
+   "test": [
+    "2014-01-01",
+    "2014-01-01"
+   ],
+   "n_train": 58,
+   "n_val": 0,
+   "n_test": 1
+  },
+  "last_fold": {
+   "train": [
+    "2018-12-01",
+    "2023-10-01"
+   ],
+   "val": null,
+   "test": [
+    "2023-12-01",
+    "2023-12-01"
+   ],
+   "n_train": 59,
+   "n_val": 0,
+   "n_test": 1
+  },
+  "test": [
+   "2014-01-01",
+   "2023-12-01"
+  ]
+ }
+}

@@ -1,0 +1,217 @@
+{
+ "config": {
+  "name": "",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "A1",
+   "B1"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "283a693f87bd",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 1.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 148,
+ "n_features": 20,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20",
+  "A1",
+  "B1_diff"
+ ],
+ "feature_importance": [
+  0.0010051939125551993,
+  0.0013442141873017163,
+  0.003033952580398873,
+  0.002319554871155971,
+  0.0011209187176758589,
+  0.0024570218278465355,
+  0.004470879917061619,
+  0.003642358475793121,
+  0.0031589011011161944,
+  0.0017052702001390657,
+  0.0007597306239367996,
+  0.0006935038747088652,
+  0.002523577855086444,
+  0.0025965790094414805,
+  0.0018652516860193857,
+  0.0034540855397774397,
+  0.0007811418781224668,
+  0.000742174261927233,
+  0.0005154316110850636,
+  0.0005572019630123856
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {
+  "A1": 59,
+  "B1": 66
+ },
+ "lag_unconfirmed": [],
+ "transforms_used": {
+  "A1": "none",
+  "B1": "diff"
+ },
+ "prediction_metrics": {
+  "rmse": 0.01787013525709624,
+  "mae": 0.013049877669916866,
+  "dir_acc": 0.4996782496782497,
+  "dm_vs_zero": 2.3617903944786973,
+  "dm_vs_zero_p": 0.01818692180459136
+ },
+ "performance": {
+  "n_periods": 3108,
+  "total_return": -0.4745264905862374,
+  "cagr": -0.05083446782762491,
+  "ann_vol": 0.22076054072179174,
+  "sharpe": -0.12548274095691675,
+  "sortino": -0.13702465565269972,
+  "mdd": -0.6519981565309622,
+  "win_rate": 0.4038642789820924,
+  "benchmark_total_return": 0.6935584740462746,
+  "benchmark_cagr": 0.043641564742352035,
+  "benchmark_mdd": -0.46494921971761083,
+  "excess_total_return": -1.168084964632512,
+  "excess_mean_per_period": -0.0004305906311146825,
+  "n_trades": 903,
+  "turnover": 903.0,
+  "exposure": 0.5398970398970399,
+  "total_cost": 0.58695,
+  "bootstrap_p_excess": 0.995,
+  "deflated_sharpe_p": 0.9981584954646936,
+  "return_skew": -0.3291429351050396,
+  "return_kurt": 12.31470464476558,
+  "trial_sr_var": null,
+  "n_trials_so_far": 82
+ },
+ "period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "prediction_period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "n_predictions": 3108,
+ "variable_first_date": {
+  "A1": "2007-01-29",
+  "B1_diff": "2009-04-17"
+ },
+ "device": "cuda",
+ "seconds": 4.4,
+ "periods": {
+  "data": [
+   "2012-04-19",
+   "2024-12-05"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 148,
+  "first_fold": {
+   "train": [
+    "2009-09-30",
+    "2012-04-16"
+   ],
+   "val": null,
+   "test": [
+    "2012-04-19",
+    "2012-05-18"
+   ],
+   "n_train": 635,
+   "n_val": 0,
+   "n_test": 21
+  },
+  "last_fold": {
+   "train": [
+    "2021-10-12",
+    "2024-11-04"
+   ],
+   "val": null,
+   "test": [
+    "2024-11-07",
+    "2024-12-05"
+   ],
+   "n_train": 754,
+   "n_val": 0,
+   "n_test": 21
+  },
+  "test": [
+   "2012-04-19",
+   "2024-12-05"
+  ]
+ }
+}

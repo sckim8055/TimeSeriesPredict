@@ -1,0 +1,86 @@
+/** 파라미터 쉬운 설명 — 처음 보는 사람용.
+ *  name: 칸 제목(쉬운 이름) · what: 무엇인지 한 줄(비유 허용) · up / down: 키우면 / 줄이면 무슨 일이 생기나
+ *  모델별 항목이 우선, 없으면 공통(_) 항목. 원래 설명(desc)은 칸의 '자세히'에 그대로 남는다. */
+export type Help = { name: string; what: string; up?: string; down?: string; choice?: boolean }  // choice: up/down 이 '키우면/줄이면'이 아니라 선택지 설명
+
+const RNN_HIDDEN: Help = {
+  name: '기억 칸 수 (은닉 크기)',
+  what: '은닉 = 겉으로 안 보이는 신경망 안의 기억. 시점을 하나씩 지나며 "지금까지 본 흐름"을 이 개수의 숫자에 적어 다음 시점으로 넘긴다',
+  up: '더 복잡한 관계를 기억 · 가중치가 제곱으로 늘어 느려지고, 데이터가 적으면 외워 버림(과적합)',
+  down: '빠르고 단순 · 너무 작으면 중요한 흐름을 못 담음',
+}
+const EPOCHS = (n = 'epochs'): Help => ({ name: '학습 반복 횟수 (' + n + ')', what: '학습 데이터를 처음부터 끝까지 몇 바퀴 볼지의 상한', up: '더 오래 배움(조기종료가 있으면 그 전에 멈춤) · 시간 증가', down: '빨리 끝남 · 덜 배운 채로 멈출 수 있음' })
+const LR = (n: string): Help => ({ name: '학습 보폭 (' + n + ')', what: '틀린 만큼 가중치를 한 번에 얼마나 크게 고칠지', up: '빨리 배우지만 손실이 튀고 발산할 수 있음', down: '안정적이지만 느림, 덜 배운 채 끝날 수 있음' })
+const BATCH: Help = { name: '한 번에 보는 창 수 (batch_size)', what: '몇 개의 창을 보고 나서 가중치를 한 번 고칠지', up: '고치는 방향이 안정·GPU 에서 빠름 · 덜 세밀', down: '자주 고침, 들쭉날쭉 · 느림' }
+const PATIENCE: Help = { name: '참을성 (patience)', what: '검증 성적이 나아지지 않아도 몇 바퀴 더 기다린 뒤 멈출지', up: '늦게 멈춤(끝까지 가 보고 가장 좋던 때를 고름)', down: '빨리 멈춤 · 잠깐 정체를 끝으로 오해할 수 있음' }
+
+const H: Record<string, Record<string, Help>> = {
+  _: {
+    '@seq_len': { name: '창 길이 (seq_len)', what: '한 번 예측할 때 들여다보는 과거 기간 수(결정일 포함)', up: '더 먼 과거의 패턴까지 봄 · 만들 수 있는 창 수가 줄고 느려짐', down: '최근만 봄 · 긴 주기(1년 등)를 놓침' },
+  },
+  biva: {
+    RIN: { name: '창마다 높낮이 지우기 (RIN)', what: '창·변수마다 평균을 빼고 표준편차로 나눠 "모양"만 보게 하고(학습되는 배율·이동 포함), 예측 뒤 되돌림', up: '예: 켜면 수준이 계속 바뀌는 데이터에 강함 · 빈 칸이 있으면 계산이 깨짐(BRITS 와 같이 쓰기 어려움)' },
+    input_scaler: { name: '입력 눈금 맞추기', what: '단위가 다른 변수(%, 원, 지수)를 같은 눈금으로 바꾸는 방식', up: 'minmax: 학습 기간 최소=0·최대=1 (원본, BRITS 채운 값과 범위가 맞음)', down: 'standard: 평균=0·흩어짐=1', choice: true },
+    use_brits: { name: '빈 칸을 신경망이 채움 (BRITS)', what: '창 안의 빈 칸(아직 시작 전인 변수)을 앞뒤 흐름과 다른 변수로 추정해 채울지 — 중간에 빈 달은 엔진이 먼저 직전 값으로 채움', up: '예(원본): 빈 칸을 그럴듯하게 채움 · 학습이 느림', down: '아니오: 학습 기간 평균으로 채움 · 빠름', choice: true },
+    rnn_hid_size: { ...RNN_HIDDEN, name: 'BRITS 기억 칸 수 (은닉 크기)', what: '은닉 = 겉으로 안 보이는 내부 기억. BRITS 가 시점을 따라가며 "지금까지 본 흐름"을 이 개수의 숫자로 들고 다니며 빈 칸을 추정' },
+    imputed_weight: { name: '빈 칸 채우기 중요도', what: '학습할 때 "관측된 칸을 얼마나 잘 되살리나" 점수를 얼마나 무겁게 볼지', up: '채우기 정확도 우선 · 예측 성적이 희생될 수 있음', down: '예측 위주 · 채운 값이 엉성할 수 있음' },
+    moving_avg: { name: '추세를 구하는 평균 기간', what: '이 기간의 이동평균 = 추세, 원래 값 − 추세 = 주기(출렁임)', up: '추세가 더 매끈해지고(느린 흐름만), 나머지 변동은 주기 쪽으로', down: '추세가 원래 값에 가까워지고 주기는 작아짐' },
+    conv1d: { name: '변수 섞기 층 (Conv1d)', what: '여러 변수를 같은 시점끼리 가중합해 줄여 가는 층. 원본은 항상 켜짐(끄면 원본 코드가 오류)' },
+    conv_kernal: { name: '섞기 층의 폭 (커널)', what: '몇 개 시점을 함께 섞을지. 원본은 1(같은 시점끼리만)만 동작' },
+    vae_latent_size: { name: '공통요인 수 (잠재 크기)', what: '변수들의 주기(출렁임) 성분을 몇 개의 숫자로 요약할지 — 논문의 "공통요인"', up: '정보를 많이 남김 · 잡음도 남음', down: '핵심만 남김 · 정보 손실' },
+    combination: { name: '추세·주기 섞는 비율 학습', what: '마지막에 추세와 주기를 α : (1−α) 로 섞을 때 α 를 학습할지 (α 는 1 에서 시작, 범위 제한 없음)', up: '예: 데이터에 맞는 비율을 배움', down: '아니오: 그냥 더함', choice: true },
+    target_scale: { name: '맞힐 값의 눈금', what: '맞힐 값을 학습 기간 평균·흩어짐으로 맞춰 학습 후 되돌릴지', up: 'standard(기본): 작은 변화율도 잘 배움', down: 'none(원본): 그대로 — 변화율처럼 아주 작은 값이면 거의 안 배워짐', choice: true },
+    learning_rate: LR('learning_rate'),
+    lradj: { name: '보폭 줄이는 일정', what: '학습 도중 보폭(학습률)을 언제 얼마나 줄일지. 3 = 10바퀴를 돈 뒤 11바퀴째부터 1/10 (원본)' },
+    batch_size: BATCH,
+    train_epochs: EPOCHS('train_epochs'),
+    patience: PATIENCE,
+    init_checkpoint: { name: '시작 가중치 파일', what: '비우면 무작위로 시작. 원본 체크포인트(.pth)에서 이어 학습할 때만 경로 입력' },
+  },
+  lstm: {
+    hidden: { ...RNN_HIDDEN, what: '은닉 = 겉으로 안 보이는 내부 기억. LSTM 셀이 시점마다 "지금까지 본 흐름"을 이 개수의 숫자(h)에 적어 다음 시점으로 넘김. 마지막 시점의 h 로 예측' },
+    layers: { name: '층 수', what: '셀 줄을 몇 겹 쌓을지 — 아래층의 기억을 윗층이 다시 읽음', up: '더 추상적인 패턴 · 느리고 과적합 쉬움', down: '단순·빠름' },
+    dropout: { name: '일부 끄기 비율 (dropout)', what: '학습할 때만 기억 칸 일부를 무작위로 0 으로 꺼서 특정 칸에 기대지 않게 함', up: '외우기(과적합) 억제 · 너무 크면 배우지 못함', down: '잘 배우지만 외우기 쉬움' },
+    epochs: EPOCHS(), lr: LR('lr'), batch_size: BATCH, patience: PATIENCE,
+    weight_decay: { name: '가중치 줄이기 (weight_decay)', what: '가중치가 커지지 않게 매번 조금씩 0 쪽으로 당김(L2)', up: '단순한 모델 · 과적합 억제', down: '자유롭게 배움' },
+  },
+  ridge: { alpha: { name: '계수 줄이기 세기 (alpha)', what: '변수 계수를 0 쪽으로 당기는 힘(L2 벌점)', up: '모든 계수가 작아져 예측이 평균에 가까움 · 과적합 억제', down: '보통 회귀에 가까움 · 변수가 많으면 과적합' } },
+  lightgbm_model: {
+    n_estimators: { name: '나무 개수', what: '앞 나무의 오차를 다음 나무가 고치며 몇 그루까지 쌓을지', up: '더 정밀 · 과적합·시간 증가', down: '덜 배움' },
+    learning_rate: { name: '나무 하나의 반영 비율', what: '새 나무의 결과를 얼마나 크게 더할지', up: '적은 나무로 빨리 · 과적합 쉬움', down: '나무가 많이 필요 · 안정' },
+    num_leaves: { name: '잎 수 (나무 하나의 칸 수)', what: '나무 하나가 데이터를 최대 몇 무리로 나눌지', up: '세밀한 규칙 · 과적합', down: '굵은 규칙' },
+    max_depth: { name: '질문 깊이', what: '"변수 ≤ 기준?" 질문을 최대 몇 번 이어 할지', up: '복잡한 조합 · 과적합', down: '단순' },
+    min_child_samples: { name: '잎 하나의 최소 표본', what: '한 무리에 최소 몇 개의 날짜가 있어야 나눌지', up: '안정 · 표본이 적으면 아예 못 나눠 상수 예측', down: '세밀 · 우연에 맞춤' },
+    subsample: { name: '나무마다 쓰는 날짜 비율', what: '나무마다 날짜(행)를 무작위로 일부만 씀', up: '1 에 가까우면 모든 날짜', down: '나무끼리 덜 닮음 · 과적합 억제' },
+    colsample_bytree: { name: '나무마다 쓰는 변수 비율', what: '나무마다 변수(열)를 무작위로 일부만 씀', up: '모든 변수', down: '한 변수에 쏠리지 않음' },
+    reg_lambda: { name: '잎 값 줄이기 (L2)', what: '잎이 내는 보정값이 너무 커지지 않게 벌점', up: '보수적', down: '공격적' },
+  },
+  arima: {
+    p: { name: '지난 값 몇 개 (AR 차수 p)', what: '지난 몇 기간의 변화율을 보고 다음을 맞힐지', up: '긴 관성까지 반영 · 계수 증가', down: '최근만' },
+    d: { name: '차분 횟수 (d)', what: '값 대신 "변화"를 몇 번 취해서 맞힐지. 입력이 이미 변화율이라 보통 0', up: '추세 제거', down: '그대로' },
+    q: { name: '지난 오차 몇 개 (MA 차수 q)', what: '지난 몇 기간의 "예상과 실제의 차이(충격)"를 반영할지', up: '충격이 오래 남는 것을 반영', down: '충격 무시' },
+    trend: { name: '상수항', what: 'c: 절편 포함(평균 변화율 = c ÷ (1 − Σφ)) · n: 없음' },
+    enforce_stationarity: { name: '정상성 제약', what: 'AR 계수를 "한 번의 충격이 시간이 지나면 사라지는" 범위(근의 크기 > 1)에서만 찾을지', up: '예(기본, statsmodels·원 노트북과 같음): 폭주하지 않는 계수만', down: '아니오(2026-11-06 전 결과의 설정): 제약 없이 — 근을 계산 따라가기에서 확인', choice: true },
+    enforce_invertibility: { name: '가역성 제약', what: 'MA 계수를 "먼 과거의 오차일수록 덜 남는" 범위(근의 크기 > 1)에서만 찾을지', up: '예(기본, statsmodels·원 노트북과 같음): 해석 가능한 θ 만', down: '아니오(2026-11-06 전 결과의 설정): 가역이 아닌 θ 가 나올 수 있음(예측값은 계산되지만 θ 숫자는 해석 불가)', choice: true },
+  },
+  vecm: {
+    k_ar_diff: { name: '지난 변화 몇 개 (p)', what: '지난 몇 기간의 모든 변수 변화를 볼지', up: '긴 단기 동학 · 계수가 변수 수² 만큼씩 증가', down: '단순' },
+    lag_select: { name: 'p 자동 고르기', what: 'fixed: 위 값 그대로 · aic·bic·hqic: 학습 기간마다 기준으로 고름(bic 가장 보수적)' },
+    coint_rank: { name: '장기 균형식 개수 (r)', what: '변수들이 오래 보면 함께 움직이는 관계를 몇 개 둘지. 0 = 검정으로 자동', up: '관계 많이 · 우연한 관계를 잡을 위험', down: '관계 적게' },
+    rank_test: { name: '자동 r 의 검정 종류', what: 'trace(일반적) / maxeig' },
+    rank_signif: { name: '자동 r 의 기준 엄격도', what: '유의수준. 작을수록 관계를 덜 인정' },
+    deterministic: { name: '상수항 위치', what: 'n: 없음 · ci: 균형식 안 · co: 균형식 밖(꾸준히 오르는 시계열)' },
+    seasons: { name: '계절 더미', what: '달마다 다른 평균 변화를 둘지(12 = 월간)' },
+    log_levels: { name: '로그 수준값', what: '비율 관계를 선형으로 볼지(양수 변수만)' },
+  },
+  ma_cross: { fast: { name: '짧은 평균 기간', what: '빠른 흐름을 잡는 이동평균', up: '덜 민감', down: '민감 · 잦은 매매' }, slow: { name: '긴 평균 기간', what: '느린 흐름을 잡는 이동평균', up: '큰 추세만', down: '짧은 평균과 비슷해짐' } },
+  momentum: { lookback: { name: '되돌아보는 기간', what: '이 기간 전보다 올랐으면 보유', up: '긴 추세', down: '짧은 출렁임에 반응' } },
+  rsi_rule: { window: { name: 'RSI 계산 기간', what: '오른 날과 내린 날의 세기를 비교하는 기간' }, lower: { name: '매수 기준', what: 'RSI 가 이 아래면 많이 떨어진 것으로 보고 매수' }, upper: { name: '매도 기준', what: 'RSI 가 이 위면 많이 오른 것으로 보고 매도' } },
+  sox_gap_fade: { q: { name: '급등 기준(분위)', what: '과거 기간 중 상위 몇 %를 급등으로 볼지(0.9 = 상위 10%)' }, window: { name: '기준을 정하는 과거 기간', what: '급등 기준을 계산하는 과거 일 수(당일 제외)' }, mode: { name: '규칙', what: 'avoid_top: 급등 다음날 현금' }, column: { name: '보는 변수', what: '급등을 판단할 변수' } },
+}
+H.gru = { ...H.lstm, hidden: { ...RNN_HIDDEN, what: '은닉 = 겉으로 안 보이는 내부 기억. GRU 셀이 시점마다 "지금까지 본 흐름"을 이 개수의 숫자(h)에 적어 넘김' } }
+H.sarima = { ...H.arima, P: { name: '작년 같은 철의 값 (계절 AR P)', what: 's 기간 전(예: 12개월 전) 값을 몇 개 볼지' }, D: { name: '계절 차분 (D)', what: '1 이면 "작년 같은 달 대비 변화"로 바꿔 맞힘' }, Q: { name: '작년 같은 철의 오차 (계절 MA Q)', what: 's 기간 전 충격을 반영할지' }, s: { name: '계절 주기 (s)', what: '몇 기간마다 반복되나(월간 12, 주간 52)' } }
+
+export function helpOf(model: string, key: string): Help | null {
+  return H[model]?.[key] ?? H._[key] ?? null
+}

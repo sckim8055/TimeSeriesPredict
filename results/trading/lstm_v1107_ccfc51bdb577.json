@@ -1,0 +1,196 @@
+{
+ "config": {
+  "name": "lstm_v1107",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "lstm",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "ccfc51bdb577",
+ "model": {
+  "file": "lstm",
+  "name": "LSTM",
+  "input_shape": "window",
+  "params": {
+   "hidden": 32,
+   "layers": 1,
+   "dropout": 0.1,
+   "epochs": 100,
+   "lr": 0.001,
+   "batch_size": 64,
+   "patience": 15,
+   "weight_decay": 0.0001
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "engine_rev": "2026-11-07",
+ "n_folds": 149,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-19",
+  "2024-12-30"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {
+  "rmse": 0.017455354809080052,
+  "mae": 0.012848607071289785,
+  "dir_acc": 0.5102432778489117,
+  "dm_vs_zero": 1.6596278374374114,
+  "dm_vs_zero_p": 0.09698934462439324
+ },
+ "performance": {
+  "n_periods": 3124,
+  "total_return": 0.046948478526111614,
+  "cagr": 0.003707781958539824,
+  "ann_vol": 0.227601764779615,
+  "sharpe": 0.1303447219071632,
+  "sortino": 0.14638378045510073,
+  "mdd": -0.5633130019411241,
+  "win_rate": 0.4640151515151515,
+  "benchmark_total_return": 0.8261413383364546,
+  "benchmark_cagr": 0.04977659059609385,
+  "benchmark_mdd": -0.46494921971761083,
+  "excess_total_return": -0.779192859810343,
+  "excess_mean_per_period": -0.00022627246031165882,
+  "n_trades": 481,
+  "turnover": 481.0,
+  "exposure": 0.600832266325224,
+  "total_cost": 0.31265,
+  "bootstrap_p_excess": 0.8875,
+  "deflated_sharpe_p": 0.9543190472719747,
+  "return_skew": -0.19368533597731652,
+  "return_kurt": 10.86130777333625,
+  "trial_sr_var": 0.00024091289746609436,
+  "n_trials_so_far": 86
+ },
+ "period": [
+  "2012-04-19",
+  "2024-12-30"
+ ],
+ "prediction_period": [
+  "2012-04-19",
+  "2024-12-30"
+ ],
+ "n_predictions": 3124,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 105.2,
+ "periods": {
+  "data": [
+   "2012-04-19",
+   "2024-12-30"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 149,
+  "first_fold": {
+   "train": [
+    "2009-05-06",
+    "2011-11-03"
+   ],
+   "val": [
+    "2011-11-08",
+    "2012-04-16"
+   ],
+   "test": [
+    "2012-04-19",
+    "2012-05-18"
+   ],
+   "n_train": 623,
+   "n_val": 110,
+   "n_test": 21
+  },
+  "last_fold": {
+   "train": [
+    "2021-12-07",
+    "2024-06-19"
+   ],
+   "val": [
+    "2024-06-24",
+    "2024-12-03"
+   ],
+   "test": [
+    "2024-12-06",
+    "2024-12-30"
+   ],
+   "n_train": 623,
+   "n_val": 110,
+   "n_test": 16
+  },
+  "test": [
+   "2012-04-19",
+   "2024-12-30"
+  ]
+ }
+}

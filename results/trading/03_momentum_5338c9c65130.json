@@ -1,0 +1,99 @@
+{
+ "config": {
+  "name": "03_momentum",
+  "ticker": "091160_merged",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "model": "momentum",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15
+  },
+  "data_version": "20261102T134628Z",
+  "seed": 2025
+ },
+ "config_hash": "5338c9c65130",
+ "model": {
+  "file": "momentum",
+  "name": "Momentum",
+  "input_shape": "rule",
+  "params": {
+   "lookback": 120
+  }
+ },
+ "data_version": "20261102T134628Z",
+ "code_version": "nogit",
+ "n_folds": 0,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": null,
+ "leak_warning": false,
+ "prediction_metrics": {},
+ "performance": {
+  "n_periods": 4315,
+  "total_return": 1.6432365046783035,
+  "cagr": 0.05840805185765863,
+  "ann_vol": 0.2580330486277575,
+  "sharpe": 0.3489754272692609,
+  "sortino": 0.38428231193615003,
+  "mdd": -0.5390970545076916,
+  "win_rate": 0.5102040816326531,
+  "benchmark_total_return": 8.686346863468584,
+  "benchmark_cagr": 0.14180688951234743,
+  "benchmark_mdd": -0.48777617289894615,
+  "excess_total_return": -7.043110358790281,
+  "excess_mean_per_period": -0.00038990278462208645,
+  "n_trades": 190,
+  "turnover": 190.0,
+  "exposure": 0.6187167014130183,
+  "total_cost": 0.1235,
+  "bootstrap_p_excess": 0.9865,
+  "deflated_sharpe_p": 0.3476319479510003,
+  "n_trials_so_far": 4
+ },
+ "period": [
+  "2009-04-17",
+  "2026-11-02"
+ ],
+ "device": "cpu",
+ "seconds": 0.8
+}

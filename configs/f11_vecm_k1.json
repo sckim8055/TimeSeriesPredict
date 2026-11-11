@@ -1,0 +1,32 @@
+{
+ "name": "f11_vecm_k1",
+ "mode": "forecast",
+ "target_variable": "F11",
+ "frequency": "M",
+ "model": "vecm",
+ "model_params": {},
+ "variable_ids": [
+  "F12",
+  "M3",
+  "N19",
+  "KR3Y"
+ ],
+ "variable_transforms": {
+  "B1": "diff",
+  "F7": "pct",
+  "BOK_RATE": "diff",
+  "KR3Y": "diff",
+  "USDKRW": "pct"
+ },
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "validation": {
+  "train_len": 60,
+  "test_len": 1,
+  "sealed_from": "2024-01-01"
+ },
+ "data_version": "20261103T141116Z",
+ "use_technical": false
+}

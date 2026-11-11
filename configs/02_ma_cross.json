@@ -1,0 +1,20 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "variable_ids": [],
+ "use_technical": true,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 21,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "02_ma_cross",
+ "model": "ma_cross",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z"
+}

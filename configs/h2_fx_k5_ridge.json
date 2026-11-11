@@ -1,0 +1,29 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 5
+ },
+ "variable_ids": [
+  "USDKRW"
+ ],
+ "use_technical": false,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 21,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "h2_fx_k5_ridge",
+ "model": "ridge",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "variable_transforms": {
+  "USDKRW": "pct5"
+ },
+ "lag_override": {},
+ "model_params": {
+  "alpha": 10.0
+ }
+}

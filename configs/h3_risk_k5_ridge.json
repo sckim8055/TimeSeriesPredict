@@ -1,0 +1,34 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 5
+ },
+ "variable_ids": [
+  "VIX",
+  "TERM_US"
+ ],
+ "use_technical": false,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 21,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "h3_risk_k5_ridge",
+ "model": "ridge",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "variable_transforms": {
+  "VIX": "pct",
+  "TERM_US": "diff"
+ },
+ "lag_override": {
+  "VIX": 0,
+  "TERM_US": 0
+ },
+ "model_params": {
+  "alpha": 10.0
+ }
+}

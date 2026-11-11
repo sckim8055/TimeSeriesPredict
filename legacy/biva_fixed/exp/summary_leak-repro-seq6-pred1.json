@@ -1,0 +1,28 @@
+{
+ "variant": "leak-repro",
+ "pred_len": 1,
+ "seq_len": 6,
+ "epochs": 500,
+ "loss_w": [
+  1.0,
+  0.1,
+  0.05
+ ],
+ "n_test": 59,
+ "biva": {
+  "rmse": 1.9313407554920974,
+  "mae": 1.6978004940359177,
+  "mape": 0.017881302822509406
+ },
+ "naive_last_value": {
+  "rmse": 0.0,
+  "mae": 0.0,
+  "mape": 0.0
+ },
+ "test_period": [
+  "2020-05-01",
+  "2025-03-01"
+ ],
+ "seconds": 917.9,
+ "device": "cpu"
+}

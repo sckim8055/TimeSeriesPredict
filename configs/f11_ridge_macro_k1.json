@@ -1,0 +1,34 @@
+{
+ "name": "f11_ridge_macro_k1",
+ "mode": "forecast",
+ "target_variable": "F11",
+ "frequency": "M",
+ "model": "ridge",
+ "model_params": {
+  "alpha": 10
+ },
+ "variable_ids": [
+  "B1",
+  "F7",
+  "BOK_RATE",
+  "KR3Y",
+  "USDKRW"
+ ],
+ "variable_transforms": {
+  "B1": "diff",
+  "F7": "pct",
+  "BOK_RATE": "diff",
+  "KR3Y": "diff",
+  "USDKRW": "pct"
+ },
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "validation": {
+  "train_len": 60,
+  "test_len": 1,
+  "sealed_from": "2024-01-01"
+ },
+ "data_version": "20261103T141116Z"
+}

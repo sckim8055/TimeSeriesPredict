@@ -1,0 +1,25 @@
+{
+ "mode": "forecast",
+ "target_variable": "F11",
+ "ticker": "091160",
+ "frequency": "M",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "use_technical": false,
+ "fill": "ffill",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "seq_len": 6,
+ "validation": {
+  "mode": "walkforward",
+  "train_len": 136,
+  "test_len": 1,
+  "sealed_from": null
+ },
+ "name": "repro_arima_wf",
+ "model": "arima",
+ "model_params": {},
+ "variable_ids": []
+}

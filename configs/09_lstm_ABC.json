@@ -1,0 +1,37 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "variable_ids": [
+  "SOX",
+  "NVDA",
+  "MU",
+  "TSM",
+  "SAMSUNG",
+  "HYNIX",
+  "USDKRW",
+  "KOSPI",
+  "US10Y",
+  "VIX",
+  "BOK_RATE",
+  "KR10Y"
+ ],
+ "use_technical": true,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 63,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "09_lstm_ABC",
+ "model": "lstm",
+ "seq_len": 20,
+ "model_params": {
+  "epochs": 60
+ },
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z"
+}

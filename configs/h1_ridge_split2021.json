@@ -1,0 +1,42 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "variable_ids": [
+  "SOX",
+  "NVDA",
+  "MU",
+  "TSM"
+ ],
+ "use_technical": false,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 21,
+  "sealed_from": "2025-01-01",
+  "mode": "split",
+  "split_date": "2021-01-01"
+ },
+ "name": "h1_ridge_split2021",
+ "model": "ridge",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "variable_transforms": {
+  "SOX": "pct",
+  "NVDA": "pct",
+  "MU": "pct",
+  "TSM": "pct"
+ },
+ "lag_override": {
+  "SOX": 0,
+  "NVDA": 0,
+  "MU": 0,
+  "TSM": 0
+ },
+ "model_params": {
+  "alpha": 10.0
+ }
+}

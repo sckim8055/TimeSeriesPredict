@@ -1,0 +1,131 @@
+{
+ "config": {
+  "name": "05_lgbm_A",
+  "ticker": "091160_merged",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "model": "lightgbm_model",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15
+  },
+  "data_version": "20261102T134628Z",
+  "seed": 2025
+ },
+ "config_hash": "2dcd5e8f0cbd",
+ "model": {
+  "file": "lightgbm_model",
+  "name": "LightGBM",
+  "input_shape": "table",
+  "params": {
+   "n_estimators": 300,
+   "learning_rate": 0.03,
+   "num_leaves": 15,
+   "max_depth": 4,
+   "min_child_samples": 40,
+   "subsample": 0.8,
+   "colsample_bytree": 0.8,
+   "reg_lambda": 1.0
+  }
+ },
+ "data_version": "20261102T134628Z",
+ "code_version": "nogit",
+ "n_folds": 148,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": [
+  0.01349925467316958,
+  0.013652445862307277,
+  0.019102003223058606,
+  0.01932136847107039,
+  0.008823392880298637,
+  0.013097567524292154,
+  0.016475627556320507,
+  0.007124143445646434,
+  0.008362359910648052,
+  0.009349470764907499,
+  0.00996329695280528,
+  0.012384385554665839,
+  0.008046654949548366,
+  0.005089906333277877,
+  0.005276747693691554,
+  0.010793703714896125,
+  0.01287129455345535,
+  0.010205120727167357
+ ],
+ "leak_warning": false,
+ "prediction_metrics": {
+  "rmse": 0.017488978140924104,
+  "mae": 0.012885567904870719,
+  "dir_acc": 0.4974259974259974,
+  "dm_vs_zero": 2.949387772460954,
+  "dm_vs_zero_p": 0.0031840419169082423
+ },
+ "performance": {
+  "n_periods": 4315,
+  "total_return": 2.708084676855156,
+  "cagr": 0.07954031805049411,
+  "ann_vol": 0.2775379395876029,
+  "sharpe": 0.41437982913108723,
+  "sortino": 0.48427303784681364,
+  "mdd": -0.5572023020558741,
+  "win_rate": 0.46186860349950476,
+  "benchmark_total_return": 8.686346863468584,
+  "benchmark_cagr": 0.14180688951234743,
+  "benchmark_mdd": -0.48777617289894615,
+  "excess_total_return": -5.978262186613428,
+  "excess_mean_per_period": -0.00029085940926794666,
+  "n_trades": 673,
+  "turnover": 673.0,
+  "exposure": 0.6277507528376187,
+  "total_cost": 0.43745,
+  "bootstrap_p_excess": 0.9735,
+  "deflated_sharpe_p": 0.33933003838293607,
+  "n_trials_so_far": 6
+ },
+ "period": [
+  "2009-04-17",
+  "2026-11-02"
+ ],
+ "device": "cpu",
+ "seconds": 5.8
+}

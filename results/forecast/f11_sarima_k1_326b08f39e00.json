@@ -1,0 +1,107 @@
+{
+ "config": {
+  "name": "f11_sarima_k1",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": false,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "sarima",
+  "model_params": {},
+  "seq_len": 12,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "326b08f39e00",
+ "model": {
+  "file": "sarima",
+  "name": "SARIMA",
+  "input_shape": "series",
+  "params": {
+   "p": 1,
+   "d": 0,
+   "q": 1,
+   "P": 1,
+   "D": 1,
+   "Q": 1,
+   "s": 12
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 0,
+ "feature_names": [],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {
+  "rmse": 0.00558946017273484,
+  "mae": 0.003251196332691711,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.8916666666666667,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -0.8851333445242415,
+  "dm_vs_zero_p": 0.376084717191171,
+  "dm_vs_naive": 1.9621735310028339,
+  "dm_vs_naive_p": 0.04974228445372053,
+  "level_rmse": 0.462708657490304,
+  "level_mape": 0.0032334269863742568,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_vs_naive": -0.704643943510423,
+  "skill_mape_vs_naive": -0.7578587614204444,
+  "dm_ape_vs_naive": 3.7272452496987873,
+  "dm_ape_vs_naive_p": 0.00019358406759240054
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 32.5
+}

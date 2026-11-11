@@ -1,0 +1,21 @@
+{
+ "version_id": "20261103T140149Z",
+ "created_utc": "2026-11-03T14:01:56.684722+00:00",
+ "files": {
+  "prices_091160.parquet": "8de37ca8331ec5e57c7ead02b4de5d3d85e26a38ad31a9c675aba5998096c420",
+  "prices_091230.parquet": "a0851d5f221cb45a8ecf0551338323e995f198617e86bbb46bebc01ba56a1aef"
+ },
+ "collect_log": {
+  "datago prices 091160": "ok",
+  "datago prices 091230": "ok"
+ },
+ "start": "2006-01-01",
+ "end": null,
+ "tickers": [
+  "091160",
+  "091230"
+ ],
+ "master": "variable_master.xlsx",
+ "variables_collected": 0,
+ "variables_missing": []
+}

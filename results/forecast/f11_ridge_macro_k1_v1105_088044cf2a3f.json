@@ -1,0 +1,178 @@
+{
+ "config": {
+  "name": "f11_ridge_macro_k1_v1105",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "B1",
+   "F7",
+   "BOK_RATE",
+   "KR3Y",
+   "USDKRW"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {
+   "B1": "diff",
+   "F7": "pct",
+   "BOK_RATE": "diff",
+   "KR3Y": "diff",
+   "USDKRW": "pct"
+  },
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {
+   "alpha": 10
+  },
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "088044cf2a3f",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 10.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 20,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_6",
+  "A_ret_12",
+  "A_ma_ratio_3",
+  "A_ma_ratio_6",
+  "A_ma_ratio_12",
+  "A_ma_ratio_24",
+  "A_vol_6",
+  "A_vol_12",
+  "A_rsi_6",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "B1_diff",
+  "F7_pct",
+  "BOK_RATE_diff",
+  "KR3Y_diff",
+  "USDKRW_pct"
+ ],
+ "feature_importance": [
+  0.0012952088717641565,
+  0.0002951158239071638,
+  0.00012190422361400957,
+  9.161339908757691e-05,
+  0.00031026702785596464,
+  0.0006702076010235028,
+  9.618412472972956e-05,
+  0.0001903488717644586,
+  0.0002860758895648491,
+  0.0005900940613130632,
+  0.00037780815627322855,
+  0.00028112063237156385,
+  4.9674214252613886e-05,
+  7.194561071734558e-05,
+  0.000213568955946167,
+  0.00017065201973261458,
+  0.0004228186642003928,
+  0.00026693630451308316,
+  0.0001025836359279087,
+  0.00019812618947082411
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {
+  "B1": 66,
+  "F7": 37,
+  "BOK_RATE": 31,
+  "KR3Y": 0,
+  "USDKRW": 0
+ },
+ "lag_unconfirmed": [
+  "USDKRW"
+ ],
+ "transforms_used": {
+  "B1": "diff",
+  "F7": "pct",
+  "BOK_RATE": "diff",
+  "KR3Y": "diff",
+  "USDKRW": "pct"
+ },
+ "prediction_metrics": {
+  "rmse": 0.004130541382156335,
+  "mae": 0.0024610254053515634,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.9,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -3.9700634878659744,
+  "dm_vs_zero_p": 7.185348306970596e-05,
+  "dm_vs_naive": 1.6093917936595759,
+  "dm_vs_naive_p": 0.10753069855923125,
+  "level_rmse": 0.3524502521110639,
+  "level_mape": 0.0024479593139481374,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_mape_vs_naive": -0.33083775998597376,
+  "dm_ape_vs_naive": 2.7932168063888905,
+  "dm_ape_vs_naive_p": 0.0052186701635017485,
+  "skill_vs_naive": -0.25971062194130634
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {
+  "B1_diff": "2009-05-01",
+  "F7_pct": "2009-04-01",
+  "BOK_RATE_diff": "2009-01-01",
+  "KR3Y_diff": "2009-01-01",
+  "USDKRW_pct": "2009-01-01"
+ },
+ "device": "cuda",
+ "seconds": 1.9
+}

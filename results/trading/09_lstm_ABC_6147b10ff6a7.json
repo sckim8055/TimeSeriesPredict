@@ -1,0 +1,139 @@
+{
+ "config": {
+  "name": "09_lstm_ABC",
+  "ticker": "091160_merged",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "B_SOX",
+   "B_NVDA",
+   "B_MU",
+   "B_TSM",
+   "B_SAMSUNG",
+   "B_HYNIX",
+   "C_USDKRW",
+   "C_KOSPI",
+   "C_US10Y",
+   "C_VIX",
+   "C_BOK_RATE",
+   "C_KR10Y"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "model": "lstm",
+  "model_params": {
+   "epochs": 60
+  },
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 63,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15
+  },
+  "data_version": "20261102T134628Z",
+  "seed": 2025
+ },
+ "config_hash": "6147b10ff6a7",
+ "model": {
+  "file": "lstm",
+  "name": "LSTM",
+  "input_shape": "window",
+  "params": {
+   "hidden": 32,
+   "layers": 1,
+   "dropout": 0.1,
+   "epochs": 60,
+   "lr": 0.001,
+   "batch_size": 64,
+   "patience": 15,
+   "weight_decay": 0.0001
+  }
+ },
+ "data_version": "20261102T134628Z",
+ "code_version": "nogit",
+ "n_folds": 49,
+ "n_features": 30,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20",
+  "B_SOX",
+  "B_NVDA",
+  "B_MU",
+  "B_TSM",
+  "B_SAMSUNG",
+  "B_HYNIX",
+  "C_USDKRW",
+  "C_KOSPI",
+  "C_US10Y",
+  "C_VIX",
+  "C_BOK_RATE",
+  "C_KR10Y"
+ ],
+ "feature_importance": null,
+ "leak_warning": false,
+ "prediction_metrics": {
+  "rmse": 0.017564783651390668,
+  "mae": 0.012980654601294293,
+  "dir_acc": 0.4839650145772595,
+  "dm_vs_zero": 4.186493221638993,
+  "dm_vs_zero_p": 2.8329738972043828e-05
+ },
+ "performance": {
+  "n_periods": 4315,
+  "total_return": 1.7565633315678593,
+  "cagr": 0.06100614193941967,
+  "ann_vol": 0.24661525565853315,
+  "sharpe": 0.3630293017079861,
+  "sortino": 0.36586309857351573,
+  "mdd": -0.48777617289894604,
+  "win_rate": 0.48500468603561386,
+  "benchmark_total_return": 8.686346863468584,
+  "benchmark_cagr": 0.14180688951234743,
+  "benchmark_mdd": -0.48777617289894615,
+  "excess_total_return": -6.929783531900725,
+  "excess_mean_per_period": -0.00039196083756735587,
+  "n_trades": 245,
+  "turnover": 245.0,
+  "exposure": 0.4688441047023396,
+  "total_cost": 0.15925,
+  "bootstrap_p_excess": 0.982,
+  "deflated_sharpe_p": 0.528917445893664,
+  "n_trials_so_far": 10
+ },
+ "period": [
+  "2009-04-17",
+  "2026-11-02"
+ ],
+ "device": "cpu",
+ "seconds": 46.9
+}

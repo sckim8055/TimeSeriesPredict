@@ -1,0 +1,215 @@
+{
+ "config": {
+  "name": "05_lgbm_A_v1107",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "lightgbm_model",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "0e3cddec0fb2",
+ "model": {
+  "file": "lightgbm_model",
+  "name": "LightGBM",
+  "input_shape": "table",
+  "params": {
+   "n_estimators": 300,
+   "learning_rate": 0.03,
+   "num_leaves": 15,
+   "max_depth": 4,
+   "min_child_samples": 40,
+   "subsample": 0.8,
+   "colsample_bytree": 0.8,
+   "reg_lambda": 1.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "engine_rev": "2026-11-07",
+ "n_folds": 149,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": [
+  0.013734942277105863,
+  0.014624981102986798,
+  0.018375421225248784,
+  0.019225599667707444,
+  0.009943394947112631,
+  0.011732934216653066,
+  0.01526247070193597,
+  0.007685864360646764,
+  0.007697636653165624,
+  0.009131906046885638,
+  0.010853916025840077,
+  0.01367562538170687,
+  0.007610554332144077,
+  0.004842041376954719,
+  0.005543800737340028,
+  0.012007329602617982,
+  0.012386316660910396,
+  0.01122754022130202
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {
+  "rmse": 0.01750051054316982,
+  "mae": 0.012909218984208925,
+  "dir_acc": 0.4910141206675225,
+  "dm_vs_zero": 3.4298262817342065,
+  "dm_vs_zero_p": 0.0006039677935976151
+ },
+ "performance": {
+  "n_periods": 3116,
+  "total_return": -0.3284769462383189,
+  "cagr": -0.03169112315394973,
+  "ann_vol": 0.23974225985919093,
+  "sharpe": -0.014173958572583533,
+  "sortino": -0.01780076242906982,
+  "mdd": -0.5596407126729211,
+  "win_rate": 0.43776824034334766,
+  "benchmark_total_return": 0.7996918335901326,
+  "benchmark_cagr": 0.048669453514883276,
+  "benchmark_mdd": -0.46494921971761183,
+  "excess_total_return": -1.1281687798284517,
+  "excess_mean_per_period": -0.0003536392499074541,
+  "n_trades": 703,
+  "turnover": 703.0,
+  "exposure": 0.7140564826700898,
+  "total_cost": 0.45694999999999997,
+  "bootstrap_p_excess": 0.989,
+  "deflated_sharpe_p": 0.979004773526608,
+  "return_skew": -0.16145128105887552,
+  "return_kurt": 8.928291362062309,
+  "trial_sr_var": 0.0001989347479949048,
+  "n_trials_so_far": 97
+ },
+ "period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "prediction_period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "n_predictions": 3116,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 10.1,
+ "periods": {
+  "data": [
+   "2012-05-02",
+   "2024-12-30"
+  ],
+  "requested": {
+   "start": "2009-01-01",
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 149,
+  "first_fold": {
+   "train": [
+    "2009-10-13",
+    "2011-12-06"
+   ],
+   "val": [
+    "2011-12-09",
+    "2012-04-26"
+   ],
+   "test": [
+    "2012-05-02",
+    "2012-05-31"
+   ],
+   "n_train": 538,
+   "n_val": 95,
+   "n_test": 21
+  },
+  "last_fold": {
+   "train": [
+    "2021-11-22",
+    "2024-06-26"
+   ],
+   "val": [
+    "2024-07-01",
+    "2024-12-13"
+   ],
+   "test": [
+    "2024-12-18",
+    "2024-12-30"
+   ],
+   "n_train": 639,
+   "n_val": 113,
+   "n_test": 8
+  },
+  "test": [
+   "2012-05-02",
+   "2024-12-30"
+  ]
+ }
+}

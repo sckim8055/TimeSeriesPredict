@@ -1,0 +1,21 @@
+{
+ "name": "f11_sarima_k1",
+ "mode": "forecast",
+ "target_variable": "F11",
+ "frequency": "M",
+ "model": "sarima",
+ "model_params": {},
+ "variable_ids": [],
+ "variable_transforms": {},
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "validation": {
+  "train_len": 60,
+  "test_len": 1,
+  "sealed_from": "2024-01-01"
+ },
+ "data_version": "20261103T141116Z",
+ "use_technical": false
+}

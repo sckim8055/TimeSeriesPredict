@@ -1,0 +1,146 @@
+{
+ "config": {
+  "name": "01_buyhold_v1107",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "buy_and_hold",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "803772f51e88",
+ "model": {
+  "file": "buy_and_hold",
+  "name": "Buy&Hold",
+  "input_shape": "rule",
+  "params": {}
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "engine_rev": "2026-11-07",
+ "n_folds": 0,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {},
+ "performance": {
+  "n_periods": 3116,
+  "total_return": 0.7985187804380978,
+  "cagr": 0.04861415781227385,
+  "ann_vol": 0.27615761998270744,
+  "sharpe": 0.3102084480906448,
+  "sortino": 0.44937704425487934,
+  "mdd": -0.4649492197176114,
+  "win_rate": 0.5215280025898349,
+  "benchmark_total_return": 0.7996918335901326,
+  "benchmark_cagr": 0.048669453514883276,
+  "benchmark_mdd": -0.46494921971761183,
+  "excess_total_return": -0.0011730531520348642,
+  "excess_mean_per_period": -2.086007702182285e-07,
+  "n_trades": 1,
+  "turnover": 1.0,
+  "exposure": 1.0,
+  "total_cost": 0.00065,
+  "bootstrap_p_excess": 0.982,
+  "deflated_sharpe_p": 0.841185857684157,
+  "return_skew": -0.11859220811841216,
+  "return_kurt": 6.3066417306569145,
+  "trial_sr_var": 0.00022377504493476937,
+  "n_trials_so_far": 93
+ },
+ "period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "prediction_period": [
+  "2012-05-02",
+  "2024-12-30"
+ ],
+ "n_predictions": 3116,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 0.8,
+ "periods": {
+  "data": [
+   "2012-05-02",
+   "2024-12-30"
+  ],
+  "requested": {
+   "start": "2009-01-01",
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 0,
+  "first_fold": null,
+  "last_fold": null,
+  "test": null
+ }
+}

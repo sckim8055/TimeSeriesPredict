@@ -1,0 +1,167 @@
+{
+ "config": {
+  "name": "f11_biva_macro_k1",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "B1",
+   "F7",
+   "BOK_RATE",
+   "KR3Y",
+   "USDKRW"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {
+   "B1": "diff",
+   "F7": "pct",
+   "BOK_RATE": "diff",
+   "KR3Y": "diff",
+   "USDKRW": "pct"
+  },
+  "lag_override": {},
+  "model": "biva",
+  "model_params": {
+   "epochs": 60
+  },
+  "seq_len": 12,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "dffbfa00dbd9",
+ "model": {
+  "file": "biva",
+  "name": "BIVA",
+  "input_shape": "window",
+  "params": {
+   "rnn_hid_size": 32,
+   "vae_latent_size": 4,
+   "moving_avg": 5,
+   "conv1d": true,
+   "conv_kernal": 1,
+   "RIN": false,
+   "combination": true,
+   "imputed_weight": 0.05,
+   "w_pred": 1.0,
+   "w_vae": 0.1,
+   "w_imp": 0.05,
+   "epochs": 60,
+   "lr": 0.001,
+   "batch_size": 32,
+   "patience": 15
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 20,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_6",
+  "A_ret_12",
+  "A_ma_ratio_3",
+  "A_ma_ratio_6",
+  "A_ma_ratio_12",
+  "A_ma_ratio_24",
+  "A_vol_6",
+  "A_vol_12",
+  "A_rsi_6",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "B1_diff",
+  "F7_pct",
+  "BOK_RATE_diff",
+  "KR3Y_diff",
+  "USDKRW_pct"
+ ],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {
+  "B1": 60,
+  "F7": 30,
+  "BOK_RATE": 0,
+  "KR3Y": 1,
+  "USDKRW": 0
+ },
+ "lag_unconfirmed": [
+  "B1",
+  "F7",
+  "BOK_RATE",
+  "KR3Y",
+  "USDKRW"
+ ],
+ "prediction_metrics": {
+  "rmse": 0.00560676322949761,
+  "mae": 0.004122821343285352,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.6916666666666667,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -2.1378622067599493,
+  "dm_vs_zero_p": 0.03252792839849872,
+  "dm_vs_naive": 4.906653115211169,
+  "dm_vs_naive_p": 9.264367055727973e-07,
+  "level_rmse": 0.48991219631924204,
+  "level_mape": 0.004105188226946196,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_vs_naive": -0.7099209380686364,
+  "skill_mape_vs_naive": -1.2317934261164005,
+  "dm_ape_vs_naive": 7.56674018595323,
+  "dm_ape_vs_naive_p": 3.8191672047105385e-14
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {
+  "B1_diff": "2009-05-01",
+  "F7_pct": "2009-04-01",
+  "BOK_RATE_diff": "2009-01-01",
+  "KR3Y_diff": "2009-01-01",
+  "USDKRW_pct": "2009-01-01"
+ },
+ "device": "cpu",
+ "seconds": 88.2
+}

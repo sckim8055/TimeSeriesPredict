@@ -1,0 +1,57 @@
+﻿id,name,description,group,freq,lag_days,transform,source,source_code,default_fill,unit,domain,duplicate_of,active
+USDKRW,원/달러 환율,,위험선호,D,0,none,YF,KRW=X,ffill,,공통,,True
+KOSPI,코스피 지수,,국내시장,D,0,none,YF,^KS11,ffill,,공통,,True
+SOX,필라델피아 반도체지수,,반도체 글로벌,D,1,none,YF,^SOX,ffill,,반도체,,True
+NVDA,엔비디아 주가,,반도체 글로벌,D,1,none,YF,NVDA,ffill,,반도체,,True
+MU,마이크론 주가,,반도체 글로벌,D,1,none,YF,MU,ffill,,반도체,,True
+TSM,TSMC(ADR) 주가,,반도체 글로벌,D,1,none,YF,TSM,ffill,,반도체,,True
+SAMSUNG,삼성전자 주가,,반도체 국내,D,0,none,YF,005930.KS,ffill,,반도체,,True
+HYNIX,SK하이닉스 주가,,반도체 국내,D,0,none,YF,000660.KS,ffill,,반도체,,True
+US10Y,미 국채 10년 금리,,금리·유동성,D,1,none,FRED,DGS10,ffill,,공통,,True
+US2Y,미 국채 2년 금리,,금리·유동성,D,1,none,FRED,DGS2,ffill,,공통,,True
+VIX,VIX 변동성지수,,위험선호,D,1,none,FRED,VIXCLS,ffill,,공통,,True
+FEDFUNDS,미 연방기금금리(월평균),,금리·유동성,M,1,none,FRED,FEDFUNDS,ffill,,공통,,True
+BOK_RATE,한은 기준금리,,금리·유동성,M,0,none,ECOS,722Y001/0101000/M,ffill,,공통,,True
+KR10Y,국고채 10년 금리,,금리·유동성,D,1,none,ECOS,817Y002/010210000/D,ffill,,공통,,True
+KR3Y,국고채 3년 금리,,금리·유동성,D,1,none,ECOS,817Y002/010200000/D,ffill,,공통,,True
+TERM_US,미 장단기 금리차(10y-2y),,금리·유동성,D,1,none,DERIVED,US10Y - US2Y,ffill,,공통,,True
+A1,국내총생산(GDP),Gross domestic product,국내경기,Q,60,none,XLSX,df_Q!A1,ffill,%,공통,,True
+B1,선행종합지수순환변동치,Leading Composite Index,국내경기,M,60,none,XLSX,df_M!B1,ffill,지수,공통,,True
+B2,동행종합지수순환변동치,Coincident Composite Index,국내경기,M,60,none,XLSX,df_M!B2,ffill,지수,공통,,True
+F1,생산자물가지수(총지수),Producer price index (total index),물가,M,30,none,XLSX,df_M!F1,ffill,지수,공통,,True
+F7,소비자물가지수(총지수),Consumer price index (total index),물가,M,30,none,XLSX,df_M!F7,ffill,지수,공통,,True
+F10,생활물가지수,cost of living index,물가,M,30,none,XLSX,df_M!F10,ffill,지수,공통,,True
+F11,주택매매가격지수(KB),Housing sales price index (KB),부동산 가격,M,30,none,XLSX,df_M!F11,ffill,지수,부동산,,True
+F12,주택전세가격지수(KB),Housing jeonse price index (KB),부동산 가격,M,30,none,XLSX,df_M!F12,ffill,지수,부동산,,True
+H1,미분양주택현황,Status of unsold houses,부동산 공급,M,60,none,XLSX,df_M!H1,ffill,호,부동산,,True
+H2,주택건설인허가실적,Housing construction permit record,부동산 공급,M,60,none,XLSX,df_M!H2,ffill,호,부동산,,True
+H3,아파트 매매 실거래가격지수,Actual Transaction Price Index for Apartment Sales,부동산 가격,M,60,none,XLSX,df_M!H3,ffill,지수,부동산,O3,True
+K1,취업자,employed person,국내경기,M,30,none,XLSX,df_M!K1,ffill,천명,공통,,True
+K2,실업자,unemployment rate,국내경기,M,30,none,XLSX,df_M!K2,ffill,천명,공통,,True
+K3,경제활동참가율,Economic activity participation rate,국내경기,M,30,none,XLSX,df_M!K3,ffill,%,공통,,True
+K4,고용률,employment rate,국내경기,M,30,none,XLSX,df_M!K4,ffill,%,공통,,True
+L1,"원/달러(시가,말일) 환율","Won/Dollar (closing price, end date) exchange rate",위험선호,M,30,none,XLSX,df_M!L1,ffill,원,공통,USDKRW,True
+L2,"원/위안(시가,말일) 환율",,위험선호,M,30,none,XLSX,df_M!L2,ffill,원,공통,,True
+L3,"원/100엔(하나은고시,말일) 환율",,위험선호,M,30,none,XLSX,df_M!L3,ffill,원,공통,,True
+L9,경상수지,current account balance,대외,M,60,none,XLSX,df_M!L9,ffill,백만달러,공통,,True
+M3,M2(말잔),M2,금리·유동성,M,60,none,XLSX,df_M!M3,ffill,십억원,공통,,True
+N1,한국은행 기준금리,BOK Base Rate,금리·유동성,M,30,none,XLSX,df_M!N1,ffill,연%,공통,BOK_RATE,True
+N2,(예금은행)총대출 금리(잔액기준),Deposit Bank Gross Loan Rate,가계금융,M,60,none,XLSX,df_M!N2,ffill,연리%,부동산,,True
+N4,(예금은행)가계대출 금리(잔액기준),,가계금융,M,60,none,XLSX,df_M!N4,ffill,연리%,부동산,,True
+N5,(예금은행)주택담보대출 금리(잔액기준),Mortgage Rate,부동산 금융,M,60,none,XLSX,df_M!N5,ffill,연리%,부동산,,True
+N6,(예금은행)전세자금대출 금리(잔액기준),Jeonse loan interest rate,부동산 금융,M,60,none,XLSX,df_M!N6,ffill,연리%,부동산,,True
+N7,(예금은행)일반신용대출 금리(잔액기준),,가계금융,M,60,none,XLSX,df_M!N7,ffill,연리%,부동산,,True
+N8,무담보콜금리 전체,Unsecured Call Rate Total Rate,금리·유동성,M,30,none,XLSX,df_M!N8,ffill,연%,공통,,True
+N10,CD(91일) 금리,CD (91 days) interest rate,금리·유동성,M,30,none,XLSX,df_M!N10,ffill,연%,공통,,True
+N11,CP(91일) 금리,CP (91 days) interest rate,금리·유동성,M,30,none,XLSX,df_M!N11,ffill,연%,공통,,True
+N12,국고채(3년) 금리,Treasury bond (1 year) interest rate,금리·유동성,M,30,none,XLSX,df_M!N12,ffill,연%,공통,KR3Y,True
+N19,가계대출(예금취급기관),household loan,가계금융,M,60,none,XLSX,df_M!N19,ffill,십억원,부동산,,True
+N20,(가계)주택담보대출,(household) home mortgage loan,부동산 금융,M,60,none,XLSX,df_M!N20,ffill,십억원,부동산,,True
+N21,(가계)기타대출,(household) other loans,가계금융,M,60,none,XLSX,df_M!N21,ffill,십억원,부동산,,True
+N24,가계대출_연체율,Household Loan_Delinquency Rate,가계금융,M,60,none,XLSX,df_M!N24,ffill,%,부동산,,True
+O1,주택종합전세가격지수(KB),Housing jeonse price index (KB),부동산 가격,M,30,none,XLSX,df_M!O1,ffill,지수,부동산,,True
+O2,주택매매건수,Housing Trading Cnt,부동산 거래,M,60,none,XLSX,df_M!O2,ffill,호,부동산,,True
+O3,아파트 매매 실거래가격지수,Actual Transaction Price Index for Apartment Sales,부동산 가격,M,60,none,XLSX,df_M!O3,ffill,지수,부동산,,True
+O4,(가계)주택담보대출,(household) home mortgage loan,부동산 금융,M,30,none,XLSX,df_M!O4,ffill,십억원,부동산,N20,True
+US10Y_YF,미국 10년물 금리(야후),,금리·유동성,D,0,none,YF,^TNX,ffill,%,공통,US10Y,True
+VIX_YF,VIX(야후),,위험선호,D,0,none,YF,^VIX,ffill,,공통,VIX,True

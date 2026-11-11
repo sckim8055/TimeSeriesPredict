@@ -1,0 +1,24 @@
+[project]
+name = "tsp"
+version = "0.1.0"
+description = "반도체 ETF 자동매매 시뮬레이션·비교 엔진"
+requires-python = ">=3.13"
+dependencies = [
+  "numpy>=2.0", "pandas>=2.2,<3", "scipy", "scikit-learn", "statsmodels", "lightgbm",
+  "torch", "openpyxl", "pyarrow", "pydantic>=2", "python-dotenv", "typer",
+]
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+collect = ["pykrx", "yfinance", "fredapi", "requests"]
+dev = ["pytest", "ruff", "mypy"]
+[tool.setuptools.packages.find]
+# models.biva_src 같은 하위 패키지까지 포함하려면 목록 대신 find 를 써야 한다
+include = ["engine*", "models*", "adapters*", "api*"]
+
+[tool.ruff]
+line-length = 120
+[tool.pytest.ini_options]
+testpaths = ["tests"]

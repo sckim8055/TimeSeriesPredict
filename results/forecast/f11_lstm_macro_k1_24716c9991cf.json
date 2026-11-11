@@ -1,0 +1,161 @@
+{
+ "config": {
+  "name": "f11_lstm_macro_k1",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "B1",
+   "F7",
+   "BOK_RATE",
+   "KR3Y",
+   "USDKRW"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {
+   "B1": "diff",
+   "F7": "pct",
+   "BOK_RATE": "diff",
+   "KR3Y": "diff",
+   "USDKRW": "pct"
+  },
+  "lag_override": {},
+  "model": "lstm",
+  "model_params": {
+   "epochs": 60,
+   "hidden": 16
+  },
+  "seq_len": 12,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "24716c9991cf",
+ "model": {
+  "file": "lstm",
+  "name": "LSTM",
+  "input_shape": "window",
+  "params": {
+   "hidden": 16,
+   "layers": 1,
+   "dropout": 0.1,
+   "epochs": 60,
+   "lr": 0.001,
+   "batch_size": 64,
+   "patience": 15,
+   "weight_decay": 0.0001
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 20,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_6",
+  "A_ret_12",
+  "A_ma_ratio_3",
+  "A_ma_ratio_6",
+  "A_ma_ratio_12",
+  "A_ma_ratio_24",
+  "A_vol_6",
+  "A_vol_12",
+  "A_rsi_6",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "B1_diff",
+  "F7_pct",
+  "BOK_RATE_diff",
+  "KR3Y_diff",
+  "USDKRW_pct"
+ ],
+ "feature_importance": null,
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {
+  "B1": 60,
+  "F7": 30,
+  "BOK_RATE": 0,
+  "KR3Y": 1,
+  "USDKRW": 0
+ },
+ "lag_unconfirmed": [
+  "B1",
+  "F7",
+  "BOK_RATE",
+  "KR3Y",
+  "USDKRW"
+ ],
+ "prediction_metrics": {
+  "rmse": 0.004496839746711597,
+  "mae": 0.0030909016821722766,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.85,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -4.1821926894897015,
+  "dm_vs_zero_p": 2.8871111543038452e-05,
+  "dm_vs_naive": 3.2161018095970553,
+  "dm_vs_naive_p": 0.0012994472389535883,
+  "level_rmse": 0.37854108400458725,
+  "level_mape": 0.0030762212544198806,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_vs_naive": -0.37142235605522655,
+  "skill_mape_vs_naive": -0.6723935647649948,
+  "dm_ape_vs_naive": 5.253074414282191,
+  "dm_ape_vs_naive_p": 1.4958106531182125e-07
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {
+  "B1_diff": "2009-05-01",
+  "F7_pct": "2009-04-01",
+  "BOK_RATE_diff": "2009-01-01",
+  "KR3Y_diff": "2009-01-01",
+  "USDKRW_pct": "2009-01-01"
+ },
+ "device": "cpu",
+ "seconds": 39.1
+}

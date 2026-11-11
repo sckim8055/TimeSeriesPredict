@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--ink:#1c2027;--ink2:#5b6372;--line:#d9dde4;--line2:#eceff3;--bg:#f3f4f6;--panel:#fff;--accent:#23466e;--acc-bg:#e8eef7;
+--data:#3b6fb6;--model:#c8710f;--good:#2f8f5b;--bad:#b3261e;--warm:#fdf6e3;--warmline:#d6a63c;--code-bg:#fbfbfc;--hl:#fff1d6;--hl-line:#e3a33b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Pretendard Variable",Pretendard,"Noto Sans KR","Noto Sans CJK KR","Malgun Gothic",sans-serif;font-feature-settings:"tnum" 1}
+#app{display:grid;grid-template-rows:auto auto 1fr auto;height:100vh;min-height:720px}
+header{display:flex;align-items:center;gap:18px;padding:10px 18px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;font-weight:700;white-space:nowrap}
+header .chap{font-size:15px;color:var(--accent);font-weight:600;white-space:nowrap}
+header .cnt{font-size:13px;color:var(--ink2);white-space:nowrap}
+#prog{flex:1;height:10px;background:var(--line2);border-radius:5px;position:relative;cursor:pointer;min-width:200px}
+#prog .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:5px}
+#prog .tick{position:absolute;top:-3px;width:2px;height:16px;background:#9aa3b2}
+#diagram{background:var(--panel);border-bottom:1px solid var(--line);padding:4px 10px 2px}
+#diagram svg{width:100%;height:auto;display:block}
+.node rect{fill:#f7f8fa;stroke:#c9ced6;stroke-width:1.2;rx:6}
+.node text{font-size:12.5px;fill:var(--ink2);text-anchor:middle;dominant-baseline:middle}
+.node .sub{font-size:10.5px;fill:#8a93a3}
+.node.grp rect{fill:none;stroke:#b8c2d3;stroke-dasharray:5 4}
+.node.grp text{font-size:12px;fill:#7a8597;text-anchor:start;font-weight:600}
+.node.on rect{fill:#fff3df;stroke:var(--model);stroke-width:2.6}
+.node.on text{fill:var(--ink);font-weight:700}
+.node.done rect{fill:#eef5ef;stroke:#9fc7ad}
+.edge{stroke:#b6bdc8;stroke-width:1.5;fill:none}
+.edge.on{stroke:var(--model);stroke-width:2.6;stroke-dasharray:7 5;animation:flow 0.9s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+main{display:grid;grid-template-columns:57% 43%;min-height:0}
+#tensors{overflow:auto;padding:12px 14px;border-right:1px solid var(--line);background:var(--panel)}
+#codep{display:flex;flex-direction:column;min-height:0;background:var(--code-bg)}
+.crumb{font-size:12.5px;color:var(--ink2);padding:8px 12px 6px;border-bottom:1px solid var(--line);line-height:1.55}
+.crumb b{color:var(--accent)}
+.crumb .sep{color:#b0b7c3;margin:0 4px}
+.fileh{font:600 13px "D2Coding","Consolas","Menlo",monospace;padding:6px 12px;background:#eef1f5;color:var(--ink);border-bottom:1px solid var(--line)}
+pre.code{position:relative;margin:0;padding:6px 0;font:13.5px/1.55 "D2Coding","Consolas","Menlo",monospace;overflow:auto;flex:1;tab-size:4}
+pre.code .ln{display:block;padding:0 12px 0 0;white-space:pre}
+pre.code .ln .no{display:inline-block;width:48px;text-align:right;color:#a3abb8;margin-right:12px;user-select:none}
+pre.code .ln.hl{background:var(--hl);box-shadow:inset 4px 0 0 var(--hl-line)}
+pre.code .ln.focus{background:#ffe2b0}
+pre.code .ln.dim{color:#9aa3b2}
+pre.code .ln.gap{color:#8a93a3;background:#f0f2f5;font-size:12px;padding:2px 0}
+.tz{margin-bottom:14px}
+.tz h3{font-size:14px;margin:0 0 4px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.tz h3 .shape{font:600 12.5px "D2Coding","Consolas",monospace;color:var(--model);background:#fff3df;border-radius:4px;padding:1px 6px}
+.tz h3 .note{font-size:12px;color:var(--ink2);font-weight:400}
+.tz canvas{display:block;max-width:100%}
+.tz .big{font-size:30px;font-weight:700;color:var(--accent)}
+.tz table.t{border-collapse:collapse;font-size:13px}
+.tz table.t th,.tz table.t td{border-bottom:1px solid var(--line2);padding:3px 9px;text-align:left;white-space:nowrap}
+.tz table.t td.n{text-align:right;font-family:"D2Coding","Consolas",monospace;font-size:12.5px}
+.tz table.t th{color:var(--ink2);font-weight:600;background:#f7f8fa}
+.tz table.t td:first-child,.tz table.t th:first-child{text-align:left}
+.tz table.t tr.hl td{background:#fff3df;font-weight:600}
+footer{background:var(--panel);border-top:1px solid var(--line);padding:10px 18px 10px;display:grid;grid-template-columns:1fr auto;gap:8px 18px}
+#narr{font-size:18px;line-height:1.6;max-width:1500px}
+#formula{font:15px/1.5 "D2Coding","Consolas",monospace;color:#3a2a0a;background:var(--warm);border:1px solid #efd9a4;border-radius:5px;padding:6px 10px;margin-top:6px;white-space:pre-wrap}
+#formula:empty{display:none}
+details#hint{margin-top:6px;font-size:14px;color:var(--ink2)}
+details#hint summary{cursor:pointer;color:var(--accent);font-weight:600}
+details#hint div{margin-top:4px;line-height:1.6;white-space:pre-wrap}
+#checks{font-size:12.5px;color:var(--good);margin-top:4px}
+#checks.bad{color:var(--bad)}
+.ctrl{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.ctrl .row{display:flex;gap:6px;align-items:center}
+.ctrl button{font:inherit;font-size:14px;border:1px solid var(--line);background:#fff;border-radius:5px;padding:5px 11px;cursor:pointer}
+.ctrl button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ctrl select{font:inherit;font-size:13px;padding:4px}
+.ctrl label{font-size:13px;color:var(--ink2);display:flex;gap:4px;align-items:center}
+#tip{position:fixed;pointer-events:none;background:#1c2027;color:#fff;font-size:12px;padding:4px 7px;border-radius:4px;display:none;z-index:9;white-space:pre}
+body.film footer .ctrl{display:none}
+body.film footer{grid-template-columns:1fr}
+body.film details#hint[open] div{display:block}
+pre.code .ln.note{white-space:pre-wrap;font:13px/1.45 "Pretendard Variable",Pretendard,"Noto Sans KR","Noto Sans CJK KR",sans-serif;color:#3f4a5a;background:#f1f4f8;padding:2px 12px 3px 66px;border-left:4px solid #9fb3cf;margin:1px 0 3px}
+pre.code .ln.note::before{content:"↳ ";color:#7f93b0}
+#cap{display:none;font-size:25px;line-height:1.5;font-weight:600;color:var(--ink);background:#fffaf0;border-left:6px solid var(--model);padding:9px 16px;border-radius:4px;max-width:1700px;min-height:56px}
+body.cap #cap{display:block}
+body.cap #narr{display:none}
+details.lab{border:1px solid #cfd8e6;border-radius:6px;background:#f7f9fc;padding:8px 12px;margin:4px 0 14px}
+details.lab summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--accent)}
+details.lab summary .k{font-weight:400;color:var(--ink2);font-size:12.5px;margin-left:6px}
+details.lab .desc{font-size:13px;color:var(--ink2);margin:6px 0}
+details.lab pre{font:12.5px/1.45 "D2Coding","Consolas",monospace;background:#fff;border:1px solid var(--line);border-radius:4px;padding:8px 10px;margin:0;max-height:300px;overflow:auto;white-space:pre}
+details.lab .outh{font-size:12.5px;color:var(--ink2);margin:8px 0 2px}
+details.lab .out{font:12.5px/1.45 "D2Coding","Consolas",monospace;background:#eef5ef;border:1px solid #cfe3d5;border-radius:4px;padding:6px 10px;white-space:pre;margin:0}
+details.lab .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+details.lab button,details.lab a.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;border-radius:5px;padding:4px 10px;cursor:pointer;color:var(--ink);text-decoration:none}
+details.lab a.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+details.lab .row .note{font-size:12px;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1 id="ttl"></h1><span class="chap" id="chap"></span><div id="prog"><div class="fill"></div></div><span class="cnt" id="cnt"></span></header>
+  <div id="diagram"></div>
+  <main><div id="tensors"></div><div id="codep"><div class="crumb" id="crumb"></div><div class="fileh" id="fileh"></div><pre class="code" id="code"></pre></div></main>
+  <footer>
+    <div><div id="cap"></div><div id="narr"></div><div id="formula"></div><div id="checks"></div><details id="hint"><summary>더 자세히 (힌트)</summary><div id="hintt"></div></details></div>
+    <div class="ctrl">
+      <div class="row"><button id="bprev" title="이전 단계 (←)">◀ 이전</button><button id="bplay" class="pri" title="재생/멈춤 (스페이스)">▶ 재생</button><button id="bnext" title="다음 단계 (→)">다음 ▶</button></div>
+      <div class="row"><select id="selch" title="장으로 이동"></select><select id="speed" title="자동 재생 속도"><option value="0.75">느리게</option><option value="1" selected>보통</option><option value="1.4">빠르게</option></select></div>
+      <div class="row"><label title="녹음된 설명 음성이 있으면 그것을, 없으면 브라우저의 한국어 음성(Windows: Microsoft Heami 등)으로 읽습니다"><input type="checkbox" id="voice"> 음성 설명</label><label><input type="checkbox" id="autohint"> 힌트 펼치기</label></div>
+    </div>
+  </footer>
+</div>
+<div id="tip"></div>
+<script>
+const S = /*__SCRIPT__*/null;
+const $ = id => document.getElementById(id);
+let cur = 0, playing = false, timer = null, utter = null;
+const params = new URLSearchParams(location.search);
+if (params.get('film')) document.body.classList.add('film');
+if (params.get('cap')) document.body.classList.add('cap');
+let audioEl = null;
+
+/* ---------------- 구조도 ---------------- */
+function drawDiagram() {
+  const d = S.diagram, W = d.width, H = d.height;
+  let h = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa3b2"/></marker></defs>`;
+  for (const g of d.groups || []) h += `<g class="node grp"><rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="8"/><text x="${g.x + 8}" y="${g.y + 12}">${g.label}</text></g>`;
+  for (const e of d.edges) {
+    const a = d.nodes.find(n => n.id === e.from), b = d.nodes.find(n => n.id === e.to);
+    const pts = e.via ? e.via : null;
+    let path;
+    const ax = a.x + a.w, ay = a.y + a.h / 2, bx = b.x, by = b.y + b.h / 2;
+    if (e.path) path = 'M' + e.path.map(p => p[0] + ',' + p[1]).join(' L');
+    else if (e.kind === 'down') path = `M${a.x + a.w / 2},${a.y + a.h} L${b.x + b.w / 2},${b.y}`;
+    else if (e.kind === 'up') path = `M${a.x + a.w / 2},${a.y} L${b.x + b.w / 2},${b.y + b.h}`;
+    else if (pts) path = `M${ax},${ay} ` + pts.map(p => `L${p[0]},${p[1]}`).join(' ') + ` L${bx},${by}`;
+    else if (Math.abs(ay - by) < 2) path = `M${ax},${ay} L${bx},${by}`;
+    else { const mx = (ax + bx) / 2; path = `M${ax},${ay} C${mx},${ay} ${mx},${by} ${bx},${by}`; }
+    h += `<path class="edge" id="e_${e.from}__${e.to}" d="${path}" marker-end="url(#ar)"/>`;
+  }
+  for (const n of d.nodes) {
+    h += `<g class="node" id="n_${n.id}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6"/>` +
+      `<text x="${n.x + n.w / 2}" y="${n.y + (n.sub ? n.h / 2 - 7 : n.h / 2)}">${n.label}</text>` +
+      (n.sub ? `<text class="sub" x="${n.x + n.w / 2}" y="${n.y + n.h / 2 + 9}">${n.sub}</text>` : '') + `</g>`;
+  }
+  $('diagram').innerHTML = h + '</svg>';
+}
+function markDiagram(st) {
+  const on = new Set(st.nodes || []), done = new Set();
+  for (let i = 0; i < cur; i++) for (const n of S.steps[i].nodes || []) done.add(n);
+  for (const n of S.diagram.nodes) {
+    const el = document.getElementById('n_' + n.id); if (!el) continue;
+    el.classList.toggle('on', on.has(n.id)); el.classList.toggle('done', !on.has(n.id) && done.has(n.id));
+  }
+  const eon = new Set((st.edges || []).map(e => e.join('__')));
+  for (const e of S.diagram.edges) { const el = document.getElementById(`e_${e.from}__${e.to}`); if (el) el.classList.toggle('on', eon.has(e.from + '__' + e.to)); }
+}
+
+/* ---------------- 텐서 그림 ---------------- */
+function color(v, sc) {
+  if (v === null || v === undefined || Number.isNaN(v)) return null;
+  if (sc.kind === '01') { const t = Math.max(0, Math.min(1, (v - sc.lo) / ((sc.hi - sc.lo) || 1))); return `rgb(${Math.round(255 - t * 196)},${Math.round(255 - t * 144)},${Math.round(255 - t * 73)})`; }
+  const m = sc.abs || 1, t = Math.max(-1, Math.min(1, v / m));
+  return t >= 0 ? `rgb(${Math.round(255 - t * 55)},${Math.round(255 - t * 138)},${Math.round(255 - t * 236)})` : `rgb(${Math.round(255 + t * 196)},${Math.round(255 + t * 144)},${Math.round(255 + t * 73)})`;
+}
+function fmt(v, d) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '·';
+  if (typeof v === 'string') return v;
+  const a = Math.abs(v);
+  if (d !== undefined) return v.toFixed(d);
+  if (a === 0) return '0';
+  if (Number.isInteger(v) && a < 1e7) return v.toLocaleString('en-US');
+  if (a >= 1000) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 0.01) return v.toFixed(2);
+  if (a >= 0.001) return v.toFixed(3);
+  return v.toExponential(0);
+}
+function cellTxt(v, d, cw) {  // 좁은 칸: 소수 둘째 자리까지(−0.00 은 0)
+  if (d !== undefined || cw >= 40 || typeof v !== 'number') return fmt(v, d);
+  if (Number.isInteger(v)) return String(v);
+  const r = v.toFixed(2); return r === '-0.00' || r === '0.00' ? '0' : r;
+}
+function heat(t) {
+  const M = t.data, R = M.length, Cn = M[0].length;
+  const lw = t.rowLabelW ?? 78, maxW = Math.max(300, ($('tensors').clientWidth - 30));
+  let cw = t.cellW || Math.max(6, Math.min(56, Math.floor((maxW - lw) / Cn)));
+  // 열 이름: 칸보다 길면 기울여 쓰고, 기울인 글자가 들어갈 만큼 위 여백을 늘린다(2026-11-07: 가로로 겹쳐 읽을 수 없던 문제)
+  const lfont = (cw >= 20 ? '11px' : '9.5px') + ' "D2Coding",monospace';
+  const mc = document.createElement('canvas').getContext('2d'); mc.font = lfont;
+  const lmax = t.cols ? Math.max(...t.cols.map(s => mc.measureText(String(s)).width)) : 0, flat_ = t.cols ? lmax <= cw - 4 : true;
+  let th = t.colLabelH ?? (t.cols ? 44 : 4); if (t.cols && !flat_ && th > 4) th = Math.max(th, Math.min(130, Math.ceil(lmax * 0.93) + 8));
+  let ch = t.cellH || (cw >= 26 ? (R <= 8 ? 24 : 20) : Math.max(8, Math.min(18, cw)));
+  const W = lw + cw * Cn + 4, H = th + ch * R + 4;
+  const cv = document.createElement('canvas'); const dpr = Math.max(2, window.devicePixelRatio || 1);
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const c = cv.getContext('2d'); c.scale(dpr, dpr);
+  const flat = M.flat().filter(v => typeof v === 'number' && !Number.isNaN(v));
+  const sc = t.scale === '01' ? { kind: '01', lo: t.lo ?? 0, hi: t.hi ?? 1 } : t.scale === 'auto01' ? { kind: '01', lo: Math.min(...flat), hi: Math.max(...flat) } : { kind: 'div', abs: t.abs ?? (Math.max(...flat.map(Math.abs)) || 1) };
+  c.font = '11px "Noto Sans KR",sans-serif'; c.textBaseline = 'middle';
+  if (t.cols && th > 4) { c.save(); c.fillStyle = '#5b6372'; c.font = lfont;
+    for (let j = 0; j < Cn; j++) { c.save(); c.translate(lw + j * cw + cw / 2 + (flat_ ? 0 : 3), th - 3); c.rotate(flat_ ? 0 : -Math.PI / 2.6); c.textAlign = flat_ ? 'center' : 'left'; c.fillText(t.cols[j], 0, 0); c.restore(); } c.restore(); }
+  for (let i = 0; i < R; i++) {
+    if (t.rows) { c.fillStyle = '#5b6372'; c.textAlign = 'right'; c.font = '11px "D2Coding",monospace'; c.fillText(t.rows[i], lw - 6, th + i * ch + ch / 2); }
+    for (let j = 0; j < Cn; j++) {
+      const v = M[i][j], x = lw + j * cw, y = th + i * ch, col = color(v, sc);
+      if (col) { c.fillStyle = col; c.fillRect(x, y, cw - 1, ch - 1); }
+      else { c.fillStyle = '#eceef2'; c.fillRect(x, y, cw - 1, ch - 1); c.strokeStyle = '#c3c8d0'; c.lineWidth = 1; c.beginPath(); for (let k = -ch; k < cw; k += 5) { c.moveTo(x + k, y + ch - 1); c.lineTo(x + k + ch, y); } c.save(); c.rect(x, y, cw - 1, ch - 1); c.clip(); c.stroke(); c.restore(); }
+      if (cw >= 27 && ch >= 15 && t.numbers !== false) { c.fillStyle = '#1c2027'; c.textAlign = 'center'; c.font = (cw >= 44 ? '11px' : cw >= 32 ? '10px' : '9px') + ' "D2Coding",monospace'; c.fillText(v === null || Number.isNaN(v) ? 'NaN' : cellTxt(v, t.digits, cw), x + cw / 2, y + ch / 2); }
+    }
+  }
+  const box = (r0, c0, r1, c1, colr, wid) => { c.strokeStyle = colr; c.lineWidth = wid; c.strokeRect(lw + c0 * cw - 0.5, th + r0 * ch - 0.5, (c1 - c0 + 1) * cw, (r1 - r0 + 1) * ch); };
+  for (const r of (t.hl?.rows || [])) box(r, 0, r, Cn - 1, '#c8710f', 2.5);
+  for (const k of (t.hl?.cols || [])) box(0, k, R - 1, k, '#c8710f', 2.5);
+  for (const [r, k] of (t.hl?.cells || [])) box(r, k, r, k, '#b3261e', 2.5);
+  for (const b of (t.hl?.boxes || [])) box(b[0], b[1], b[2], b[3], b[4] || '#23466e', 3);
+  cv.addEventListener('mousemove', ev => { const r = cv.getBoundingClientRect(); const j = Math.floor((ev.clientX - r.left - lw) / cw), i = Math.floor((ev.clientY - r.top - th) / ch);
+    if (i >= 0 && i < R && j >= 0 && j < Cn) { const tip = $('tip'); tip.style.display = 'block'; tip.style.left = ev.clientX + 12 + 'px'; tip.style.top = ev.clientY + 12 + 'px';
+      tip.textContent = `${t.rows ? t.rows[i] : '행 ' + i} · ${t.cols ? (t.colNames ? t.colNames[j] : t.cols[j]) : '열 ' + j}\n값 ${M[i][j] === null ? 'NaN(빈 칸)' : M[i][j]}`; } else $('tip').style.display = 'none'; });
+  cv.addEventListener('mouseleave', () => $('tip').style.display = 'none');
+  return cv;
+}
+function axisFmt(v, lo, hi) {
+  const span = Math.abs(hi - lo) || Math.abs(hi) || 1, dec = Math.max(0, Math.min(8, Math.ceil(-Math.log10(span)) + 2));
+  const a = Math.abs(v); if (a >= 1000) return v.toFixed(0); if (a >= 10 && span >= 5) return v.toFixed(1);
+  return v.toFixed(dec);
+}
+function lineChart(t) {
+  const W = Math.min(980, $('tensors').clientWidth - 30), H = t.height || 230, pad = { l: 64, r: 20, t: 22, b: 34 };
+  const cv = document.createElement('canvas'); const dpr = Math.max(2, window.devicePixelRatio || 1); cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const c = cv.getContext('2d'); c.scale(dpr, dpr);
+  const xs = t.x, all = t.series.flatMap(s => s.y.filter(v => v !== null && (!t.ylog || v > 0)));
+  const tf = v => t.ylog ? Math.log10(v) : v;
+  const lo = tf(t.ylo ?? Math.min(...all)), hi = tf(t.yhi ?? Math.max(...all));
+  const X = i => pad.l + (W - pad.l - pad.r) * (i / (xs.length - 1 || 1)), Y = v => pad.t + (H - pad.t - pad.b) * (1 - (tf(v) - lo) / ((hi - lo) || 1));
+  c.strokeStyle = '#c9ced6'; c.beginPath(); c.moveTo(pad.l, pad.t); c.lineTo(pad.l, H - pad.b); c.lineTo(W - pad.r, H - pad.b); c.stroke();
+  c.fillStyle = '#5b6372'; c.font = '11px sans-serif'; c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let k = 0; k <= 4; k++) { const u = lo + (hi - lo) * k / 4, v = t.ylog ? Math.pow(10, u) : u; const yy = pad.t + (H - pad.t - pad.b) * (1 - k / 4);
+    c.fillText(t.ylog ? (v >= 1 ? v.toFixed(v >= 10 ? 0 : 1) : v.toPrecision(2)) : axisFmt(v, lo, hi), pad.l - 6, yy); c.strokeStyle = '#eceff3'; c.beginPath(); c.moveTo(pad.l, yy); c.lineTo(W - pad.r, yy); c.stroke(); }
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic'; const every = Math.ceil(xs.length / 12);
+  xs.forEach((x, i) => { if (i % every === 0 || i === xs.length - 1) c.fillText(x, X(i), H - pad.b + 14); });
+  if (t.xlabel) c.fillText(t.xlabel + (t.ylog ? '   (세로축 로그 눈금)' : ''), (W + pad.l) / 2, H - 4);
+  (t.vlines || []).forEach((v, k) => { c.strokeStyle = v.color || '#2f8f5b'; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(X(v.i), pad.t); c.lineTo(X(v.i), H - pad.b); c.stroke(); c.setLineDash([]);
+    c.fillStyle = v.color || '#2f8f5b'; c.textAlign = 'left'; c.fillText(v.label, X(v.i) + 4, pad.t + 12 + k * 14); });
+  c.save(); c.beginPath(); c.rect(pad.l - 3, pad.t - 3, W - pad.l - pad.r + 6, H - pad.t - pad.b + 6); c.clip();   // ylo·yhi 밖은 잘라 그림
+  for (const s of t.series) { c.strokeStyle = s.color; c.lineWidth = 2; c.beginPath(); let st = false; s.y.forEach((v, i) => { if (v === null || (t.ylog && v <= 0)) return; if (!st) { c.moveTo(X(i), Y(v)); st = true; } else c.lineTo(X(i), Y(v)); }); c.stroke();
+    if (s.dots) s.y.forEach((v, i) => { if (v !== null && !(t.ylog && v <= 0)) { c.fillStyle = s.color; c.beginPath(); c.arc(X(i), Y(v), 2.5, 0, 7); c.fill(); } }); }
+  c.restore();
+  // 범례: 오른쪽 위
+  c.font = '12px sans-serif'; let lx = W - pad.r - t.series.reduce((a, s) => a + 34 + c.measureText(s.name).width, 0);
+  for (const s of t.series) { c.fillStyle = s.color; c.fillRect(lx, 6, 16, 3); c.fillStyle = '#1c2027'; c.textAlign = 'left'; c.fillText(s.name, lx + 20, 11); lx += 34 + c.measureText(s.name).width; }
+  return cv;
+}
+function segBar(t) {
+  const W = Math.min(980, $('tensors').clientWidth - 30), H = 64;
+  const cv = document.createElement('canvas'); const dpr = Math.max(2, window.devicePixelRatio || 1); cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const c = cv.getContext('2d'); c.scale(dpr, dpr); const tot = t.segs.reduce((a, s) => a + s.n, 0); let x = 0;
+  for (const s of t.segs) { const w = (W - 2) * s.n / tot; c.fillStyle = s.color; c.fillRect(x + 1, 8, Math.max(w - 2, 1), 26); c.fillStyle = '#1c2027'; c.font = '12px sans-serif'; c.textAlign = 'center';
+    if (w > 40) c.fillText(`${s.label} ${s.n}`, x + w / 2, 25); c.fillStyle = '#5b6372'; c.font = '11px sans-serif'; if (s.sub && w > 60) c.fillText(s.sub, x + w / 2, 50); x += w; }
+  return cv;
+}
+function renderTensor(t) {
+  const box = document.createElement('div'); box.className = 'tz';
+  box.innerHTML = `<h3>${t.title || ''}${t.shape ? `<span class="shape">[${t.shape.join(', ')}]</span>` : ''}${t.note ? `<span class="note">${t.note}</span>` : ''}</h3>`;
+  if (t.type === 'heat') box.appendChild(heat(t));
+  else if (t.type === 'batch') { for (const [k, m] of t.mats.entries()) { const sub = document.createElement('div'); sub.style.margin = '2px 0 6px'; const lab = document.createElement('div'); lab.style.cssText = 'font-size:12px;color:#5b6372;margin:2px 0'; lab.textContent = t.labels[k]; sub.appendChild(lab); sub.appendChild(heat({ ...t, data: m, rows: (t.rowsEach && t.rowsEach[k]) || t.rows, hl: (t.hlEach && t.hlEach[k]) || t.hl, colLabelH: k === 0 ? (t.colLabelH ?? 44) : 4 })); box.appendChild(sub); } }
+  else if (t.type === 'num') { const d = document.createElement('div'); d.innerHTML = t.items.map(it => `<div style="display:inline-block;margin:4px 26px 4px 0"><div style="font-size:12.5px;color:#5b6372">${it.label}</div><div class="big" style="${it.color ? 'color:' + it.color : ''}">${it.value}</div>${it.sub ? `<div style="font-size:12px;color:#5b6372">${it.sub}</div>` : ''}</div>`).join(''); box.appendChild(d); }
+  else if (t.type === 'table') {
+    const k = t.split || 1, per = Math.ceil(t.rows.length / k), wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;gap:18px;align-items:flex-start';
+    for (let q = 0; q < k; q++) { const part = t.rows.slice(q * per, (q + 1) * per); if (!part.length) break; const tb = document.createElement('table'); tb.className = 't';
+      tb.innerHTML = `<thead><tr>${t.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${part.map((r, i) => `<tr class="${(t.hlRows || []).includes(q * per + i) ? 'hl' : ''}">${r.map(v => typeof v === 'number' || v === null ? `<td class="n">${fmt(v, t.digits)}</td>` : `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>`; wrap.appendChild(tb); }
+    box.appendChild(wrap); }
+  else if (t.type === 'line') box.appendChild(lineChart(t));
+  else if (t.type === 'segs') box.appendChild(segBar(t));
+  else if (t.type === 'html') { const d = document.createElement('div'); d.innerHTML = t.html; box.appendChild(d); }
+  else if (t.type === 'row') { const d = document.createElement('div'); d.style.cssText = 'display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap'; for (const it of t.items) d.appendChild(renderTensor(it)); box.appendChild(d); }
+  return box;
+}
+
+/* ---------------- 코드 ---------------- */
+function esc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function showCode(st) {
+  const cd = st.code; if (!cd) { $('code').innerHTML = ''; $('fileh').textContent = ''; $('code').scrollTop = 0; return; }
+  const src = S.sources[cd.file] || [];
+  const lines = (cd.lines && cd.lines.length ? cd.lines : [cd.focus]).slice().sort((a, b) => a - b);
+  const hl = new Set(lines), focus = cd.focus ?? lines[0];
+  // 강조 줄이 멀리 떨어져 있으면 묶음(cluster)마다 따로 보여 주고 사이를 ⋯ 로 줄인다(정의부 + 호출부를 한 화면에)
+  const groups = []; for (const l of lines) { const g = groups[groups.length - 1]; if (g && l - g[g.length - 1] <= 14) g.push(l); else groups.push([l]); }
+  const fg = groups.find(g => g.includes(focus)) || groups[0];
+  let h = '', prevHi = 0;
+  for (const g of groups) {
+    const main = g === fg, lo = Math.max(1, g[0] - (main ? (cd.before ?? 8) : 2)), hi = Math.min(src.length, g[g.length - 1] + (main ? (cd.after ?? 10) : 2));
+    const a = Math.max(lo, prevHi + 1); if (prevHi && a > prevHi + 1) h += `<span class="ln gap"><span class="no">⋯</span>(줄 ${prevHi + 1}–${a - 1} 생략)</span>`;
+    for (let i = a; i <= hi; i++) {
+      const t = (src[i - 1] ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      h += `<span class="ln${hl.has(i) ? ' hl' : ''}${i === focus ? ' focus' : ''}" id="L${i}"><span class="no">${i}</span>${t || ' '}</span>`;
+      const nt = cd.notes && cd.notes[String(i)]; if (nt) h += `<span class="ln note">${esc(nt)}</span>`;
+    }
+    prevHi = Math.max(prevHi, hi);
+  }
+  $('code').innerHTML = h;
+  const rng = groups.map(g => g.length > 1 ? g[0] + '–' + g[g.length - 1] : '' + g[0]).join(', ');
+  $('fileh').textContent = `${cd.file}  ·  ${cd.func || ''}  ·  줄 ${rng}`;
+  const f = document.getElementById('L' + focus); const pre = $('code');
+  if (f) pre.scrollTop = Math.max(0, f.offsetTop - pre.clientHeight * 0.35); else pre.scrollTop = 0;
+}
+
+/* ---------------- 직접 실행해 보기 ---------------- */
+// 혼자 도는 파이썬 코드(실행 기록의 숫자를 그대로 넣음). 기대 출력 = 엔진 값 — 대본을 만들 때 실제로 실행해 같은지 확인했다(tools/codewalk/common.run_lab).
+function tutorUrl(code) { return 'https://pythontutor.com/visualize.html#code=' + encodeURIComponent(code) + '&cumulative=false&heapPrimitives=nevernest&mode=edit&origin=opt-frontend.js&py=311&rawInputLstJSON=%5B%5D&textReferences=false'; }
+function renderLab(L) {
+  const d = document.createElement('details'); d.className = 'lab';
+  const tut = L.tutor === undefined ? L.pure : L.tutor;   // Python Tutor 로 열 수 있는지(예전 대본은 pure 와 같음)
+  d.innerHTML = `<summary>직접 실행해 보기: ${esc(L.title)}<span class="k">${tut ? '순수 파이썬 — Python Tutor 에서 한 줄씩 볼 수 있음' : (L.pure ? '순수 파이썬 — 반복이 많아 복사해서 실행(Colab·주피터·PC 의 파이썬)' : 'numpy 사용 — 복사해서 Colab·주피터에서 실행')}${L.ok ? (L.tol ? ' · 기대 출력 확인됨(끝자리 차이 허용)' : ' · 기대 출력 확인됨') : ' · ✗ 기대 출력과 다름'}</span></summary>`
+    + `<div class="desc">${esc(L.desc || '')}</div><pre>${esc(L.code)}</pre><div class="outh">기대 출력 (엔진 값)${L.tol ? ` — 엔진은 32비트 실수로 계산해서, 이 코드(64비트)의 출력과 끝자리가 조금 다를 수 있습니다(상대오차 ${L.tol} 이내 확인)` : ''}</div><pre class="out">${esc(L.expect)}</pre>`
+    + `<div class="row">${tut ? `<a class="btn pri" target="_blank" rel="noopener" href="${tutorUrl(L.code)}">Python Tutor 에서 한 줄씩 보기 ↗</a>` : `<a class="btn pri" target="_blank" rel="noopener" href="https://colab.research.google.com/#create=true">Colab 새 노트 열기 ↗</a>`}`
+    + `<button type="button" class="cp">코드 복사</button><span class="note">코드와 숫자가 그 사이트로 전송됩니다(공개 시장·경제 자료).</span></div>`;
+  d.querySelector('.cp').onclick = ev => { ev.preventDefault(); (navigator.clipboard ? navigator.clipboard.writeText(L.code) : Promise.reject()).then(() => { ev.target.textContent = '복사됨'; }, () => { ev.target.textContent = '복사 실패 — 코드를 직접 선택하세요'; }); };
+  d.addEventListener('toggle', () => fitTensors());
+  return d;
+}
+
+/* ---------------- 단계 ---------------- */
+function show(i) {
+  cur = Math.max(0, Math.min(S.steps.length - 1, i));
+  const st = S.steps[cur];
+  $('ttl').textContent = S.title; $('chap').textContent = st.chapter; $('cnt').textContent = `${cur + 1} / ${S.steps.length}`;
+  $('prog').querySelector('.fill').style.width = (100 * (cur + 1) / S.steps.length) + '%';
+  markDiagram(st);
+  $('crumb').innerHTML = (st.stack || []).map((s, k) => k === st.stack.length - 1 ? `<b>${s}</b>` : s).join('<span class="sep">›</span>');
+  showCode(st);
+  const T = $('tensors'); T.innerHTML = ''; const Z = document.createElement('div'); Z.className = 'zoomer'; T.appendChild(Z);
+  for (const t of st.tensors || []) Z.appendChild(renderTensor(t)); if (st.lab) Z.appendChild(renderLab(st.lab)); T.scrollTop = 0;
+
+  $('narr').innerHTML = st.narr; $('formula').textContent = st.formula || ''; $('cap').textContent = (st.captions || [])[0] || '';
+  $('hintt').textContent = st.hint || ''; $('hint').style.display = st.hint ? '' : 'none'; $('hint').open = $('autohint').checked || params.get('film') === '1' && !!st.hint;
+  const ck = st.checks || []; $('checks').className = ck.every(c => c.ok) ? '' : 'bad';
+  $('checks').textContent = ck.length ? '검증: ' + ck.map(c => (c.ok ? '✓ ' : '✗ ') + c.what).join(' · ') : '';
+  $('selch').value = st.chapter;
+  fitTensors();
+  if (playing) schedule();
+}
+// 한 화면에 다 보이게: 넘치면 0.6 배까지 줄인다(그보다 더 넘치면 스크롤). 설명·힌트 높이가 정해진 뒤에 잰다.
+function fitTensors() { const T = $('tensors'), Z = T.querySelector('.zoomer'); if (!Z) return; Z.style.zoom = 1;
+  const avail = T.clientHeight - 26, need = Z.scrollHeight; if (need > avail) { Z.style.zoom = Math.max(0.6, avail / need); return; }
+  // 내용이 작으면 키운다(최대 1.4배) — 표·그림의 실제 너비(가장 오른쪽 끝)와 높이가 모두 들어갈 때만
+  const z0 = Z.getBoundingClientRect().left, w = Math.max(1, ...[...Z.querySelectorAll('table,canvas,svg,.big')].map(e => e.getBoundingClientRect().right - z0));
+  const up = Math.min(1.4, avail / need, (T.clientWidth - 24) / w); if (up > 1.05) Z.style.zoom = up; }
+function stepDur(st) { const n = (st.narr || '').replace(/<[^>]+>/g, '').length + (st.formula || '').length * 0.4; return (st.dur || Math.min(34, Math.max(7, 3 + n * 0.11))) / parseFloat($('speed').value); }
+// 음성용으로 기호를 읽을 수 있는 말로(화면 글자는 그대로)
+function sayable(t) {
+  const M = [[/x̂/g, '엑스 햇'], [/ẑ/g, '제트 햇'], [/ĉ/g, '씨 햇'], [/ŷ/g, '와이 햇'], [/τ/g, '타우 '], [/γ_h/g, '감마 에이치'], [/γ_x/g, '감마 엑스'], [/γ/g, '감마'],
+    [/σ²/g, '시그마 제곱'], [/σ/g, '시그마'], [/μ/g, '뮤'], [/α/g, '알파'], [/ε/g, '엡실론'], [/δ/g, '델타'], [/Σ/g, '합'], [/⊙/g, ' 곱하기 '], [/×/g, ' 곱하기 '], [/÷/g, ' 나누기 '],
+    [/→/g, ' 에서 '], [/≥/g, ' 이상 '], [/≤/g, ' 이하 '], [/−/g, ' 빼기 '], [/·/g, ', '], [/\[(\d+), (\d+), (\d+)\]/g, '$1 곱하기 $2 곱하기 $3'], [/\[(\d+), (\d+)\]/g, '$1 곱하기 $2'], [/_/g, ' ']];
+  for (const [r, w] of M) t = t.replace(r, w); return t;
+}
+function stopAudio() { if (audioEl) { audioEl.onended = audioEl.onerror = audioEl.ontimeupdate = null; audioEl.pause(); audioEl = null; } if (!params.get('cap')) document.body.classList.remove('cap'); }
+window.setCap = k => { const st = S.steps[cur], c = st.captions || []; $('cap').textContent = c[k] ?? ''; };
+// 녹음된 설명 음성(S.audio: tools/narrate.py 가 만든 단계별 mp3 + 자막 줄 시각)이 있으면 그것을 재생하며 자막을 바꾼다. 없으면 브라우저 음성.
+function speak(st, done) {
+  const A = S.audio && S.audio.steps && S.audio.steps[String(cur)];
+  if (A) {
+    stopAudio(); const caps = st.captions || []; document.body.classList.add('cap'); $('cap').textContent = caps[0] || '';
+    audioEl = new Audio(S.audio.dir + A.file); audioEl.playbackRate = parseFloat($('speed').value);
+    audioEl.ontimeupdate = () => { const t = audioEl.currentTime; let k = 0; A.segs.forEach((g, i) => { if (t >= g[0] - 0.05) k = i; }); $('cap').textContent = caps[k] || ''; };
+    audioEl.onended = () => { stopAudio(); done(); }; audioEl.onerror = () => { stopAudio(); speakTTS(st, done); };
+    audioEl.play().catch(() => { stopAudio(); speakTTS(st, done); }); return;
+  }
+  speakTTS(st, done);
+}
+function speakTTS(st, done) {
+  if (!('speechSynthesis' in window)) return done();
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(st.speech && st.speech.length ? st.speech.join(' ') : sayable((st.say || st.narr).replace(/<[^>]+>/g, '')));
+  u.lang = 'ko-KR'; const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('ko')); if (v) u.voice = v;
+  u.rate = parseFloat($('speed').value); u.onend = () => done(); u.onerror = () => done(); utter = u; speechSynthesis.speak(u);
+}
+function schedule() {
+  clearTimeout(timer); if ('speechSynthesis' in window) speechSynthesis.cancel(); stopAudio();
+  const st = S.steps[cur], next = () => { if (cur < S.steps.length - 1) show(cur + 1); else togglePlay(false); };
+  if ($('voice').checked) speak(st, () => { timer = setTimeout(next, 900); }); else timer = setTimeout(next, stepDur(st) * 1000);
+}
+function togglePlay(on) { playing = on ?? !playing; $('bplay').textContent = playing ? '⏸ 멈춤' : '▶ 재생'; if (playing) schedule(); else { clearTimeout(timer); if ('speechSynthesis' in window) speechSynthesis.cancel(); stopAudio(); } }
+function init() {
+  drawDiagram();
+  const chs = [...new Set(S.steps.map(s => s.chapter))];
+  $('selch').innerHTML = chs.map(c => `<option>${c}</option>`).join('');
+  $('selch').onchange = e => show(S.steps.findIndex(s => s.chapter === e.target.value));
+  const pg = $('prog'); chs.forEach(c => { const i = S.steps.findIndex(s => s.chapter === c); const tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = (100 * i / S.steps.length) + '%'; tk.title = c; pg.appendChild(tk); });
+  pg.onclick = e => { const r = pg.getBoundingClientRect(); show(Math.floor((e.clientX - r.left) / r.width * S.steps.length)); };
+  $('bprev').onclick = () => show(cur - 1); $('bnext').onclick = () => show(cur + 1); $('bplay').onclick = () => togglePlay();
+  $('autohint').onchange = () => show(cur); $('voice').onchange = () => { if (playing) schedule(); };
+  document.addEventListener('keydown', e => { if (e.key === 'ArrowRight') show(cur + 1); else if (e.key === 'ArrowLeft') show(cur - 1); else if (e.key === ' ') { e.preventDefault(); togglePlay(); } });
+  window.addEventListener('resize', () => show(cur));
+  show(parseInt(params.get('step') || '1') - 1);
+}
+window.goto = i => show(i);
+init();
+</script>
+</body>
+</html>

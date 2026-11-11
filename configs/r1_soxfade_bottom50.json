@@ -1,0 +1,32 @@
+{
+ "ticker": "091160",
+ "frequency": "D",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "variable_ids": [
+  "SOX"
+ ],
+ "use_technical": false,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 756,
+  "test_len": 21,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "r1_soxfade_bottom50",
+ "model": "sox_gap_fade",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "variable_transforms": {
+  "SOX": "pct"
+ },
+ "lag_override": {
+  "SOX": 0
+ },
+ "model_params": {
+  "q": 0.5,
+  "mode": "long_bottom"
+ }
+}

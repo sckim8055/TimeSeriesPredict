@@ -1,0 +1,134 @@
+{
+ "config": {
+  "name": "f11_ridge_tech_k1",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {
+   "alpha": 10
+  },
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "c526aa1c9321",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 10.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 15,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_6",
+  "A_ret_12",
+  "A_ma_ratio_3",
+  "A_ma_ratio_6",
+  "A_ma_ratio_12",
+  "A_ma_ratio_24",
+  "A_vol_6",
+  "A_vol_12",
+  "A_rsi_6",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist"
+ ],
+ "feature_importance": [
+  0.0014045621229861938,
+  0.00024877485214817364,
+  0.00019669633526516668,
+  0.0001388494651982559,
+  0.0003126167839700546,
+  0.0006818127373193211,
+  9.806327652617116e-05,
+  0.00018585323027227093,
+  0.0003693283650017458,
+  0.0005387963852455575,
+  0.00038512056408494095,
+  0.0002808764156208022,
+  4.680996552355134e-05,
+  6.777816705553165e-05,
+  0.00023565883262733305
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "prediction_metrics": {
+  "rmse": 0.004137292228655442,
+  "mae": 0.002564066472787356,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.8916666666666667,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -4.15208696708584,
+  "dm_vs_zero_p": 3.294570076084469e-05,
+  "dm_vs_naive": 1.939453799487677,
+  "dm_vs_naive_p": 0.05244610499190694,
+  "level_rmse": 0.3548505409796612,
+  "level_mape": 0.0025520507442783687,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_vs_naive": -0.26176945933215245,
+  "skill_mape_vs_naive": -0.3874272650423294,
+  "dm_ape_vs_naive": 3.520424323937084,
+  "dm_ape_vs_naive_p": 0.0004308569208826274
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {},
+ "device": "cpu",
+ "seconds": 1.1
+}

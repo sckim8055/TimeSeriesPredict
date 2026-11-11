@@ -1,0 +1,33 @@
+{
+ "ticker": "091160",
+ "frequency": "M",
+ "target": {
+  "kind": "return",
+  "k": 1
+ },
+ "variable_ids": [
+  "B1",
+  "F7",
+  "BOK_RATE"
+ ],
+ "use_technical": false,
+ "fill": "ffill",
+ "validation": {
+  "train_len": 60,
+  "test_len": 1,
+  "sealed_from": "2025-01-01"
+ },
+ "name": "h5_macro_M_k1_ridge",
+ "model": "ridge",
+ "start": "2009-01-01",
+ "data_version": "20261103T141116Z",
+ "variable_transforms": {
+  "B1": "diff",
+  "F7": "pct",
+  "BOK_RATE": "diff"
+ },
+ "lag_override": {},
+ "model_params": {
+  "alpha": 100.0
+ }
+}

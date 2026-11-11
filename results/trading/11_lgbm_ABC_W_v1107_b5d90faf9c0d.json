@@ -1,0 +1,293 @@
+{
+ "config": {
+  "name": "11_lgbm_ABC_W_v1107",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "W",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [
+   "SOX",
+   "NVDA",
+   "MU",
+   "TSM",
+   "SAMSUNG",
+   "HYNIX",
+   "USDKRW",
+   "KOSPI",
+   "US10Y",
+   "VIX",
+   "BOK_RATE",
+   "KR10Y"
+  ],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "lightgbm_model",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 156,
+   "test_len": 4,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "b5d90faf9c0d",
+ "model": {
+  "file": "lightgbm_model",
+  "name": "LightGBM",
+  "input_shape": "table",
+  "params": {
+   "n_estimators": 200,
+   "learning_rate": 0.03,
+   "num_leaves": 7,
+   "max_depth": 3,
+   "min_child_samples": 15,
+   "subsample": 0.8,
+   "colsample_bytree": 0.8,
+   "reg_lambda": 1.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "engine_rev": "2026-11-07",
+ "n_folds": 166,
+ "n_features": 30,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_4",
+  "A_ret_8",
+  "A_ret_13",
+  "A_ret_26",
+  "A_ma_ratio_4",
+  "A_ma_ratio_13",
+  "A_ma_ratio_26",
+  "A_ma_ratio_52",
+  "A_vol_13",
+  "A_vol_26",
+  "A_rsi_8",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_4",
+  "A_vol_ratio_13",
+  "SOX_pct",
+  "NVDA_pct",
+  "MU_pct",
+  "TSM_pct",
+  "SAMSUNG_pct",
+  "HYNIX_pct",
+  "USDKRW_pct",
+  "KOSPI_pct",
+  "US10Y_diff",
+  "VIX_pct",
+  "BOK_RATE_diff",
+  "KR10Y_diff"
+ ],
+ "feature_importance": [
+  0.022899353689288283,
+  0.01111571340879891,
+  0.006849034477049115,
+  0.01155967672768537,
+  0.005986404227561329,
+  0.012041123386147061,
+  0.00607371573041527,
+  0.0076529121668784915,
+  0.003735112102775195,
+  0.011297180745484173,
+  0.016161621582073002,
+  0.01642688712966348,
+  0.004621318857927515,
+  0.0030839284593979295,
+  0.004775965099779788,
+  0.007232191377033266,
+  0.009364610232471725,
+  0.012404440517687373,
+  0.01993961345272192,
+  0.012443836281095008,
+  0.01356452168544042,
+  0.008232387028394704,
+  0.021259756928873642,
+  0.014041924617023218,
+  0.044442098277427414,
+  0.0190273583586137,
+  0.011789929486933188,
+  0.010728749147292327,
+  0.0038730053592989423,
+  0.03805045057729824
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-13",
+  "2024-12-27"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {
+  "SOX": 0,
+  "NVDA": 0,
+  "MU": 0,
+  "TSM": 0,
+  "SAMSUNG": 0,
+  "HYNIX": 0,
+  "USDKRW": 0,
+  "KOSPI": 0,
+  "US10Y": 0,
+  "VIX": 0,
+  "BOK_RATE": 31,
+  "KR10Y": 0
+ },
+ "lag_unconfirmed": [
+  "USDKRW"
+ ],
+ "transforms_used": {
+  "SOX": "pct",
+  "NVDA": "pct",
+  "MU": "pct",
+  "TSM": "pct",
+  "SAMSUNG": "pct",
+  "HYNIX": "pct",
+  "USDKRW": "pct",
+  "KOSPI": "pct",
+  "US10Y": "diff",
+  "VIX": "pct",
+  "BOK_RATE": "diff",
+  "KR10Y": "diff"
+ },
+ "prediction_metrics": {
+  "rmse": 0.035962756428336254,
+  "mae": 0.02739472159634679,
+  "dir_acc": 0.5203619909502263,
+  "dm_vs_zero": 2.2255908300966376,
+  "dm_vs_zero_p": 0.02604160097549868
+ },
+ "performance": {
+  "n_periods": 663,
+  "total_return": 0.8473956308560644,
+  "cagr": 0.0493168812398983,
+  "ann_vol": 0.22381781333842932,
+  "sharpe": 0.32802472654244874,
+  "sortino": 0.4069919298087272,
+  "mdd": -0.4948240988480125,
+  "win_rate": 0.4335154826958106,
+  "benchmark_total_return": 0.9576619273301721,
+  "benchmark_cagr": 0.054098967222357075,
+  "benchmark_mdd": -0.45132524151597764,
+  "excess_total_return": -0.11026629647410768,
+  "excess_mean_per_period": -0.00023511317969594553,
+  "n_trades": 199,
+  "turnover": 199.0,
+  "exposure": 0.6787330316742082,
+  "total_cost": 0.12935000000000002,
+  "bootstrap_p_excess": 0.6565,
+  "deflated_sharpe_p": 0.9048194145312292,
+  "return_skew": -0.38352271316429787,
+  "return_kurt": 7.0342332677743995,
+  "trial_sr_var": null,
+  "n_trials_so_far": 90
+ },
+ "period": [
+  "2012-04-13",
+  "2024-12-27"
+ ],
+ "prediction_period": [
+  "2012-04-13",
+  "2024-12-27"
+ ],
+ "n_predictions": 663,
+ "variable_first_date": {
+  "SOX_pct": "2009-04-17",
+  "NVDA_pct": "2009-04-17",
+  "MU_pct": "2009-04-17",
+  "TSM_pct": "2009-04-17",
+  "SAMSUNG_pct": "2009-04-17",
+  "HYNIX_pct": "2009-04-17",
+  "USDKRW_pct": "2009-04-17",
+  "KOSPI_pct": "2009-04-17",
+  "US10Y_diff": "2009-04-17",
+  "VIX_pct": "2009-04-17",
+  "BOK_RATE_diff": "2009-04-17",
+  "KR10Y_diff": "2009-04-17"
+ },
+ "device": "cpu",
+ "seconds": 3.2,
+ "periods": {
+  "data": [
+   "2012-04-13",
+   "2024-12-27"
+  ],
+  "requested": {
+   "start": "2009-01-01",
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 166,
+  "first_fold": {
+   "train": [
+    "2010-04-09",
+    "2011-11-25"
+   ],
+   "val": [
+    "2011-12-16",
+    "2012-03-23"
+   ],
+   "test": [
+    "2012-04-13",
+    "2012-05-04"
+   ],
+   "n_train": 86,
+   "n_val": 15,
+   "n_test": 4
+  },
+  "last_fold": {
+   "train": [
+    "2021-12-17",
+    "2024-05-31"
+   ],
+   "val": [
+    "2024-06-21",
+    "2024-11-22"
+   ],
+   "test": [
+    "2024-12-13",
+    "2024-12-27"
+   ],
+   "n_train": 129,
+   "n_val": 23,
+   "n_test": 3
+  },
+  "test": [
+   "2012-04-13",
+   "2024-12-27"
+  ]
+ }
+}

@@ -1,0 +1,21 @@
+# pip install -r requirements.txt   (editable 설치 없이 바로 실행 가능 — 스크립트가 프로젝트 루트를 sys.path 에 넣음)
+numpy>=2.0
+pandas>=2.2,<3
+scipy
+scikit-learn
+statsmodels
+lightgbm
+# torch: Windows 는 PyPI 기본이 CPU 전용. GPU 는 python check_env.py 안내대로 CUDA 빌드 설치.
+torch
+openpyxl
+pyarrow
+pydantic>=2
+python-dotenv
+requests
+pytest
+# 수집용
+pykrx
+yfinance
+fredapi
+fastapi>=0.115
+uvicorn>=0.30

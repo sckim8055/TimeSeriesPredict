@@ -1,0 +1,45 @@
+{
+ "version_id": "20261102T134628Z",
+ "created_utc": "2026-11-02T13:46:45.268446+00:00",
+ "files": {
+  "prices_091160.parquet": "ee65679d44e526eb99cdc53b9747a2204ec46fee42ca73beffd9fbaef9913712",
+  "prices_091160_yf.parquet": "3f131b80b96b13a1a17ac421737fd6ed984a0dddb0d40f1924909eb604b7c909",
+  "prices_091230.parquet": "9ba874a332ca2a8b142c2c7e3d4df9433f64d9817aef4f47cf4bc507b9828990",
+  "prices_091230_yf.parquet": "dade677d993279ebec33cd1fb97e8101950449ac916827241426a035b70a217d",
+  "variables_ecos.parquet": "15f729f1b06f1d590bc37f3826baa85f0f430474251d9f3c97e0ba3bf80f8d0b",
+  "variables_fred.parquet": "73a05684030d536a30ccfff3d8b5b92d68d47a7d70e1c0899924f91052476e11",
+  "variables_xlsx_seoul34.parquet": "fde1c90f1bc75d0c734900fb5037da654985d2d93aa6f2986262cbe2b683aaf5",
+  "variables_yf.parquet": "c6b9f12376d3cc93f3252e77e7386fcd3f16de0ca31c183d15bb6f1034958f65"
+ },
+ "collect_log": {
+  "pykrx prices 091160 (네이버 경로, 연구용)": "ok",
+  "pykrx prices 091230 (네이버 경로, 연구용)": "ok",
+  "yf prices 091160": "ok",
+  "yf prices 091230": "ok",
+  "yf series C_USDKRW": "ok",
+  "yf series C_KOSPI": "ok",
+  "yf series B_SOX": "ok",
+  "yf series B_NVDA": "ok",
+  "yf series B_MU": "ok",
+  "yf series B_TSM": "ok",
+  "yf series B_SAMSUNG": "ok",
+  "yf series B_HYNIX": "ok",
+  "yf series C_US10Y_YF": "ok",
+  "yf series C_VIX_YF": "ok",
+  "fred C_US10Y": "ok",
+  "fred C_VIX": "ok",
+  "fred C_FEDFUNDS": "ok",
+  "fred C_US2Y": "ok",
+  "ecos C_BOK_RATE": "ok",
+  "ecos C_KR10Y": "ok",
+  "ecos C_KR3Y": "ok",
+  "xlsx seoul34": "ok"
+ },
+ "start": "2006-01-01",
+ "end": null,
+ "tickers": [
+  "091160",
+  "091230"
+ ],
+ "repair": "merged = yf + naver gap-fill (engine/repair.py)"
+}

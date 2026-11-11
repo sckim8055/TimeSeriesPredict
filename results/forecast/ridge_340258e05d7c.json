@@ -1,0 +1,186 @@
+{
+ "config": {
+  "name": "",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "M",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {},
+  "seq_len": 12,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 60,
+   "test_len": 1,
+   "embargo": null,
+   "sealed_from": "2024-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025
+ },
+ "config_hash": "340258e05d7c",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 100.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 120,
+ "n_features": 15,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_6",
+  "A_ret_12",
+  "A_ma_ratio_3",
+  "A_ma_ratio_6",
+  "A_ma_ratio_12",
+  "A_ma_ratio_24",
+  "A_vol_6",
+  "A_vol_12",
+  "A_rsi_6",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist"
+ ],
+ "feature_importance": [
+  0.0004723951477516031,
+  0.0002663279864818212,
+  0.00014817764469065417,
+  9.306779887620654e-05,
+  9.083024239088942e-05,
+  0.00034655942893698784,
+  0.00016419428922740062,
+  0.00012518497032561432,
+  7.513243789699336e-05,
+  0.00018335460640672387,
+  0.0001533802236944761,
+  0.00016174967613909262,
+  9.4176523788564e-05,
+  6.279997851715139e-05,
+  0.0002269718910628695
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "prediction_metrics": {
+  "rmse": 0.003860414285804586,
+  "mae": 0.0024897815695461216,
+  "rmse_zero": 0.006428854421713957,
+  "rmse_naive": 0.003278960509034105,
+  "dir_acc": 0.8833333333333333,
+  "dir_acc_naive": 0.9416666666666667,
+  "dm_vs_zero": -4.989402129628659,
+  "dm_vs_zero_p": 6.05664499220282e-07,
+  "dm_vs_naive": 1.748720618240528,
+  "dm_vs_naive_p": 0.08033932424319801,
+  "level_rmse": 0.31502603396742695,
+  "level_mape": 0.002474945731026538,
+  "level_rmse_naive": 0.2615524074451602,
+  "level_mape_naive": 0.001839412276650414,
+  "level_rmse_zero": 0.540293309973119,
+  "level_mape_zero": 0.004498581047419652,
+  "skill_mape_vs_naive": -0.34550897721169727,
+  "dm_ape_vs_naive": 3.0940285709807727,
+  "dm_ape_vs_naive_p": 0.0019745846993100002,
+  "skill_vs_naive": -0.1773286915680976
+ },
+ "performance": {},
+ "period": [
+  "2009-01-01",
+  "2025-03-01"
+ ],
+ "prediction_period": [
+  "2014-01-01",
+  "2023-12-01"
+ ],
+ "n_predictions": 120,
+ "variable_first_date": {},
+ "device": "cuda",
+ "seconds": 4.5,
+ "periods": {
+  "data": [
+   "2009-01-01",
+   "2025-03-01"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2024-01-01"
+  },
+  "embargo": 1,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 120,
+  "first_fold": {
+   "train": [
+    "2010-12-01",
+    "2013-11-01"
+   ],
+   "val": null,
+   "test": [
+    "2014-01-01",
+    "2014-01-01"
+   ],
+   "n_train": 36,
+   "n_val": 0,
+   "n_test": 1
+  },
+  "last_fold": {
+   "train": [
+    "2018-12-01",
+    "2023-10-01"
+   ],
+   "val": null,
+   "test": [
+    "2023-12-01",
+    "2023-12-01"
+   ],
+   "n_train": 59,
+   "n_val": 0,
+   "n_test": 1
+  },
+  "test": [
+   "2014-01-01",
+   "2023-12-01"
+  ]
+ }
+}

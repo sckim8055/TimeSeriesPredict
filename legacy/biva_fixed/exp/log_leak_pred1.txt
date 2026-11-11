@@ -1,0 +1,13 @@
+{'train': (112, 6, 34), 'val': (21, 6, 34), 'test': (59, 6, 34)}
+ep 1 train 0.05955 val 0.47883
+ep 50 train 0.00427 val 0.01867
+ep 100 train 0.00376 val 0.01225
+ep 150 train 0.00346 val 0.01105
+ep 200 train 0.00336 val 0.01096
+ep 250 train 0.00324 val 0.01097
+ep 300 train 0.00310 val 0.01158
+ep 350 train 0.00301 val 0.01150
+ep 400 train 0.00300 val 0.01106
+ep 450 train 0.00288 val 0.01151
+ep 500 train 0.00286 val 0.01138
+{"variant": "leak-repro", "pred_len": 1, "seq_len": 6, "epochs": 500, "loss_w": [1.0, 0.1, 0.05], "n_test": 59, "biva": {"rmse": 1.9313407554920974, "mae": 1.6978004940359177, "mape": 0.017881302822509406}, "naive_last_value": {"rmse": 0.0, "mae": 0.0, "mape": 0.0}, "test_period": ["2020-05-01", "2025-03-01"], "seconds": 917.9, "device": "cpu"}

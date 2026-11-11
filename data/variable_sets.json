@@ -1,0 +1,159 @@
+{
+ "sets": [
+  {
+   "id": "semi_basic",
+   "name": "반도체 기본 (글로벌+국내 주가, 거시 일간)",
+   "description": "1차 실험 B+C. 미국 반도체 4종, 삼성·하이닉스, 환율·코스피·금리·VIX",
+   "variable_ids": [
+    "SOX",
+    "NVDA",
+    "MU",
+    "TSM",
+    "SAMSUNG",
+    "HYNIX",
+    "USDKRW",
+    "KOSPI",
+    "US10Y",
+    "US2Y",
+    "VIX",
+    "KR10Y",
+    "KR3Y",
+    "TERM_US"
+   ],
+   "transforms": {
+    "SOX": "pct",
+    "NVDA": "pct",
+    "MU": "pct",
+    "TSM": "pct",
+    "SAMSUNG": "pct",
+    "HYNIX": "pct",
+    "USDKRW": "pct",
+    "KOSPI": "pct"
+   },
+   "lag_override": {},
+   "recommended_for": [
+    "ridge",
+    "lightgbm_model",
+    "lstm",
+    "biva"
+   ]
+  },
+  {
+   "id": "h1_us_overnight",
+   "name": "H1 미국 반도체 익일 (4개, lag 0)",
+   "description": "SOX·NVDA·MU·TSM 일간수익률. 결정 시점 = t+1 개장 직전 해석으로 lag 0",
+   "variable_ids": [
+    "SOX",
+    "NVDA",
+    "MU",
+    "TSM"
+   ],
+   "transforms": {
+    "SOX": "pct",
+    "NVDA": "pct",
+    "MU": "pct",
+    "TSM": "pct"
+   },
+   "lag_override": {
+    "SOX": 0,
+    "NVDA": 0,
+    "MU": 0,
+    "TSM": 0
+   },
+   "recommended_for": [
+    "ridge",
+    "lightgbm_model"
+   ]
+  },
+  {
+   "id": "biva_seoul34",
+   "name": "BIVA 원본 (서울 거시 엑셀 34개, 월간)",
+   "description": "연구실 BIVA 가 쓰던 df_var_info 변수 전체(데이터 있는 것). 부동산 변수 포함 — 반도체 입력으로는 근거 약함",
+   "variable_ids": [
+    "A1",
+    "B1",
+    "B2",
+    "F1",
+    "F7",
+    "F10",
+    "F11",
+    "F12",
+    "H1",
+    "H2",
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "L2",
+    "L3",
+    "L9",
+    "M3",
+    "N2",
+    "N4",
+    "N5",
+    "N6",
+    "N7",
+    "N8",
+    "N10",
+    "N11",
+    "N19",
+    "N20",
+    "N21",
+    "N24"
+   ],
+   "transforms": {},
+   "lag_override": {},
+   "recommended_for": [
+    "biva",
+    "lstm"
+   ]
+  },
+  {
+   "id": "macro_monthly_3",
+   "name": "H5 월간 거시 3개",
+   "description": "선행지수 차분, CPI 변화율, 기준금리 차분",
+   "variable_ids": [
+    "B1",
+    "F7",
+    "BOK_RATE"
+   ],
+   "transforms": {
+    "B1": "diff",
+    "F7": "pct",
+    "BOK_RATE": "diff"
+   },
+   "lag_override": {},
+   "recommended_for": [
+    "ridge"
+   ]
+  },
+  {
+   "id": "rates_risk",
+   "name": "금리·위험선호 (일간)",
+   "description": "미국 2·10년 금리, 금리차, VIX, 한국 3·10년, 기준금리",
+   "variable_ids": [
+    "US10Y",
+    "US2Y",
+    "TERM_US",
+    "VIX",
+    "KR3Y",
+    "KR10Y",
+    "BOK_RATE"
+   ],
+   "transforms": {
+    "US10Y": "diff",
+    "US2Y": "diff",
+    "TERM_US": "diff",
+    "VIX": "pct",
+    "KR3Y": "diff",
+    "KR10Y": "diff",
+    "BOK_RATE": "diff"
+   },
+   "lag_override": {},
+   "recommended_for": [
+    "ridge",
+    "lightgbm_model"
+   ]
+  }
+ ]
+}

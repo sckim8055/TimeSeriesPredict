@@ -1,0 +1,13 @@
+{'train': (106, 6, 34), 'val': (15, 6, 34), 'test': (53, 6, 34)}
+ep 1 train 0.05543 val 0.41902
+ep 50 train 0.00455 val 0.02688
+ep 100 train 0.00380 val 0.01952
+ep 150 train 0.00348 val 0.02616
+ep 200 train 0.00328 val 0.03129
+ep 250 train 0.00314 val 0.03962
+ep 300 train 0.00307 val 0.03585
+ep 350 train 0.00297 val 0.03838
+ep 400 train 0.00292 val 0.04058
+ep 450 train 0.00290 val 0.04174
+ep 500 train 0.00284 val 0.03622
+{"variant": "fixed", "pred_len": 6, "seq_len": 6, "epochs": 500, "loss_w": [1.0, 0.1, 0.05], "n_test": 53, "biva": {"rmse": 5.784264718484181, "mae": 4.971423690520453, "mape": 0.052050472452029345}, "naive_last_value": {"rmse": 2.4545174216160817, "mae": 1.7239746143867496, "mape": 0.018277786999912834}, "test_period": ["2020-06-01", "2025-03-01"], "seconds": 909.9, "device": "cpu"}

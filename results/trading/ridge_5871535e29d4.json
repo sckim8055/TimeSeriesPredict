@@ -1,0 +1,140 @@
+{
+ "config": {
+  "name": "",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 42
+ },
+ "config_hash": "5871535e29d4",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 1.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "nogit",
+ "n_folds": 148,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": [
+  0.0011630843254549308,
+  0.0014116775782486914,
+  0.0033854835669179396,
+  0.002465987839782903,
+  0.0011381369114683087,
+  0.0026831834279460974,
+  0.0047204106612110846,
+  0.0034930241066484973,
+  0.0034067035968261025,
+  0.00153323024128341,
+  0.0008602538047597178,
+  0.0007320966389674583,
+  0.0028979418760644213,
+  0.002660236348716945,
+  0.001974900247966901,
+  0.0034334233252747808,
+  0.0008703167200396181,
+  0.0009172157375169783
+ ],
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "prediction_metrics": {
+  "rmse": 0.01791280660923429,
+  "mae": 0.013118765817116622,
+  "dir_acc": 0.49324324324324326,
+  "dm_vs_zero": 2.4175301861276846,
+  "dm_vs_zero_p": 0.01562623784007333
+ },
+ "performance": {
+  "n_periods": 3108,
+  "total_return": -0.49721045078567583,
+  "cagr": -0.054224469277711296,
+  "ann_vol": 0.22151488851208728,
+  "sharpe": -0.14063681219225008,
+  "sortino": -0.15661243947955747,
+  "mdd": -0.6445363923027096,
+  "win_rate": 0.4020076481835564,
+  "benchmark_total_return": 0.6935584740462746,
+  "benchmark_cagr": 0.043641564742352035,
+  "benchmark_mdd": -0.46494921971761083,
+  "excess_total_return": -1.1907689248319504,
+  "excess_mean_per_period": -0.0004442870994819849,
+  "n_trades": 862,
+  "turnover": 862.0,
+  "exposure": 0.536036036036036,
+  "total_cost": 0.5603,
+  "bootstrap_p_excess": 0.9875,
+  "deflated_sharpe_p": 0.9982020043691378,
+  "n_trials_so_far": 73
+ },
+ "period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "prediction_period": [
+  "2012-04-19",
+  "2024-12-05"
+ ],
+ "n_predictions": 3108,
+ "variable_first_date": {},
+ "device": "cuda",
+ "seconds": 3.3
+}

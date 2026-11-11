@@ -1,0 +1,124 @@
+{
+ "config": {
+  "name": "04_ridge_A",
+  "ticker": "091160_merged",
+  "frequency": "D",
+  "start": "2009-01-01",
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "fill": "ffill",
+  "apply_lag": true,
+  "model": "ridge",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15
+  },
+  "data_version": "20261102T134628Z",
+  "seed": 2025
+ },
+ "config_hash": "f7dfa822a8cc",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 1.0
+  }
+ },
+ "data_version": "20261102T134628Z",
+ "code_version": "nogit",
+ "n_folds": 148,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": [
+  0.0011398423262561274,
+  0.0013805091494369197,
+  0.0033339554493024065,
+  0.0024213884608529786,
+  0.0011601073501846131,
+  0.002675571833261972,
+  0.004676105875161538,
+  0.0034869039034447226,
+  0.003362367254835865,
+  0.0015347850167657605,
+  0.0008755858355108708,
+  0.0007283432922686749,
+  0.002966483182244717,
+  0.0026868613027309063,
+  0.002009676569861018,
+  0.003428545636668221,
+  0.0008690010471625459,
+  0.0009327649664831597
+ ],
+ "leak_warning": false,
+ "prediction_metrics": {
+  "rmse": 0.017942300408045096,
+  "mae": 0.013161480867138059,
+  "dir_acc": 0.4954954954954955,
+  "dm_vs_zero": 2.4198567045864072,
+  "dm_vs_zero_p": 0.015526624214791784
+ },
+ "performance": {
+  "n_periods": 4315,
+  "total_return": -0.34488143213022426,
+  "cagr": -0.024397482328588516,
+  "ann_vol": 0.1853918171771801,
+  "sharpe": -0.04030300515260479,
+  "sortino": -0.037861697823988155,
+  "mdd": -0.5726791205373745,
+  "win_rate": 0.4071914480077745,
+  "benchmark_total_return": 8.686346863468584,
+  "benchmark_cagr": 0.14180688951234743,
+  "benchmark_mdd": -0.48777617289894615,
+  "excess_total_return": -9.031228295598808,
+  "excess_mean_per_period": -0.0007768831050879764,
+  "n_trades": 828,
+  "turnover": 828.0,
+  "exposure": 0.3824415103080843,
+  "total_cost": 0.5382,
+  "bootstrap_p_excess": 0.9985,
+  "deflated_sharpe_p": 0.9129815419730847,
+  "n_trials_so_far": 5
+ },
+ "period": [
+  "2009-04-17",
+  "2026-11-02"
+ ],
+ "device": "cpu",
+ "seconds": 2.4
+}

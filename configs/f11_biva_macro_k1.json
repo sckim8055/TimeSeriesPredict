@@ -1,0 +1,35 @@
+{
+  "name": "f11_biva_macro_k1",
+  "mode": "forecast",
+  "target_variable": "F11",
+  "frequency": "M",
+  "model": "biva",
+  "model_params": {
+    "train_epochs": 60
+  },
+  "variable_ids": [
+    "B1",
+    "F7",
+    "BOK_RATE",
+    "KR3Y",
+    "USDKRW"
+  ],
+  "variable_transforms": {
+    "B1": "diff",
+    "F7": "pct",
+    "BOK_RATE": "diff",
+    "KR3Y": "diff",
+    "USDKRW": "pct"
+  },
+  "target": {
+    "kind": "return",
+    "k": 1
+  },
+  "validation": {
+    "train_len": 60,
+    "test_len": 1,
+    "sealed_from": "2024-01-01"
+  },
+  "data_version": "20261103T141116Z",
+  "seq_len": 12
+}
