@@ -44,6 +44,8 @@ class _Net(nn.Module):
 
 
 class Model(BaseModel):
+    STOCHASTIC = True  # 가중치 초기값·미니배치 순서·드롭아웃이 시드에 따라 달라진다
+
     def fit(self, X, y, X_val=None, y_val=None):
         p = self.params
         dev = torch.device(self.device if torch.cuda.is_available() or self.device == "cpu" else "cpu")
@@ -100,6 +102,9 @@ class Model(BaseModel):
         if best_state is not None:
             self.net.load_state_dict(best_state)
         self.net.eval()
+        # 진단: 몇 번째 반복의 가중치를 쓰는가(검증 손실 최저 시점). 검증이 없으면 마지막 반복.
+        self.diag = {"early_stopping": bool(has_val), "epochs_run": int(ep + 1), "epoch_used": int(self.best_epoch) if self.best_epoch else int(ep + 1),
+                     "epochs_max": int(p["epochs"]), "best_val_loss": float(best) if has_val and np.isfinite(best) else None}
 
     def predict(self, X):
         dev = next(self.net.parameters()).device

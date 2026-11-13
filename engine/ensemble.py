@@ -40,6 +40,11 @@ def make_ensemble(stems: list[str], results_dir: Path, method: str = "mean") -> 
             raise ValueError(f"{st}: 대상·k·맞히는 방식·정보 시점이 다릅니다 {key(r)} ≠ {k0}")
     if any(r.get("sealed_evaluation") for r in rs):
         raise ValueError("봉인 평가 결과는 결합하지 않습니다")
+    # 계산 방식(engine_rev)이 다른 결과는 섞지 않는다. 앙상블 결과에도 그 값을 적는다 — 2026-11-10 전에는 적지 않아 새 앙상블이 전부 '옛 방식'으로
+    # 표시되고 다중비교 가족에서 빠졌다(독립 검토 F4).
+    revs = sorted({str(r.get("engine_rev")) for r in rs})
+    if len(revs) > 1:
+        raise ValueError(f"구성 결과의 계산 방식(engine_rev)이 서로 다릅니다 {revs} — 같은 방식으로 다시 돌린 결과끼리 결합하세요")
     preds = pd.concat([d["prediction"].rename(st) for st, d in zip(stems, ds)], axis=1)
     both = preds.dropna()
     if len(both) < 10:
@@ -51,6 +56,10 @@ def make_ensemble(stems: list[str], results_dir: Path, method: str = "mean") -> 
     g = (lambda x: 1 + x) if kind == "return" else (np.exp if kind == "logreturn" else None)
     base["pred_future_level"] = (base["level"] * g(base["prediction"])).where(base["prediction"].notna()) if g else np.nan
     base = base.drop(columns=[c for c in ("fit",) if c in base.columns])
+    # 기준 예측(학습 창 평균)은 구성 모델들의 폴드가 같을 때만 뜻이 있다 — 공통 시점에서 모두 같으면 그대로, 아니면 뺀다(평균 기준 CW 는 계산하지 않음)
+    if "bench_mean" in base.columns:
+        same = all("bench_mean" in d.columns and np.allclose(d["bench_mean"].reindex(both.index).values, ds[0]["bench_mean"].reindex(both.index).values, equal_nan=True) for d in ds)
+        base = base.assign(bench_mean=base["bench_mean"].where(base.index.isin(both.index))) if same else base.drop(columns=["bench_mean"])
     target_type = "classification" if kind in ("direction", "event") else "regression"
     pm, ev = forecast_metrics(base, kind, k, target_type)
     # 구성 모델 각각도 같은 공통 시점에서 다시 채점(공정 비교)
@@ -71,7 +80,7 @@ def make_ensemble(stems: list[str], results_dir: Path, method: str = "mean") -> 
     return {
         "config": cfg, "config_hash": h,
         "model": {"file": "ensemble", "name": f"앙상블({method}: {' + '.join(names)})", "input_shape": "ensemble", "params": cfg["model_params"]},
-        "data_version": rs[0].get("data_version"), "code_version": rs[0].get("code_version"), "n_folds": None,
+        "data_version": rs[0].get("data_version"), "code_version": rs[0].get("code_version"), "engine_rev": rs[0].get("engine_rev"), "n_folds": None,
         "n_features": None, "feature_names": [], "feature_importance": None, "degenerate_model": False, "sealed_evaluation": False,
         "evaluation_period": [str(ev.index[0].date()), str(ev.index[-1].date())], "leak_warning": any(r.get("leak_warning") for r in rs),
         "lag_days_used": {st: r.get("lag_days_used") for st, r in zip(stems, rs)},

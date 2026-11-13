@@ -63,12 +63,19 @@ class BaseModel(ABC):
     False 면 학습 창 전체를 학습에 쓴다(검증을 쓰지 않는 모델이 15% 를 버리지 않도록)."""
 
     USES_VALIDATION = True
+    # STOCHASTIC: 같은 자료·같은 파라미터라도 난수(가중치 초기값·미니배치 순서·행/열 표본추출)에 따라 결과가 달라지는 모델이면 True.
+    # 엔진은 이런 모델에 한해 설정의 n_seeds 만큼 시드를 바꿔 학습하고 예측을 평균한다(2026-11-10). 결정적 모델(릿지·ARIMA 등)은 한 번만 학습.
+    STOCHASTIC = False
 
     def __init__(self, params: dict[str, Any], *, n_features: int, target_type: str, device: str = "cpu"):
         self.params = params
         self.n_features = n_features
         self.target_type = target_type
         self.device = device
+        # 시드는 모델이 정하지 않는다(절대 규칙 3). 엔진이 학습 직전에 전역 난수(random·numpy·torch)를 이 폴드·이 반복의 시드로 맞춘다
+        # (engine.experiment.fold_seed). 자체 난수기를 가진 라이브러리(LightGBM)는 그 numpy 전역 난수에서 시드를 하나 뽑아 쓴다.
+        # 학습 진단(조기 종료 지점 등). 모델이 채우면 엔진이 폴드 기록·결과 요약에 남긴다. 계산에는 쓰지 않는다.
+        self.diag: dict | None = None
 
     @abstractmethod
     def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray | None = None, y_val: np.ndarray | None = None) -> None: ...
@@ -137,3 +144,66 @@ class RuleModel(ABC):
 
     @abstractmethod
     def positions(self, prices, X=None) -> "np.ndarray": ...
+
+
+def fit_multi_start(mod, *, starts: str = "multi", maxiter: int = 200):
+    """statsmodels 상태공간 모형(SARIMAX)을 여러 출발점에서 최우추정해 로그우도가 가장 높은 해를 고른다. 반환 (결과, 진단 dict).
+
+    왜(2026-11-10): ARMA 가능도에는 극대점이 여러 개 있을 수 있고, 기본 출발점 하나에서 L-BFGS 가 '수렴했다'고 해도 최댓값이 아닐 수 있다.
+    F11 월간(학습 창 60) 폴드 30개 표본에서: ARIMA(2,0,2) 는 10개 폴드에서 다른 출발점의 로그우도가 0.01 이상 높았고(최대 +0.99),
+    SARIMA(1,0,1)(1,0,1,12) 는 8개(최대 +1.82). 그때 1기간 예측은 평균 0.00025·0.00007 달랐다(변화율 표준편차 0.0049).
+    최우추정량의 정의는 '가능도가 가장 큰 모수'이므로, 여러 출발점 중 가장 높은 것을 쓰는 것이 정의에 맞다 — 그래도 전역 최댓값이라는 보장은 아니다.
+
+    출발점(모두 정해진 값 — 난수 없음, 같은 자료면 같은 결과)
+      default  statsmodels 기본 출발점(조건부 제곱합 추정)
+      zero     AR·MA 계수 전부 0 (상수·분산만)
+      ar+ ar-  첫 AR 계수 ±0.5 (계절 AR ±0.3), 나머지 0
+      ma+ ma-  첫 MA 계수 ±0.5 (계절 MA ±0.3), 나머지 0
+      nm       기본 출발점에서 Nelder–Mead(도함수 없이 탐색) → 그 해에서 다시 L-BFGS
+    starts="default" 면 기본 출발점 하나만(2026-11-10 전과 같다).
+    고르는 규칙: 로그우도가 유한한 해 가운데 최대. 단 앞의 해보다 1e−4 넘게 높을 때만 바꾼다(default 우선) — 사실상 같은 최대점에서 출발점만 다른 해로
+    바뀌어 예측이 소수 끝자리에서 흔들리는 것을 막는다(컴퓨터·라이브러리 판에 따라 어느 해가 '아주 조금' 높은지가 달라질 수 있다)."""
+    import numpy as _np
+
+    names = list(mod.param_names)
+    base = _np.asarray(mod.start_params, dtype=float)
+
+    def vec(ar, ma, sar, sma):
+        v = base.copy()
+        for i, n in enumerate(names):
+            if n.startswith("ar.S."):
+                v[i] = sar if n.split(".L")[-1] == str(getattr(mod, "seasonal_periods", 0)) else 0.0
+            elif n.startswith("ma.S."):
+                v[i] = sma if n.split(".L")[-1] == str(getattr(mod, "seasonal_periods", 0)) else 0.0
+            elif n.startswith("ar.L"):
+                v[i] = ar if n == "ar.L1" else 0.0
+            elif n.startswith("ma.L"):
+                v[i] = ma if n == "ma.L1" else 0.0
+        return v
+
+    plan = [("default", None)]
+    if starts == "multi":
+        plan += [("zero", vec(0, 0, 0, 0)), ("ar+", vec(0.5, 0, 0.3, 0)), ("ar-", vec(-0.5, 0, -0.3, 0)), ("ma+", vec(0, 0.5, 0, 0.3)), ("ma-", vec(0, -0.5, 0, -0.3)), ("nm", "nm")]
+    tried = []
+    best = None
+    for nm, sp in plan:
+        try:
+            if isinstance(sp, str):  # Nelder–Mead 뒤 L-BFGS 로 다듬기
+                r0 = mod.fit(method="nm", disp=False, maxiter=2000)
+                res = mod.fit(start_params=r0.params, disp=False, maxiter=maxiter)
+            else:
+                res = mod.fit(start_params=sp, disp=False, maxiter=maxiter)
+            llf = float(res.llf)
+        except Exception:  # noqa: BLE001 — 한 출발점이 실패해도 나머지로 계속
+            tried.append({"start": nm, "llf": None})
+            continue
+        ok = bool(_np.isfinite(llf)) and bool(_np.all(_np.isfinite(_np.asarray(res.params, dtype=float))))
+        tried.append({"start": nm, "llf": llf if ok else None, "converged": bool((getattr(res, "mle_retvals", None) or {}).get("converged", False))})
+        if ok and (best is None or llf > best[1] + 1e-4):
+            best = (nm, llf, res)
+    if best is None:
+        raise RuntimeError("최우추정이 모든 출발점에서 실패했습니다")
+    d = next((t["llf"] for t in tried if t["start"] == "default"), None)
+    diag = {"start_used": best[0], "llf": best[1], "llf_default": d, "llf_gain": (best[1] - d) if d is not None else None,
+            "n_starts": len(plan), "converged": bool((getattr(best[2], "mle_retvals", None) or {}).get("converged", False)), "tried": tried}
+    return best[2], diag

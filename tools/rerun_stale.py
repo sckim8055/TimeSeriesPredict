@@ -9,6 +9,10 @@
   python tools/rerun_stale.py --run --all     # LSTM·GRU·BIVA 포함(노트북 GPU 권장)
   python tools/rerun_stale.py --run --mode forecast
 
+[2026-11-10 주의] 엔진 계산 방식이 2026-11-10 에 크게 바뀌어(봉인 경계·시드·SARIMA 기본·변환 등, engine.experiment.ENGINE_REV) 그 전 결과는 '전부' 옛 방식이다.
+이 도구는 'lag·변환이 달라진 결과'만 찾고, ARIMA·SARIMA 는 '그때의 옛 기본값'으로 고정해 다시 돌린다 — 논문용 재실행에는 맞지 않는다.
+논문용 재실행은 사전 분석 계획서(docs/PREREG_초안_2026-11.md)의 설정 목록으로 한다. 그래서 --run 은 --old-defaults 를 함께 줄 때만 돈다.
+
 재실행은 정식 실험으로 기록된다(실험 카운터 +1) — 같은 가설을 데이터 교정 후 다시 본 것이므로 숨기지 않는 쪽이 정직하다.
 옛 결과 파일은 지우지 않는다(비교용). 새 결과 이름 끝에 '_v1107' 을 붙여 구분한다(전에 붙인 '_v1105' 는 떼고).
 """
@@ -62,7 +66,12 @@ def main() -> None:
     ap.add_argument("--all", action="store_true", help="딥러닝 모델 포함")
     ap.add_argument("--mode", choices=["trading", "forecast", "both"], default="both")
     ap.add_argument("--match", default="", help="결과 파일 이름에 이 글자(쉼표로 여러 개)가 든 것만")
+    ap.add_argument("--old-defaults", action="store_true", help="옛 기본값(ARIMA·SARIMA 추정 설정 등)으로 고정해 다시 돌리는 것임을 알고 실행")
     a = ap.parse_args()
+    if a.run and not a.old_defaults:
+        print("이 도구의 재실행은 ARIMA·SARIMA 를 '옛 기본값'으로 고정합니다 — 2026-11-10 엔진의 논문용 재실행에는 사전 분석 계획서의 설정 목록을 쓰세요.\n"
+              "그래도 옛 기본값으로 다시 돌리려면 --old-defaults 를 함께 주세요. (목록만 보려면 --run 을 빼세요)")
+        return
     reg, _ = Registry.load_master(ROOT / "data" / "variable_master.xlsx")
     stale = []
     newest: dict = {}  # (모드, 이름(태그 뗀 것), 모델) → 가장 최근 결과 파일의 시각(낡지 않은 것 포함)
@@ -147,7 +156,8 @@ def main() -> None:
                 have = set()
             miss = [v for v in c["variable_ids"] if v not in have]
             if miss:
-                latest = sorted(q.name for q in (ROOT / "data" / "versions").glob("*") if (q / "manifest.json").exists())[-1]  # cli.latest_version 과 같은 규칙
+                from engine.store import latest_version_id
+                latest = latest_version_id(ROOT / "data")  # cli.latest_version 과 같은 규칙(가장 새 온전한 버전)
                 print(f"  [데이터 버전] {dv_id} 에 {', '.join(miss[:5])}{' …' if len(miss) > 5 else ''} 없음(옛 ID 시절 버전) → 최신 데이터 버전 {latest} 로 실행")
                 c["data_version"] = latest
                 tk = c.get("ticker") or ""

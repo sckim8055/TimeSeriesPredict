@@ -24,10 +24,11 @@ RESULTS = ROOT / "results"
 
 
 def latest_version() -> str:
-    vs = sorted(p.name for p in (DATA / "versions").glob("*") if (p / "manifest.json").exists())
-    if not vs:
+    from engine.store import latest_version_id
+    v = latest_version_id(DATA)  # 가장 새 '온전한' 버전(일부를 받지 못한 버전은 자동으로 고르지 않는다)
+    if not v:
         raise SystemExit("데이터 버전이 없습니다. 먼저 collect.py 를 실행하세요.")
-    return vs[-1]
+    return v
 
 
 def cmd_models():
@@ -63,6 +64,7 @@ def cmd_run(path: str, version: str | None, sealed: bool = False, master: str | 
     RES.mkdir(parents=True, exist_ok=True)
     ledger.ensure(RES)  # 시도 원장(없으면 옛 카운터 값으로 시작)
     n_dev = ledger.count(RES)
+    led_before = ledger.head(RES)  # 시작할 때의 원장 머리 — 결과(run_record.ledger_before)에 적어 두어 원장의 끝 줄이 지워지면 드러나게 한다
     # 봉인 평가는 '개발 시도'가 아니다: 원장에 sealed 로 적되 N 에 넣지 않고, 과최적화 보정에는 지금까지의 개발 시도 수를 쓴다
     n = max(1, n_dev) if sealed else n_dev + 1
     from engine.experiment import default_device
@@ -79,9 +81,13 @@ def cmd_run(path: str, version: str | None, sealed: bool = False, master: str | 
     if sealed:
         # 시작할 때 '예약' 줄을 먼저 쓴다 — 전에는 끝난 뒤에만 써서, 연달아 두 번 실행하면 둘 다 통과했다(2026-11-10 점검 S4)
         hist = read_log(sealed_log)
-        hist.append({"config": cfg.name, "hash": cfg.config_hash(), "when": pd.Timestamp.utcnow().isoformat(), "status": "started", "run_id": run_id,
+        from engine import sealpolicy
+        from engine.experiment import fill_defaults
+        cfg_eff = fill_defaults(sealpolicy.apply(cfg, sealed=True)[0], reg)  # 봉인 정책·기본값을 채운 '실제로 돌 설정'
+        h_res, sf_eff = cfg_eff.config_hash(), cfg_eff.validation.sealed_from  # 결과 파일과 같은 해시(창 길이 기본값을 채운 설정) — 중간에 죽어도 같은 설정의 개봉으로 잡힌다
+        hist.append({"config": cfg.name, "hash": h_res, "when": pd.Timestamp.utcnow().isoformat(), "status": "started", "run_id": run_id,
                      "job_id": job_id, "source_result": os.environ.get("TSP_SEALED_SOURCE") or None, "note": os.environ.get("TSP_SEALED_NOTE") or "",
-                     "model": cfg.model, "mode": cfg.mode, "sealed_from": cfg.validation.sealed_from})
+                     "model": cfg.model, "mode": cfg.mode, "sealed_from": sf_eff})
         write_log(sealed_log, hist)
     try:
         res = run_experiment(cfg, dv, reg, n_trials_so_far=n, sealed=sealed, trial_sr_var=trial_sharpe_variance(RES, ppy))
@@ -94,36 +100,54 @@ def cmd_run(path: str, version: str | None, sealed: bool = False, master: str | 
                     x["status"] = "failed"; x["error"] = f"{type(e).__name__}: {e}"[:500]
             write_log(sealed_log, hist)
         raise
-    if sealed:
-        hist = read_log(sealed_log)
-        h = res["config_hash"]  # 실제로 돈 설정(창 길이 등 기본값을 채운 것)의 해시 — 결과 파일·미리보기와 같은 값
-        done = [e for e in hist if e.get("run_id") != run_id and e.get("status", "done") != "failed"]  # 실패한 시도·자기 예약 줄은 개봉 횟수에서 뺀다
-        prev_same = sum(1 for e in done if e.get("hash") == h)
-        prev_seal = sum(1 for e in done if e.get("sealed_from") == cfg.validation.sealed_from)
-        res["sealed_info"] = {
-            "opened_utc": pd.Timestamp.utcnow().isoformat(), "job_id": job_id,
-            "source_result": os.environ.get("TSP_SEALED_SOURCE") or None, "note": os.environ.get("TSP_SEALED_NOTE") or "",
-            "opening_no_same_config": prev_same + 1, "opening_no_same_seal_date": prev_seal + 1, "opening_no_mode": len(done) + 1,
-            "dev_trials": n,
-        }
-        out = save_result(res, RES)
-        pm, pf = res.get("prediction_metrics") or {}, res.get("performance") or {}
-        entry = {"config": cfg.name, "hash": h, "when": res["sealed_info"]["opened_utc"], "status": "done", "run_id": run_id, "result": Path(out).stem,
-                 "source_result": res["sealed_info"]["source_result"], "note": res["sealed_info"]["note"], "job_id": res["sealed_info"]["job_id"],
-                 "model": cfg.model, "mode": cfg.mode, "sealed_from": cfg.validation.sealed_from,
-                 "period": (res.get("periods") or {}).get("test") or res.get("evaluation_period"), "n_folds": res.get("n_folds"),
-                 "data_version": res.get("data_version"), "code_version": res.get("code_version"),
-                 "metrics": {k: pm.get(k) for k in ("rmse", "rmse_naive", "dm_vs_naive_p", "cw_vs_zero_p", "dir_acc", "auc") if pm.get(k) is not None}
-                            | {k: pf.get(k) for k in ("sharpe", "cagr", "mdd", "benchmark_cagr", "bootstrap_p_excess", "deflated_sharpe_p") if pf.get(k) is not None}}
-        hist = [entry if e.get("run_id") == run_id else e for e in hist] if any(e.get("run_id") == run_id for e in hist) else hist + [entry]
-        write_log(sealed_log, hist)
-        ledger.record(RES, "sealed", config_hash=h, name=cfg.name, model=cfg.model, run_id=run_id, result=Path(out).stem)
-        print(f"  [봉인 평가] 이 설정(해시 {h})의 봉인 평가 {prev_same + 1}회째 · 같은 봉인 시작일 {prev_seal + 1}회째 — 같은 설정을 2회 이상 열면 봉인의 의미가 없습니다")
-        print(f"  [봉인 평가] 개발 시도 수는 올리지 않음(개발 시도 {n}회 기준으로 보정)")
-    else:
-        out = save_result(res, RES)
-        # 원장에 한 줄(끝난 뒤 — 평가를 본 시도만 센다). 저장 시점의 원장으로 세므로 두 실험이 겹쳐도 횟수가 줄지 않는다
-        n = ledger.record(RES, "trial", config_hash=res["config_hash"], name=cfg.name, model=cfg.model, run_id=run_id, result=Path(out).stem)
+    # 저장·기록 단계의 실패도 실행 기록에 남긴다(전에는 run_experiment 안의 실패만 남았다 — 2026-11-10 독립 검토 F17).
+    # 봉인 평가는 이 단계가 끝나기 전까지 수치를 어디에도 보여 주지 않으므로, 여기서 실패하면 '실패'(개봉으로 세지 않음)가 맞다.
+    try:
+        res.setdefault("run_record", {})["ledger_before"] = led_before
+        if sealed:
+            hist = read_log(sealed_log)
+            h = res["config_hash"]  # 실제로 돈 설정(창 길이 등 기본값을 채운 것)의 해시 — 결과 파일·미리보기와 같은 값
+            done = [e for e in hist if e.get("run_id") != run_id and e.get("status", "done") != "failed"]  # 실패한 시도·자기 예약 줄은 개봉 횟수에서 뺀다
+            prev_same = sum(1 for e in done if e.get("hash") == h)
+            sf_eff = (res["config"].get("validation") or {}).get("sealed_from")  # 실제로 쓴 봉인 시작일(정책이 채웠을 수 있다)
+            prev_seal = sum(1 for e in done if e.get("sealed_from") == sf_eff)
+            res["sealed_info"] = {
+                "opened_utc": pd.Timestamp.utcnow().isoformat(), "job_id": job_id,
+                "source_result": os.environ.get("TSP_SEALED_SOURCE") or None, "note": os.environ.get("TSP_SEALED_NOTE") or "",
+                "opening_no_same_config": prev_same + 1, "opening_no_same_seal_date": prev_seal + 1, "opening_no_mode": len(done) + 1,
+                "dev_trials": n,
+            }
+            out = save_result(res, RES)
+            pm, pf = res.get("prediction_metrics") or {}, res.get("performance") or {}
+            entry = {"config": cfg.name, "hash": h, "when": res["sealed_info"]["opened_utc"], "status": "done", "run_id": run_id, "result": Path(out).stem,
+                     "source_result": res["sealed_info"]["source_result"], "note": res["sealed_info"]["note"], "job_id": res["sealed_info"]["job_id"],
+                     "model": cfg.model, "mode": cfg.mode, "sealed_from": sf_eff,
+                     "period": (res.get("periods") or {}).get("test") or res.get("evaluation_period"), "n_folds": res.get("n_folds"),
+                     "data_version": res.get("data_version"), "code_version": res.get("code_version"),
+                     "metrics": {k: pm.get(k) for k in ("rmse", "rmse_naive", "dm_vs_naive_p", "cw_vs_zero_p", "dir_acc", "auc") if pm.get(k) is not None}
+                                | {k: pf.get(k) for k in ("sharpe", "cagr", "mdd", "benchmark_cagr", "bootstrap_p_excess", "deflated_sharpe_p") if pf.get(k) is not None}}
+            hist = [entry if e.get("run_id") == run_id else e for e in hist] if any(e.get("run_id") == run_id for e in hist) else hist + [entry]
+            write_log(sealed_log, hist)
+            ledger.record(RES, "sealed", config_hash=h, name=cfg.name, model=cfg.model, run_id=run_id, result=Path(out).stem)
+            print(f"  [봉인 평가] 이 설정(해시 {h})의 봉인 평가 {prev_same + 1}회째 · 같은 봉인 시작일 {prev_seal + 1}회째 — 같은 설정을 2회 이상 열면 봉인의 의미가 없습니다")
+            print(f"  [봉인 평가] 개발 시도 수는 올리지 않음(개발 시도 {n}회 기준으로 보정)")
+        else:
+            out = save_result(res, RES)
+            # 원장에 한 줄(끝난 뒤 — 평가를 본 시도만 센다). 저장 시점의 원장으로 세므로 두 실험이 겹쳐도 횟수가 줄지 않는다
+            n = ledger.record(RES, "trial", config_hash=res["config_hash"], name=cfg.name, model=cfg.model, run_id=run_id, result=Path(out).stem)
+            sp = res.get("seal_policy") or {}
+            if sp.get("status") == "override":  # 봉인 구간을 일부러 본 실행 — 원장에 이유와 함께 따로 한 줄(개발 시도로는 위에서 이미 셌다)
+                ledger.record(RES, "seal_override", config_hash=res["config_hash"], name=cfg.name, run_id=run_id, result=Path(out).stem,
+                              target=sp.get("target"), policy_date=sp.get("policy_date"), reason=sp.get("reason"))
+    except BaseException as e:
+        runlog.append_log(RES, {"event": "failed", "run_id": run_id, "job_id": job_id, "stage": "save", "error": f"{type(e).__name__}: {e}"[:2000]})
+        if sealed:
+            hist = read_log(sealed_log)
+            for x in hist:
+                if x.get("run_id") == run_id and x.get("status") == "started":
+                    x["status"] = "failed"; x["error"] = f"저장 단계: {type(e).__name__}: {e}"[:500]
+            write_log(sealed_log, hist)
+        raise
     log.info("결과 저장: %s (실험 카운터 %d%s)", out, n, ", 봉인 평가" if sealed else "")
     log.debug("결과 요약: %s", logs.describe({"prediction_metrics": res.get("prediction_metrics"), "periods": res.get("periods"), "n_folds": res.get("n_folds")}))
     p = res["performance"]
@@ -159,6 +183,12 @@ def _main():
     else:
         ver = sys.argv[sys.argv.index("--data-version") + 1] if "--data-version" in sys.argv else None
         mst = sys.argv[sys.argv.index("--master") + 1] if "--master" in sys.argv else None
+        if "--past-seal" in sys.argv:  # 봉인 정책을 일부러 넘긴다(재현 실험 등). 이유가 결과와 시도 원장에 남는다 — engine/sealpolicy.py
+            i_ = sys.argv.index("--past-seal")
+            why = sys.argv[i_ + 1].strip() if i_ + 1 < len(sys.argv) and not sys.argv[i_ + 1].startswith("--") else ""
+            if not why:
+                raise SystemExit('--past-seal 뒤에 이유를 적어야 합니다. 예: --past-seal "원 논문의 분할 재현"')
+            os.environ["TSP_SEAL_OVERRIDE"] = why
         cmd_run(sys.argv[2], ver, sealed="--sealed" in sys.argv, master=mst)
 
 

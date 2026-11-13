@@ -473,7 +473,10 @@ def build(cap: dict) -> dict:
         return t
 
     stk = ["engine/experiment.py · _walkforward_predict", "models/base.py · SeriesModel.fit", f"{MODEL} · Model.fit_series"]
-    fit_line = src.line(MODEL, ".fit(disp=False, maxiter=200)"); sx_line = src.line(MODEL, "self.res = SARIMAX(r * self.scale")
+    # 2026-11-10: 추정이 '여러 출발점 중 로그우도 최대'(models/base.py fit_multi_start)로 바뀌었다. 이 대본은 출발점 하나의 L-BFGS 를 따라간다 —
+    # 옛 기록(출발점 하나)에서는 그대로 맞고, 새 기록에서는 '뽑힌 출발점의 추정'을 보여 주도록 다시 기록·손봐야 한다(docs/STATUS.md).
+    fit_line = src.line(MODEL, "self.res, self.diag = fit_multi_start(mod"); sx_line = src.line(MODEL, "mod = SARIMAX(r * self.scale")
+    ms_note = " (2026-11-10 부터는 정해진 출발점 7개에서 각각 이렇게 추정해 로그우도가 가장 높은 해를 씁니다 — 이 화면의 기록은 기본 출발점 하나로 추정한 것)"
     st_line = src.line(MODEL, '"enforce_stationarity": {"type": "bool"'); inv_line = src.line(MODEL, '"enforce_invertibility": {"type": "bool"')
     ser_line = src.line(EXP, 'if plugin.INPUT_SHAPE == "series":')
     lev = cap["level"]; r_all = cap["r_all"]; r_tr = cap["r_tr"]; tr_idx = cap["tr_idx"]
@@ -701,7 +704,7 @@ def build(cap: dict) -> dict:
                 "충격은 평균 0, 분산 시그마 제곱인 정규분포로 봅니다. 이 모델 파일은 상수항을 넘기지 않고 statsmodels의 기본도 상수 없음이라, 상수는 없습니다. "
                 "추정할 모수는 φ1, θ1, Φ1, Θ1, 시그마 제곱의 5개입니다.")
         nt5 = N((sx_line, f"SARIMAX(r × {sc:g}, order=({p['p']}, {p['d']}, {p['q']}), seasonal_order=({p['P']}, {p['D']}, {p['Q']}, {p['s']})) — trend 없음 → 상수 없음"),
-                (fit_line, "정상성·가역성 제약 켬 · .fit: 기본 방법 L-BFGS, 최대 200번 반복"))
+                (fit_line, "정상성·가역성 제약 켬 · .fit: 기본 방법 L-BFGS, 최대 200번 반복" + ms_note))
     else:
         form = "r_t = c + φ₁ r_(t−1) + φ₂ r_(t−2) + ε_t + θ₁ ε_(t−1) + θ₂ ε_(t−2),   ε ~ N(0, σ²)"
         narr = (f"ARIMA{order} + 상수: 이번 달 변화율 = 상수 + 지난 두 달 변화율의 가중합(AR) + 이번 달 충격 ε + 지난 두 달 충격의 가중합(MA). "
@@ -710,7 +713,7 @@ def build(cap: dict) -> dict:
                 "충격은 평균 0, 분산 시그마 제곱인 정규분포로 봅니다. 차분 d가 0인 것은 입력이 이미 변화율이기 때문입니다. "
                 "추정할 모수는 상수, φ1, φ2, θ1, θ2, 시그마 제곱의 6개입니다. statsmodels에서 상수는 자기회귀 식 안에 들어가므로, 상수 자체가 평균은 아닙니다.")
         nt5 = N((sx_line, f"SARIMAX(r × {sc:g}, order=({p['p']}, {p['d']}, {p['q']}), trend='{p['trend']}') — 정상성·가역성 제약 켬"),
-                (fit_line, ".fit: 기본 방법 L-BFGS, 최대 200번 반복"))
+                (fit_line, ".fit: 기본 방법 L-BFGS, 최대 200번 반복" + ms_note))
     S("2. 모형식", narr, say=say5, notes=nt5,
       code=C(MODEL, [sx_line, fit_line], sx_line, "Model.fit_series", 6, 2),
       stack=stk, nodes=["mle"], formula=form,
@@ -810,7 +813,7 @@ def build(cap: dict) -> dict:
       notes=N((src.line(MODEL, 'self.scale = float(p.get("scale", 1.0) or 1.0)'), f"PARAMS 의 scale 기본값 → self.scale = {sc:g} (설정 파일은 scale 을 정하지 않음)"),
               (sx_line, f"추정은 r × {sc:g} 단위"),
               (src.line(MODEL, "return np.asarray(self.res.apply(np.asarray(history"), f"예측도 history × {sc:g} 로 필터 → forecast ÷ {sc:g}")),
-      code=C(MODEL, src.lines(MODEL, 'self.scale = float(p.get("scale", 1.0) or 1.0)', "self.res = SARIMAX(r * self.scale", 'sc = getattr(self, "scale", 1.0)', "return np.asarray(self.res.apply(np.asarray(history"),
+      code=C(MODEL, src.lines(MODEL, 'self.scale = float(p.get("scale", 1.0) or 1.0)', "mod = SARIMAX(r * self.scale", 'sc = getattr(self, "scale", 1.0)', "return np.asarray(self.res.apply(np.asarray(history"),
              src.line(MODEL, 'self.scale = float(p.get("scale", 1.0) or 1.0)'), "Model.fit_series / forecast", 4, 4),
       stack=stk, nodes=["scale"], edges=[("train", "scale")],
       formula=f"추정: SARIMAX(r × {sc:g}),   예측: forecast(history × {sc:g}) ÷ {sc:g},   로그우도(원래 단위) = 로그우도(배율) + n·ln {sc:g}   (n = 로그우도에 더한 개월 수; 배율 모형의 로그우도를 원래 단위로 바꾼 것)",

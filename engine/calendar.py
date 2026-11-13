@@ -105,7 +105,29 @@ def fill_leaks_future(fill: str) -> bool:
 # ---------------------------------------------------------------------------
 # 타겟 정렬 — 모델이 맞히는 값은 항상 입력 구간 바깥의 미래
 # ---------------------------------------------------------------------------
-TargetKind = Literal["return", "logreturn", "direction", "event"]
+TargetKind = Literal["return", "logreturn", "direction", "event", "volatility"]
+
+
+def _log_close_returns(ohlcv: pd.DataFrame) -> pd.Series:
+    c = ohlcv["close"].astype(float)
+    return np.log(c / c.shift(1))
+
+
+def realized_volatility_target(ohlcv: pd.DataFrame, k: int) -> pd.Series:
+    """변동성 타겟(2026-11-12): 결정일 t(마감 후)의 값 = 그 뒤 k 기간의 실현 변동성
+        RV_t = sqrt( (1/k) · Σ_{j=1..k} ( ln(C[t+j] / C[t+j−1]) )² )      (C = 종가, 1기간 단위 — 연율화하지 않는다)
+    t+1 … t+k 의 종가만 쓴다(t 의 종가는 첫 수익률의 출발점으로만). 마지막 k 행은 미래가 없어 NaN.
+    k=1 이면 |다음 기간 수익률| 하나라 잡음이 크다 — 5(일간이면 1주) 이상을 권한다."""
+    r2 = _log_close_returns(ohlcv) ** 2
+    fut = sum(r2.shift(-j) for j in range(1, k + 1)) / k   # 하나라도 없으면 NaN
+    return np.sqrt(fut)
+
+
+def naive_volatility(ohlcv: pd.DataFrame, k: int) -> pd.Series:
+    """변동성의 단순 기준 예측: 결정일 t 까지의 최근 k 기간 실현 변동성(t−k+1 … t 의 수익률). '변동성은 이어진다'만 아는 예측 — 미래 값을 쓰지 않는다."""
+    r2 = _log_close_returns(ohlcv) ** 2
+    past = sum(r2.shift(j) for j in range(0, k)) / k
+    return np.sqrt(past)
 
 
 def make_target(
@@ -124,10 +146,15 @@ def make_target(
     - logreturn: log(1 + r_t)
     - direction: 1 if r_t > 0 else 0
     - event: 1 if r_t > threshold else 0  (threshold 음수면 하락 이벤트로 해석하지 않음 — 별도 타겟으로)
+    - volatility: 수익률이 아니라 그 뒤 k 기간의 실현 변동성(realized_volatility_target — 종가 기준, 체결 가정과 무관)
     마지막 1+k 행은 미래가 없어 NaN. 인덱스는 결정일 t.
     """
     if k < 1:
         raise ValueError("k는 1 이상")
+    if kind == "volatility":
+        y = realized_volatility_target(ohlcv, k)
+        y.name = f"target_volatility_k{k}"
+        return y
     p = ohlcv[exec_price].astype(float)
     entry = p.shift(-1)
     exit_ = p.shift(-(1 + k))

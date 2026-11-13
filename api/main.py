@@ -7,22 +7,32 @@
 from __future__ import annotations
 
 import json
+import os
+from typing import Literal
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+try:  # 접속 키(.env)를 서버도 읽는다 — 화면의 '변수 등록 전 확인'이 출처에 직접 물어보기 때문(2026-11-12). 키는 화면·로그에 내보내지 않는다
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:  # noqa: BLE001
+    pass
 from api.jobs import JobStore  # noqa: E402
 from engine.experiment import ENGINE_REV, ExperimentConfig, default_device, list_plugins, results_dir  # noqa: E402
 from engine.features import describe_feature  # noqa: E402
 from engine.registry import LAG_DEFAULT, Registry  # noqa: E402
+from engine import tickers as tickers_mod  # noqa: E402
+from adapters.base import scrub_secrets  # noqa: E402
 
 DATA = ROOT / "data"
 RESULTS = ROOT / "results"
@@ -71,6 +81,57 @@ async def _log_requests(request, call_next):
     return resp
 
 
+# ---------------------------------------------------------------------------
+# 바꾸는 동작에 암호 (2026-11-12) — 외부 공개 주소(Tailscale Funnel)로 열어 둘 때
+#   .env 의 TSP_WRITE_PASSWORD 가 있으면: /api 의 GET 이 아닌 요청(실험 실행·데이터 가져오기·변수/종목 추가·삭제·계산 따라가기 등)은
+#     머리글 X-TSP-Password 가 맞아야 통과. 보기(GET)는 열려 있다.
+#   없으면: 노트북에서 직접 하는 요청은 지금처럼 통과, Funnel 로 들어온 요청(머리글 Tailscale-Funnel-Request — Tailscale 이 붙인다)은 막는다.
+#   Funnel 로 들어온 요청은 모두 127.0.0.1 에서 온 것처럼 보이므로 주소로는 가릴 수 없다 — 그래서 암호가 기본 방어.
+# ---------------------------------------------------------------------------
+_WRONG_DELAY = 1.0   # 틀린 암호마다 기다리는 초(마구 넣어 보기를 늦춘다)
+_OPEN_METHODS = ("GET", "HEAD", "OPTIONS")
+# POST 이지만 아무것도 저장하지 않는 '보기' — 화면을 열면 저절로 불리는 설명 계산(2026-11-13: 화면을 열자마자 암호 창이 떠서 뺌)
+_OPEN_POST_PATHS = ("/api/flow", "/api/explain")
+
+
+def _write_password() -> str:
+    return (os.environ.get("TSP_WRITE_PASSWORD") or "").strip()
+
+
+def _is_external(request) -> bool:
+    return bool(request.headers.get("tailscale-funnel-request"))
+
+
+@app.middleware("http")
+async def _guard_writes(request, call_next):
+    import asyncio
+    import hmac
+    if request.url.path.startswith("/api/") and request.method not in _OPEN_METHODS and request.url.path not in _OPEN_POST_PATHS:
+        pw = _write_password()
+        if pw:
+            given = request.headers.get("x-tsp-password") or ""
+            if not given:
+                return JSONResponse({"detail": "바꾸는 동작(실험 실행·데이터 가져오기·추가·삭제)에는 암호가 필요합니다.", "need_password": True}, status_code=401)
+            if not hmac.compare_digest(given.encode(), pw.encode()):
+                alog.warning("암호가 틀린 요청: %s %s", request.method, request.url.path)
+                await asyncio.sleep(_WRONG_DELAY)
+                return JSONResponse({"detail": "암호가 틀렸습니다.", "need_password": True}, status_code=401)
+        elif _is_external(request):
+            return JSONResponse({"detail": "외부 주소에서는 바꾸는 동작이 막혀 있습니다 — 노트북의 .env 파일에 TSP_WRITE_PASSWORD=암호 를 넣고 서버를 다시 시작하면 "
+                                           "암호를 넣고 쓸 수 있습니다(노트북에서 직접 열면 지금도 됩니다)."}, status_code=403)
+    return await call_next(request)
+
+
+@app.get("/api/auth")
+def auth_status(request: Request) -> dict:
+    return {"password_set": bool(_write_password()), "external": _is_external(request)}
+
+
+@app.post("/api/auth/check")
+def auth_check() -> dict:
+    return {"ok": True}   # 여기까지 왔으면 암호가 맞았거나(있을 때) 노트북에서 직접 연 것
+
+
 jobs = JobStore()
 
 
@@ -85,14 +146,16 @@ def _registry() -> tuple[Registry, list[str]]:
 
 
 def _versions() -> list[dict]:
+    """데이터 버전 목록. 맨 끝이 '기본으로 쓰는 버전'이 되게 놓는다: 일부를 받지 못한 버전(incomplete)들 → 온전한 버전들(각각 오래된 순).
+    그래서 화면·실행의 기본값(목록의 마지막)은 가장 새 '온전한' 버전이다(engine.store.latest_version_id 와 같은 규칙)."""
+    from engine.store import list_versions
     out = []
-    for p in sorted((DATA / "versions").glob("*")):
-        m = p / "manifest.json"
-        if m.exists():
-            j = json.loads(m.read_text(encoding="utf-8"))
-            out.append({"id": p.name, "created_utc": j.get("created_utc"), "tickers": j.get("tickers", []), "variables": j.get("variables_collected"),
-                        "start": j.get("start"), "end": j.get("end"), "migrated_from": j.get("migrated_from")})
-    return out
+    for v in list_versions(DATA):
+        j = v["manifest"]
+        out.append({"id": v["id"], "created_utc": j.get("created_utc"), "tickers": j.get("tickers", []), "variables": j.get("variables_collected"),
+                    "start": j.get("start"), "end": j.get("end"), "migrated_from": j.get("migrated_from"),
+                    "incomplete": v["incomplete"], "failed_items": j.get("failed_items") or []})
+    return [v for v in out if v["incomplete"]] + [v for v in out if not v["incomplete"]]
 
 
 @app.get("/api/meta")
@@ -140,8 +203,8 @@ def meta():
         "master_warnings": warns,
         "lag_defaults": LAG_DEFAULT,
         "data_versions": versions,
-        "tickers": [{"id": "091160", "name": "KODEX 반도체"}, {"id": "091230", "name": "TIGER 반도체"}],
-        "price_api": {t: price_specs(t, c_start, c_end, c_at) for t in ("091160", "091230")},
+        "tickers": tickers_mod.load(DATA),
+        "price_api": {t: price_specs(t, c_start, c_end, c_at) for t in tickers_mod.ids(DATA)},
         "data_version_collect": {"start": c_start, "end": c_end, "created_utc": c_at},
         "defaults": json.loads(ExperimentConfig(model="ridge").model_dump_json()),
         "experiment_counter": n,
@@ -170,6 +233,443 @@ class VariableSet(BaseModel):
     transforms: dict[str, str] = {}
     lag_override: dict[str, int] = {}
     recommended_for: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# 화면에서 변수 등록 · 데이터 가져오기 (2026-11-12)
+# ---------------------------------------------------------------------------
+# 지원하는 출처만: 출처마다 응답 형식·인증이 달라 연결 코드(adapters/)가 있는 것만 받을 수 있다. 접속 키는 화면에서 받지 않고 .env 에만 둔다.
+_SOURCES = {
+    "YF": {"label": "야후 파이낸스 (주가·지수·환율·원자재)", "code_help": "야후 종목 기호", "example": "^SOX · 005930.KS · KRW=X · CL=F", "key_env": None, "freqs": ["D"]},
+    "FRED": {"label": "미국 세인트루이스 연준 FRED (미국 금리·물가·경기)", "code_help": "FRED 시리즈 ID", "example": "DGS10 · CPIAUCSL · VIXCLS", "key_env": "FRED_API_KEY", "freqs": ["D", "W", "M", "Q"]},
+    "ECOS": {"label": "한국은행 ECOS (한국 금리·물가·수출입)", "code_help": "통계표코드/항목코드/주기 (주기는 D·M·Q·A)", "example": "722Y001/0101000/M", "key_env": "ECOS_API_KEY", "freqs": ["D", "M", "Q"]},
+}
+
+
+class VariableCheckBody(BaseModel):
+    source: Literal["YF", "FRED", "ECOS"]
+    source_code: str
+
+
+class TickerCheckBody(BaseModel):
+    id: str
+
+
+class TickerBody(BaseModel):
+    id: str
+    name: str = ""
+    kind: Literal["etf", "stock"] | None = None   # 비우면 자동 판별(2026-11-13 — 사람이 고르지 않는다)
+
+
+def _probe_kind(code: str) -> tuple[str, str]:
+    """공식 ETF 시세(data.go.kr)에 그 코드가 있으면 ETF, '응답 없음'이면 주식. 키가 없거나 연결이 안 되면 판별 못 함 → 주식으로 둔다
+    (공식 출처를 묻지 않으니 수집 실패가 생기지 않는다). 돌려주는 값: (종류, 근거 문장)."""
+    from adapters import datago_adapter
+    if not os.environ.get("DATAGO_API_KEY"):
+        return "stock", "공식 ETF 시세 키(DATAGO_API_KEY)가 없어 ETF 인지 판별하지 못했습니다 — 주식으로 두고 야후 가격으로 받습니다"
+    start = (pd.Timestamp.today() - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
+    try:
+        df = datago_adapter.fetch_prices(code, start, None)
+    except RuntimeError as e:
+        if "응답 없음" in str(e):
+            return "stock", "공식 ETF 시세에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
+        return "stock", f"공식 ETF 시세를 확인하지 못해 ETF 인지 판별하지 못했습니다({scrub_secrets(str(e))[:120]}) — 주식으로 두고 야후 가격으로 받습니다"
+    except Exception as e:  # noqa: BLE001 — 연결 오류 등
+        return "stock", f"공식 ETF 시세에 연결하지 못해 ETF 인지 판별하지 못했습니다({type(e).__name__}) — 주식으로 두고 야후 가격으로 받습니다"
+    if df is not None and len(df):
+        return "etf", "공식 ETF 시세에 있는 코드라 ETF 로 봅니다(가격은 공식 2020~ + 야후 그 이전, 빠진 날은 네이버로 메움)"
+    return "stock", "공식 ETF 시세에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
+
+
+def _probe_prices(code: str) -> pd.DataFrame:
+    """야후에서 그 종목의 최근 3년 가격을 실제로 받아 본다(등록 전 확인용 — 캐시·데이터 버전에 쓰지 않는다)."""
+    from adapters import yf_adapter
+    start = (pd.Timestamp.today() - pd.DateOffset(years=3)).strftime("%Y-%m-%d")
+    return yf_adapter.fetch_prices(code, start, None)
+
+
+@app.get("/api/tickers")
+def list_tickers() -> list[dict]:
+    return tickers_mod.load(DATA)
+
+
+@app.post("/api/tickers/check")
+def check_ticker(body: TickerCheckBody) -> dict:
+    tid = (body.id or "").strip()
+    if not tid.isdigit() or len(tid) != 6:
+        return {"ok": False, "error": "종목 코드는 한국거래소 6자리 숫자여야 합니다(예: 005930)"}
+    try:
+        px = _probe_prices(tid)
+    except Exception as e:  # noqa: BLE001 — 출처 오류 문구를 그대로(키는 가린다) 보여 준다
+        return {"ok": False, "error": f"야후에서 {tid}.KS 의 가격을 받지 못했습니다: {scrub_secrets(str(e))[:300]}"}
+    if px is None or len(px) == 0:
+        return {"ok": False, "error": f"야후에서 {tid}.KS 의 가격을 받지 못했습니다: 빈 응답"}
+    tail = px["close"].tail(5)
+    return {"ok": True, "rows": int(len(px)), "first": str(px.index.min().date()), "last": str(px.index.max().date()),
+            "sample": [{"date": str(d.date()), "close": float(v)} for d, v in tail.items()]}
+
+
+@app.post("/api/tickers")
+def add_ticker(body: TickerBody) -> dict:
+    why = tickers_mod.problem(DATA, body.id, body.kind or "etf")
+    if why:
+        raise HTTPException(400, why)
+    chk = check_ticker(TickerCheckBody(id=body.id))
+    if not chk["ok"]:
+        raise HTTPException(400, chk["error"])
+    if body.kind:
+        kind, basis = body.kind, "종류를 직접 지정했습니다"
+    else:
+        kind, basis = _probe_kind(body.id.strip())
+    row = tickers_mod.add(DATA, body.id, body.name, kind)
+    return {"added": row["id"], "ticker": row, "check": chk, "kind_basis": basis,
+            "note": "목록에 넣었습니다. 아래 [데이터 가져오기]를 눌러야 이 종목의 가격이 데이터에 들어옵니다(그 뒤 실험에서 고를 수 있습니다)."}
+
+
+class VariableBody(BaseModel):
+    id: str
+    name: str = ""
+    source: Literal["YF", "FRED", "ECOS"]
+    source_code: str
+    freq: Literal["D", "W", "M", "Q"] = "D"
+    group: str = ""
+    transform: Literal["pct", "diff", "none"] = "pct"
+    lag_days: int | None = Field(None, ge=0, description="기준일→공개일 일수. 비우면 주기별 보수적 기본값(미확인으로 표시)")
+    unit: str = ""
+    note: str = ""
+
+
+def _probe_series(source: str, code: str, freq: str = "D") -> pd.Series:
+    """출처에서 최근 3년치를 실제로 받아 본다(등록 전 확인용 — 캐시·데이터 버전에 쓰지 않는다)."""
+    start = (pd.Timestamp.today() - pd.DateOffset(years=3)).strftime("%Y-%m-%d")
+    if source == "YF":
+        from adapters import yf_adapter
+        return yf_adapter.fetch_series(code, start, None)
+    if source == "FRED":
+        from adapters import fred_adapter
+        return fred_adapter.fetch_series(code, start, None)
+    from adapters import ecos_adapter
+    from engine.api_spec import ecos_period
+    st, it, fq = code.split("/")
+    return ecos_adapter.fetch_series(st, it, fq, ecos_period(pd.Timestamp(start), fq), ecos_period(pd.Timestamp.today(), fq))
+
+
+def _code_problem(source: str, code: str) -> str:
+    code = (code or "").strip()
+    if not code:
+        return "출처 코드를 넣어 주세요"
+    if source == "ECOS" and (len(code.split("/")) != 3 or code.split("/")[2] not in ("D", "M", "Q", "A")):
+        return "한국은행 코드는 '통계표코드/항목코드/주기' 꼴이어야 합니다(예: 722Y001/0101000/M)"
+    env = _SOURCES[source]["key_env"]
+    if env and not os.environ.get(env):
+        return f"이 출처는 접속 키가 필요합니다 — 프로젝트 폴더의 .env 파일에 {env} 를 넣고 서버를 다시 시작하세요(키는 화면에서 받지 않습니다)"
+    return ""
+
+
+@app.get("/api/variables/sources")
+def variable_sources() -> list[dict]:
+    return [{"source": k, **v, "key_present": (v["key_env"] is None) or bool(os.environ.get(v["key_env"]))} for k, v in _SOURCES.items()]
+
+
+@app.post("/api/variables/check")
+def check_variable(body: VariableCheckBody) -> dict:
+    """출처·코드로 실제 자료를 받아 본다. 받아지면 줄 수·기간·최근 값 5개를, 아니면 이유를 쉬운 말로."""
+    why = _code_problem(body.source, body.source_code)
+    if why:
+        return {"ok": False, "error": why}
+    try:
+        sr = _probe_series(body.source, body.source_code.strip(), "D").dropna()
+    except Exception as e:  # noqa: BLE001
+        from adapters.base import scrub_secrets  # 오류 문구의 요청 주소에 접속 키가 들어 있다 → 지우고 보여 준다
+        return {"ok": False, "error": f"이 코드로 자료를 받지 못했습니다 — 코드가 맞는지, 인터넷이 되는지 확인하세요. (원인: {scrub_secrets(f'{type(e).__name__}: {e}')[:200]})"}
+    if not len(sr):
+        return {"ok": False, "error": "이 코드로 자료를 받지 못했습니다 — 받은 값이 하나도 없습니다"}
+    return {"ok": True, "rows": int(len(sr)), "first": str(pd.Timestamp(sr.index[0]).date()), "last": str(pd.Timestamp(sr.index[-1]).date()),
+            "sample": [{"date": str(pd.Timestamp(d).date()), "value": float(v)} for d, v in sr.tail(5).items()]}
+
+
+@app.post("/api/variables")
+def add_variable(body: VariableBody) -> dict:
+    """변수 사전(variable_master.xlsx 의 variables 시트)에 한 줄을 추가한다. 자료는 다음 '데이터 가져오기' 때 받는다.
+    추가 전에 출처에서 실제로 받아 보고(받아지지 않으면 거절), 사전을 고치기 전의 사본을 data/master_history/ 에 남긴다."""
+    from engine import runlog
+    from engine.master_check import _bad_id
+    from engine.registry import append_master_rows
+
+    master = DATA / "variable_master.xlsx"
+    if not master.exists():
+        raise HTTPException(400, "변수 사전(data/variable_master.xlsx)이 없습니다")
+    vid = body.id.strip()
+    bad = _bad_id(vid) if vid else "변수 이름(id)을 넣어 주세요"
+    if bad:
+        raise HTTPException(400, f"변수 이름(id) '{vid}': {bad}")
+    reg, _ = Registry.load_master(master)
+    if vid.lower() in {i.lower() for i in reg.ids(usable_only=False)}:
+        raise HTTPException(400, f"'{vid}' 는 이미 있는 변수 이름입니다(대소문자만 다른 것도 같은 이름으로 봅니다)")
+    same = [v.id for v in (reg.get(i) for i in reg.ids(usable_only=False)) if v.source == body.source and v.source_code.strip() == body.source_code.strip()]
+    if same:
+        raise HTTPException(400, f"같은 출처·같은 코드의 변수가 이미 있습니다: {same[0]}")
+    chk = check_variable(VariableCheckBody(source=body.source, source_code=body.source_code))
+    if not chk["ok"]:
+        raise HTTPException(400, chk["error"])
+    runlog.snapshot_master(master, DATA)  # 고치기 전 사본
+    row = {"id": vid, "name": body.name.strip(), "description": "", "group": body.group.strip(), "freq": body.freq, "lag_days": "" if body.lag_days is None else body.lag_days,
+           "lag_confirmed": "N" if body.lag_days is None else "Y", "source": body.source, "source_code": body.source_code.strip(), "default_fill": "ffill",
+           "transform": body.transform, "unit": body.unit.strip(), "active": "Y",
+           "note": (body.note.strip() + " " if body.note.strip() else "") + f"화면에서 등록 {pd.Timestamp.utcnow().strftime('%Y-%m-%d')}"}
+    if append_master_rows(master, [row]) != 1:
+        raise HTTPException(500, "변수 사전에 쓰지 못했습니다 — 엑셀에서 파일을 열어 두었다면 닫고 다시 해 보세요")
+    import logging
+    logging.getLogger("tsp.api").info("변수 등록: %s (%s %s)", vid, body.source, body.source_code)
+    return {"added": vid, "checked": chk,
+            "note": "변수 사전에 추가했습니다. '데이터 가져오기'를 누르면 이 변수의 자료를 받아 새 데이터 버전을 만듭니다."
+                    + ("" if body.lag_days is not None else " 발표시차(lag)는 주기별 기본값을 쓰고 '미확인'으로 표시됩니다.")}
+
+
+# ---------------------------------------------------------------------------
+# 변수 값 보기 · CSV · 발표시차·변환 고치기 (2026-11-13)
+# ---------------------------------------------------------------------------
+_GAP_DAYS = {"D": 12, "W": 21, "M": 45, "Q": 120, "H": 220, "Y": 400}   # 이보다 긴 빈 기간을 알린다(일간 12일: 가장 긴 휴장 = 2017 추석 연휴 11일은 정상)
+_OUTLIER_Z = 8.0                                                        # 하루 변화의 강건 z(중앙값·MAD) 기준
+
+
+def _pick_version(version: str | None) -> str:
+    vs = _versions()
+    if not vs:
+        raise HTTPException(404, "데이터 버전이 없습니다 — 먼저 '데이터 가져오기'를 하세요")
+    if version is None:
+        return vs[-1]["id"]                                              # 화면·실행의 기본과 같은 '가장 새 온전한 버전'
+    if version not in {v["id"] for v in vs}:
+        raise HTTPException(404, f"데이터 버전 {version} 이 없습니다")
+    return version
+
+
+def _series_of(vid: str, version: str | None):
+    from engine.store import DataVersion
+    reg, _ = _registry()
+    if vid not in set(reg.ids(usable_only=False)):
+        raise HTTPException(404, f"변수 {vid} 가 변수 사전에 없습니다")
+    v = reg.get(vid)
+    ver = _pick_version(version)
+    long = DataVersion(DATA, ver).read_variables([vid])
+    return v, ver, long
+
+
+def _gap_and_reversal_checks(s: pd.Series, freq: str, skip_reversal_note: str | None = None) -> dict:
+    """빈 기간·하루 튀었다 되돌아온 날·가장 큰 움직임(변수·종목 가격 공통, 2026-11-13). 값을 바꾸지 않는다."""
+    gaps = []
+    lim = _GAP_DAYS.get(freq, 45)
+    d = s.index.to_series().diff().dt.days
+    for t, days in d[d > lim].items():
+        prev = s.index[s.index.get_loc(t) - 1]
+        gaps.append({"from": str(prev.date()), "to": str(t.date()), "days": int(days)})
+    reversals, moves, rev_note = [], [], skip_reversal_note
+    if rev_note is None:
+        ser = s.dropna()
+        pos = bool((ser > 0).all())
+        r = (np.log(ser).diff() if pos else ser.diff()).dropna()
+        mad = float((r - r.median()).abs().median()) * 1.4826 if len(r) >= 10 else 0.0
+        if mad > 0:
+            a_, ix = r.to_numpy(), r.index
+            for i in range(len(a_) - 1):
+                if (abs(a_[i]) > _OUTLIER_Z * mad and abs(a_[i + 1]) > _OUTLIER_Z * mad and np.sign(a_[i]) != np.sign(a_[i + 1])
+                        and abs(a_[i] + a_[i + 1]) < 0.5 * min(abs(a_[i]), abs(a_[i + 1]))):
+                    t = ix[i]; k = ser.index.get_loc(t)
+                    reversals.append({"date": str(t.date()), "before": float(ser.iloc[k - 1]), "value": float(ser.iloc[k]), "after": float(ser.iloc[k + 1])})
+            for t in r.abs().sort_values(ascending=False).index[:5]:
+                moves.append({"date": str(t.date()), "change": float(r[t]), "kind": "로그 변화" if pos else "차이", "value": float(ser[t])})
+    return {"gaps": gaps, "gap_days_limit": lim, "reversals": reversals, "reversal_z": _OUTLIER_Z, "reversal_note": rev_note, "largest_moves": moves}
+
+
+@app.get("/api/variables/{vid}/values")
+def variable_values(vid: str, version: str | None = None) -> dict:
+    """한 변수의 값(그 데이터 버전에 저장된 그대로)과 점검 결과. 점검은 알림일 뿐 값을 바꾸지 않는다.
+    빈 기간 = 주기별 기준보다 긴 날짜 간격, 중복 = 같은 날짜가 두 번 이상, 확인해 볼 날 = 하루 크게(강건 z > 8) 움직였다가 다음 날 되돌아온 날,
+    가장 큰 움직임 5개(참고),
+    0 이하 = 변화율·로그 변환인데 0 이하 값(계산 불가)."""
+    from engine.experiment import apply_transform
+    v, ver, long = _series_of(vid, version)
+    base = {"id": v.id, "name": v.name, "freq": v.freq, "transform": v.transform, "lag_days": v.lag_days, "lag_confirmed": v.lag_confirmed,
+            "source": v.source, "source_code": v.source_code, "version": ver}
+    if long.empty:
+        return {**base, "n": 0, "values": [], "checks": None,
+                "message": f"이 데이터 버전({ver})에는 {vid} 의 값이 없습니다 — 새로 추가한 변수라면 '데이터 가져오기'가 끝나야 생깁니다"}
+    long = long.sort_values("date", kind="stable")
+    dates = pd.to_datetime(long["date"])
+    dup = int(dates.duplicated(keep="first").sum())
+    s = pd.Series(long["value"].astype(float).to_numpy(), index=dates)
+    s = s[~s.index.duplicated(keep="last")]
+    msg = None
+    try:
+        tr = apply_transform(s, v.transform)
+    except Exception as e:  # noqa: BLE001
+        tr, msg = pd.Series(np.nan, index=s.index), f"변환 '{v.transform}' 을 계산하지 못했습니다: {e}"
+    # '하루 크게 움직였다가 다음 날 되돌아온 날' = 자료 오류의 흔한 모양(단위·자릿수 잘못, 한 칸 밀림). 실제 급변도 걸릴 수 있어 '확인해 볼 날'로만 알린다.
+    # 값이 0 근처를 오가는 흐름 자료(변환 none 이고 음수 있음, 예: 순매수대금)는 매일 크게 오가는 게 정상이라 되돌림 검사를 하지 않는다.
+    flow_like = (v.transform or "none").lower() == "none" and not bool((s.dropna() > 0).all())
+    chk = _gap_and_reversal_checks(s, v.freq, "0 근처를 오가는 자료라 되돌림 검사를 하지 않습니다" if flow_like else None)
+    t_low = (v.transform or "none").lower()
+    nonpos = int((s <= 0).sum()) if (t_low.startswith("pct") or t_low.startswith("log")) else 0
+    vals = [{"date": str(t.date()), "value": float(s[t]), "transformed": (None if pd.isna(tr[t]) or not np.isfinite(tr[t]) else float(tr[t]))} for t in s.index]
+    return {**base, "n": int(len(s)), "first": str(s.index.min().date()), "last": str(s.index.max().date()), "values": vals, "message": msg,
+            "checks": {**chk, "duplicate_dates": dup, "nonpositive": nonpos, "n_nan": int(s.isna().sum())}}
+
+
+@app.get("/api/variables/{vid}/values.csv")
+def variable_values_csv(vid: str, version: str | None = None):
+    """엑셀에서 바로 열리는 CSV(UTF-8 BOM — 한글 깨짐 방지). 날짜·저장된 값·모델에 넣는 꼴로 바꾼 값."""
+    from fastapi.responses import Response
+    r = variable_values(vid, version)
+    lines = [f"date,value,변환값({r['transform']})"]
+    for row in r["values"]:
+        lines.append(f"{row['date']},{row['value']!r},{'' if row['transformed'] is None else repr(row['transformed'])}")
+    body = ("\ufeff" + "\r\n".join(lines) + "\r\n").encode("utf-8")
+    return Response(content=body, media_type="text/csv; charset=utf-8",
+                    headers={"content-disposition": f'attachment; filename="{vid}_{r["version"]}.csv"'})
+
+
+@app.get("/api/tickers/{tid}/values")
+def ticker_values(tid: str, version: str | None = None) -> dict:
+    """종목 가격(실험이 읽는 조립된 prices_<코드>) 그대로와 점검. 점검은 종가 기준 빈 기간·중복·하루 튀었다 되돌아온 날,
+    0 이하 가격, 고가/저가 앞뒤 안 맞음, 네이버로 메운 날(repair_log). 값을 바꾸지 않는다."""
+    ver = _pick_version(version)
+    vdir = DATA / "versions" / ver
+    known = set(tickers_mod.ids(DATA))
+    f = vdir / f"prices_{tid}.parquet"
+    if tid not in known and not f.exists():
+        raise HTTPException(404, f"종목 {tid} 가 종목 목록에 없습니다")
+    base = {"id": tid, "name": next((t["name"] for t in tickers_mod.load(DATA) if t["id"] == tid), ""), "version": ver}
+    if not f.exists():
+        return {**base, "n": 0, "values": [], "checks": None,
+                "message": f"이 데이터 버전({ver})에는 {tid} 의 가격이 없습니다 — 새로 추가한 종목이라면 '데이터 가져오기'가 끝나야 생깁니다"}
+    p = pd.read_parquet(f).sort_index(kind="stable")
+    p.index = pd.to_datetime(p.index)
+    dup = int(p.index.duplicated(keep="first").sum())
+    p = p[~p.index.duplicated(keep="last")]
+    close = p["close"].astype(float)
+    chk = _gap_and_reversal_checks(close, "D")
+    o, h, l, c = (p[k].astype(float) for k in ("open", "high", "low", "close"))
+    bad = (h < np.maximum(o, c) - 1e-9) | (l > np.minimum(o, c) + 1e-9) | (h < l)
+    ohlc_bad = [str(t.date()) for t in p.index[bad.fillna(False).to_numpy()]]
+    rl = vdir / f"repair_log_{tid}.csv"
+    repaired = 0
+    if rl.exists():
+        try:
+            repaired = int(len(pd.read_csv(rl, encoding="utf-8-sig")))
+        except Exception:  # noqa: BLE001 — 빈 파일
+            repaired = 0
+    nonpos = int((p[["open", "high", "low", "close"]] <= 0).any(axis=1).sum())
+    vals = [{"date": str(t.date()), **{k: (None if pd.isna(p.at[t, k]) else float(p.at[t, k])) for k in ("open", "high", "low", "close", "volume")}} for t in p.index]
+    return {**base, "n": int(len(p)), "first": str(p.index.min().date()), "last": str(p.index.max().date()), "values": vals, "message": None,
+            "checks": {**chk, "duplicate_dates": dup, "nonpositive": nonpos, "ohlc_bad": len(ohlc_bad), "ohlc_bad_dates": ohlc_bad[:20],
+                       "repaired": repaired, "n_nan": int(close.isna().sum())}}
+
+
+@app.get("/api/tickers/{tid}/values.csv")
+def ticker_values_csv(tid: str, version: str | None = None):
+    from fastapi.responses import Response
+    r = ticker_values(tid, version)
+    cols = ("open", "high", "low", "close", "volume")
+    lines = ["date," + ",".join(cols)] + [row["date"] + "," + ",".join("" if row[k] is None else repr(row[k]) for k in cols) for row in r["values"]]
+    body = ("\ufeff" + "\r\n".join(lines) + "\r\n").encode("utf-8")
+    return Response(content=body, media_type="text/csv; charset=utf-8",
+                    headers={"content-disposition": f'attachment; filename="prices_{tid}_{r["version"]}.csv"'})
+
+
+class VariableEditBody(BaseModel):
+    lag_days: int | None = Field(None, ge=0, le=800)
+    lag_confirmed: bool | None = None
+    transform: str | None = None
+    basis: str = ""                       # 고친 근거(예: 공표일정 주소) — 비고에 날짜와 함께 남긴다
+
+
+@app.patch("/api/variables/{vid}")
+def update_variable(vid: str, body: VariableEditBody) -> dict:
+    """변수 사전에서 발표시차(lag_days)·확인 여부·변환(transform)을 고친다. 고치기 전 사본을 data/master_history/ 에 남긴다.
+    다음 실험부터 적용된다. 지난 결과는 그때 쓴 값(lag_days_used·transforms_used)과 사전 sha256 이 기록돼 있어 그대로 재현된다."""
+    from engine import runlog
+    from engine.experiment import _TR_RE
+    from engine.registry import update_master_row
+
+    master = DATA / "variable_master.xlsx"
+    if not master.exists():
+        raise HTTPException(400, "변수 사전(data/variable_master.xlsx)이 없습니다")
+    reg, _ = Registry.load_master(master)
+    if vid not in set(reg.ids(usable_only=False)):
+        raise HTTPException(404, f"변수 {vid} 가 변수 사전에 없습니다")
+    v = reg.get(vid)
+    changes: dict = {}
+    if body.transform is not None:
+        t = body.transform.strip().lower()
+        if not (t in ("none", "log", "logdiff") or _TR_RE.match(t)):
+            raise HTTPException(400, f"알 수 없는 변환 '{body.transform}' — none, pct, pct5 처럼 pct+숫자, diff, diff+숫자, log, logdiff 중 하나")
+        if t != (v.transform or "none").lower():
+            changes["transform"] = t
+    if body.lag_days is not None and (body.lag_days != v.lag_days or not v.lag_confirmed and body.lag_confirmed):
+        changes["lag_days"] = int(body.lag_days)
+    if body.lag_confirmed is not None and body.lag_confirmed != v.lag_confirmed:
+        changes["lag_confirmed"] = "Y" if body.lag_confirmed else "N"
+        if body.lag_confirmed and "lag_days" not in changes:
+            changes["lag_days"] = int(v.lag_days)       # 기본값(빈칸)을 확인한 값으로 적어 둔다 — 빈칸이면 다시 '미확인'으로 읽힌다
+    if not changes:
+        raise HTTPException(400, "바뀐 것이 없습니다")
+    label = {"lag_days": "발표시차", "lag_confirmed": "확인", "transform": "변환"}
+    what = ", ".join(f"{label[k]} {getattr(v, k)}→{changes[k]}" for k in ("lag_days", "lag_confirmed", "transform") if k in changes)
+    note = (v.note + " | " if v.note else "") + f"화면에서 고침 {pd.Timestamp.utcnow().strftime('%Y-%m-%d')}: {what}" + (f"; 근거: {body.basis.strip()}" if body.basis.strip() else "")
+    runlog.snapshot_master(master, DATA)  # 고치기 전 사본
+    try:
+        update_master_row(master, vid, {**changes, "note": note})
+    except PermissionError:
+        raise HTTPException(500, "변수 사전에 쓰지 못했습니다 — 엑셀에서 파일을 열어 두었다면 닫고 다시 해 보세요")
+    import logging
+    logging.getLogger("tsp.api").info("변수 고침: %s %s", vid, what)
+    return {"updated": vid, "changed": [k for k in ("lag_days", "lag_confirmed", "transform") if k in changes],
+            "note": f"{vid}: {what}. 다음 실험부터 적용됩니다(지난 결과는 그때 쓴 값이 기록돼 있어 바뀌지 않습니다)."}
+
+
+_COLLECT: dict = {}
+
+
+def _collect_cmd() -> list[str]:
+    return [sys.executable, str(ROOT / "collect.py")]
+
+
+@app.get("/api/collect")
+def collect_status() -> dict:
+    """데이터 가져오기의 상태: none(한 적 없음) / running / done(종료 코드와 뜻, 로그 끝 40줄)."""
+    if not _COLLECT:
+        return {"state": "none"}
+    rc = _COLLECT["proc"].poll()
+    log = Path(_COLLECT["log"])
+    from adapters.base import scrub_secrets
+    tail = [scrub_secrets(ln) for ln in log.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]] if log.exists() else []
+    out = {"state": "running" if rc is None else "done", "started": _COLLECT["started"], "log": log.name, "log_tail": tail}
+    if rc is not None:
+        out["returncode"] = rc
+        out["message"] = {0: "모두 받았습니다. 새 데이터 버전이 만들어졌습니다.",
+                          2: "받지 못한 항목이 있습니다 — 그 항목은 직전 값 그대로 두었고, 이 버전은 '일부 받지 못함'으로 표시됩니다. 아래 기록에서 [fail] 줄을 확인하세요."
+                          }.get(rc, f"가져오기가 오류로 끝났습니다(종료 코드 {rc}). 아래 기록을 확인하세요.")
+    return out
+
+
+@app.post("/api/collect")
+def collect_start() -> dict:
+    """collect.py 를 따로 띄운다(한 번에 하나). 실험이 도는 중이면 시작하지 않는다 — 실험 도중에 '최신 데이터 버전'이 바뀌지 않게."""
+    import subprocess
+
+    if _COLLECT and _COLLECT["proc"].poll() is None:
+        raise HTTPException(409, "데이터 가져오기가 이미 진행 중입니다")
+    if any(j_.get("status") in ("queued", "running") for j_ in jobs.list(limit=100000)):
+        raise HTTPException(409, "실험이 실행 중이거나 대기 중입니다 — 끝난 뒤에 데이터를 가져오세요")
+    d = RESULTS / "jobs"
+    d.mkdir(parents=True, exist_ok=True)
+    started = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    log = d / f"collect_{started}.log"
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    fh = open(log, "w", encoding="utf-8")
+    proc = subprocess.Popen(_collect_cmd(), cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT, env=env)
+    _COLLECT.clear(); _COLLECT.update(proc=proc, log=str(log), started=started)
+    return collect_status()
 
 
 @app.post("/api/variable_sets")
@@ -300,7 +800,7 @@ def sealed_preview(stem: str):
         raise HTTPException(400, "데이터 버전이 없습니다")
     reg, _ = _registry()
     try:
-        return preview(r, stem, DataVersion(DATA, vid), reg, _sealed_log(mode), vs[-1]["id"] if vs else None)
+        return preview(r, stem, DataVersion(DATA, vid), reg, _sealed_log(mode), vs[-1]["id"] if vs else None, res_dir=results_dir(RESULTS, mode))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(422, f"봉인 평가 미리보기 오류: {e}")
 
@@ -318,7 +818,15 @@ def sealed_run(body: SealedRunBody):
         raise HTTPException(409, f"이 설정은 이미 {len(pv['history']['same_config'])}회 봉인 평가했습니다 — 다시 열려면 '재개봉' 확인이 필요합니다")
     cfg = ExperimentConfig(**pv["config"])
     # 대기·실행 중인 봉인 작업도 본다 — 봉인 기록은 실행이 시작돼야 써지므로, 연달아 두 번 누르면 둘 다 통과하던 틈(2026-11-10 점검 S4)
-    pending = [j for j in jobs.list(limit=100000) if j.get("sealed") and j.get("status") in ("queued", "running") and j.get("sealed_source") == body.stem]
+    # 같은 '설정'으로 비교한다(해시). 후보 이름으로만 비교하면 같은 설정이 다른 이름의 결과로도 저장돼 있을 때(다시 돌린 결과 등) 둘 다 접수됐다(독립 검토 F10)
+    def _job_hash(j: dict) -> str | None:
+        try:
+            return ExperimentConfig(**json.loads(Path(j["config_path"]).read_text(encoding="utf-8"))).config_hash()
+        except Exception:  # noqa: BLE001
+            return None
+    h_now = cfg.config_hash()
+    pending = [j for j in jobs.list(limit=100000) if j.get("sealed") and j.get("status") in ("queued", "running")
+               and (j.get("sealed_source") == body.stem or _job_hash(j) == h_now)]
     if pending:
         raise HTTPException(409, f"이 후보의 봉인 평가가 이미 접수되어 {('실행 중' if pending[0]['status'] == 'running' else '대기 중')}입니다(작업 {pending[0]['id']}) — 끝난 뒤 결과를 확인하세요")
     job = jobs.submit(json.loads(cfg.model_dump_json()), sealed=True, sealed_note=body.note[:2000], sealed_source=body.stem)
@@ -416,6 +924,10 @@ def _summary(p: Path) -> dict:
         "n_predictions": r.get("n_predictions"), "n_folds": r.get("n_folds"),
         "dir_acc": pm.get("dir_acc"), "rmse": pm.get("rmse"), "dm_vs_zero": pm.get("dm_vs_zero"), "dm_p": pm.get("dm_vs_zero_p"), "auc": pm.get("auc"),
         "cw_vs_zero": pm.get("cw_vs_zero"), "cw_p": pm.get("cw_vs_zero_p"),
+        # 학습 창 평균 기준(2026-11-10): '평균을 아는 것 말고 예측 정보가 더 있는가'(CW, 한쪽 p) · 표본 밖 R²
+        "cw_vs_mean": pm.get("cw_vs_mean"), "cw_mean_p": pm.get("cw_vs_mean_p"), "dm_vs_mean": pm.get("dm_vs_mean"), "dm_mean_p": pm.get("dm_vs_mean_p"),
+        "r2_oos": pm.get("r2_oos_vs_mean"), "pred_sd_ratio": pm.get("pred_sd_ratio"),
+        "n_seeds": ((r.get("model_diag") or {}).get("seeds") or {}).get("n_seeds"),
         # stale: 지금 엔진과 계산 방식이 다른 옛 결과(engine_rev 불일치) — 순위·다중비교에서 뺀다. sealed_inclusive: 평가 구간에 봉인 구간이 섞인 옛 매매 결과
         "engine_rev": r.get("engine_rev"), "stale": r.get("engine_rev") != ENGINE_REV,
         "sealed_inclusive": c.get("mode", "trading") != "forecast" and not r.get("evaluation_period") and not r.get("sealed_evaluation"),
@@ -446,23 +958,18 @@ def results(mode: str = "trading"):
 
 
 def _holm_by_family(rows: list[dict]) -> None:
-    """다중비교 보정(Holm–Bonferroni). '같은 문제'(대상·k·맞히는 방식·정보 시점·평가 구간)를 푼 결과들을 한 가족으로 보고,
-    각 모델의 'naive 대비' p값을 가족 크기 m 에 맞춰 보정한다. 봉인 평가 결과는 제외(1회용이라 따로 본다).
-    p_(1) ≤ … ≤ p_(m) 에서 adj_(i) = max_{j≤i} min(1, (m−j+1)·p_(j)).  (Holm 1979)"""
-    fam: dict[tuple, list[dict]] = {}
+    """다중비교 보정(Holm–Bonferroni) — 가족 정의와 계산은 engine/multitest.py(통계 재계산 도구와 같은 함수).
+    'naive 보다 낫다'의 한쪽 p(dm_naive_p_better)에 적용한다: 양측 p 는 '더 나쁘다'일 때도 작아서, 보정값만 보고 '유의하게 좋다'로 읽을 수 있었다(2026-11-10 F13).
+    p_holm = 가족(같은 대상·k·타겟 종류·정보 시점) 안 보정, p_holm_all = 이 모드의 지금 엔진 결과 전부를 한 가족으로 본 보정. 봉인 평가·옛 계산 방식 결과는 제외."""
+    from engine.multitest import better_one_sided, holm
+
     for r in rows:
-        if "error" in r or r.get("sealed") or r.get("dm_naive_p") is None or r.get("stale"):
-            continue  # 옛 계산 방식의 결과는 가족에 넣지 않는다 — 같은 실험의 옛 판·새 판이 따로 세어져 m 이 부풀던 문제(2026-11-10 점검 S6)
-        key = (r.get("target_variable"), r.get("k"), r.get("target_kind"), r.get("info_time"), tuple(r.get("evaluation_period") or []))
-        fam.setdefault(key, []).append(r)
-    for members in fam.values():
-        m = len(members)
-        members.sort(key=lambda r: r["dm_naive_p"])
-        run = 0.0
-        for i, r in enumerate(members):
-            run = max(run, min(1.0, (m - i) * r["dm_naive_p"]))
-            r["p_holm"] = run
-            r["family_size"] = m
+        if "error" not in r:
+            r["dm_naive_p_better"] = better_one_sided(r.get("dm_vs_naive"), r.get("dm_naive_p"))
+    holm(rows, "dm_naive_p_better", "p_holm", skip=lambda r: "error" in r or r.get("sealed") or r.get("stale"))
+    for r in rows:
+        if "p_holm_m" in r:
+            r["family_size"] = r["p_holm_m"]
 
 
 @app.get("/api/results/{stem}")

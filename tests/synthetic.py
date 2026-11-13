@@ -46,3 +46,20 @@ def sine_ohlcv(n: int = 1500, period: int = 40, amp: float = 0.05) -> pd.DataFra
     open_ = 10000 * (1 + amp * np.sin(2 * np.pi * t / period))
     close = 10000 * (1 + amp * np.sin(2 * np.pi * (t + 0.5) / period))
     return pd.DataFrame({"open": open_, "high": np.maximum(open_, close) * 1.001, "low": np.minimum(open_, close) * 0.999, "close": close, "volume": 1e6}, index=trading_days(n))
+
+
+def volatility_ohlcv(n: int = 1500, seed: int = 0, planted: bool = True) -> tuple[pd.DataFrame, pd.Series]:
+    """'앞으로의 변동성'이 숨은 신호 s_t(0~1 사이를 천천히 오가는 값)로 정해지는 시장. 수익률의 방향은 예측할 수 없다(평균 0).
+    r_{t+1} ~ N(0, σ_t²),  σ_t = 0.004 + 0.02·s_t  (planted=False 면 σ 가 늘 같다 — 변동성에 예측할 것이 없는 시장)."""
+    rng = np.random.default_rng(seed)
+    z = np.zeros(n)
+    for t in range(1, n):
+        z[t] = 0.97 * z[t - 1] + rng.normal(0, 0.25)
+    s = 1 / (1 + np.exp(-z))
+    sig = (0.004 + 0.02 * s) if planted else np.full(n, 0.012)
+    r = np.r_[0, rng.normal(0, 1, n - 1) * sig[:-1]]  # r[t+1] 의 크기를 s[t] 가 정한다
+    close = 10000 * np.exp(np.cumsum(r))
+    open_ = np.r_[close[0], close[:-1]] * (1 + rng.normal(0, 0.0005, n))
+    df = pd.DataFrame({"open": open_, "high": np.maximum(open_, close) * 1.001, "low": np.minimum(open_, close) * 0.999, "close": close,
+                       "volume": rng.lognormal(12, 0.3, n)}, index=trading_days(n))
+    return df, pd.Series(s, index=df.index, name="S_signal")

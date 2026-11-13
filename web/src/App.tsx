@@ -38,7 +38,7 @@ export default function App() {
         {([['vars', '변수 사전'], ['help', '도움말'], ['logs', '개발 로그']] as [Page, string][]).map(([p, l]) =>
           <button key={p} className={page === p ? 'active' : ''} onClick={() => setPage(p)}>{l}</button>)}
         <div className="foot">
-          {mode === 'trading' ? '매매' : '예측'} 실험 {meta.experiment_counters?.[mode] ?? 0}회 · 봉인 평가 {meta.sealed_evaluations_by_mode?.[mode]?.length ?? 0}회<br />
+          {mode === 'trading' ? '매매' : '예측'} 실험 {meta.experiment_counters?.[mode] ?? 0}회 · 봉인 평가 {(meta.sealed_evaluations_by_mode?.[mode] ?? []).filter((e: any) => (e.status ?? 'done') !== 'failed').length}회<br />
           데이터 {meta.data_versions.at(-1)?.id ?? '없음'}<br />
           장치 {meta.device}
         </div>
@@ -47,7 +47,7 @@ export default function App() {
         {page === 'new' && <ExperimentForm key={mode} meta={meta} mode={mode} onSubmitted={jobId => { load(); setOpenJob(jobId); setPage('jobs') }} />}
         {page === 'jobs' && <Jobs mode={mode} initialJobId={openJob} onOpenResult={s => { setOpenResult(s); setPage('results') }} onOpenLogs={id => { setOpenJob(id); setPage('logs') }} />}
         {page === 'results' && <Results key={mode} mode={mode} initial={openResult} />}
-        {page === 'vars' && <Variables meta={meta} />}
+        {page === 'vars' && <Variables meta={meta} onReload={load} />}
         {page === 'help' && <Help />}
         {page === 'logs' && <Logs initialRun={openJob} />}
       </main>

@@ -337,3 +337,10 @@ svg.mflow { margin-top: 4px; }
 .sealed-log { padding: 10px 14px; }
 .sealed-log summary { cursor: pointer; font-size: 13px; }
 .sealed-log table { font-size: 12px; margin-top: 8px; }
+
+/* 변수 값 보기 (2026-11-13) */
+.varvals { padding: 6px 4px; }
+.varvals .checks ul { margin: 4px 0 8px 18px; padding: 0; }
+.varvals .checks li { margin: 2px 0; }
+.varvals table.mini { font-size: 12px; margin-top: 4px; }
+.varvals .varedit { margin-top: 10px; }

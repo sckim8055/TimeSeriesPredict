@@ -271,7 +271,7 @@ def test_anim_biva_parts_match_original_modules():
     from models.biva_src import BIVA_RITS
     m = BIVA_RITS.Model(SimpleNamespace(seq_len=6, channels=2, rnn_hid_size=4, imputed_weight=1.0))
     mask = torch.tensor([b["mask"]])
-    assert torch.equal(m.delta_calc(mask), m.delta_calc_orig(mask)) and b["delta_f"] == m.delta_calc_orig(mask)[0].tolist()
+    assert b["delta_f"] == m.delta_calc(mask)[0].tolist()
     mv = compute_moving_avg()
     assert [r(v, 3) for v in mv["trend"]] == [2, 2.667, 4, 5.333, 6.5, 7.5] and [r(v, 3) for v in mv["seasonal"]] == [-1, -0.667, -1, -1.333, -1.5, 1.5]
     cv = compute_conv1d()

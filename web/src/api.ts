@@ -2,8 +2,8 @@ export type Mode = 'trading' | 'forecast'
 export type Meta = {
   models: { file: string; name: string; input_shape: string; target_types: string[]; params: Record<string, any>; param_groups?: string[] | null; uses_validation?: boolean; doc?: string; seq_len_default?: Record<string, number> | null }[]
   variables: Variable[]; groups: string[]; master_warnings: string[]; lag_defaults: Record<string, number>
-  variable_sets: VariableSet[]; forecast_targets: { id: string; name: string; freq: string; group: string; domain: string }[]; experiment_counters: Record<string, number>; sealed_evaluations_by_mode: Record<string, any[]>; data_versions: { id: string; created_utc?: string; tickers: string[]; variables?: number }[]
-  tickers: { id: string; name: string }[]; defaults: any; experiment_counter: number; sealed_evaluations: any[]; device: string; transforms: string[]; price_api?: Record<string, any[]>; data_version_collect?: { start: string; end: string | null; created_utc: string | null }
+  variable_sets: VariableSet[]; forecast_targets: { id: string; name: string; freq: string; group: string; domain: string }[]; experiment_counters: Record<string, number>; sealed_evaluations_by_mode: Record<string, any[]>; data_versions: { id: string; created_utc?: string; tickers: string[]; variables?: number; incomplete?: boolean; failed_items?: string[] }[]
+  tickers: { id: string; name: string; kind?: string }[]; defaults: any; experiment_counter: number; sealed_evaluations: any[]; device: string; transforms: string[]; price_api?: Record<string, any[]>; data_version_collect?: { start: string; end: string | null; created_utc: string | null }
 }
 export type VariableSet = { id: string; name: string; description: string; variable_ids: string[]; transforms: Record<string, string>; lag_override: Record<string, number>; recommended_for: string[] }
 export type Variable = { id: string; name: string; description: string; group: string; domain: string; freq: string; lag_days: number; lag_confirmed: boolean; source: string; transform: string; active: boolean; duplicate_of: string; usable: boolean; has_data: boolean; note: string; source_code: string; api?: any; stored: { file: string; first: string; last: string; n: number; upload: string | null } | null }
@@ -12,11 +12,26 @@ export type ResultRow = Record<string, any>
 
 /** 개발 로그: 브라우저 콘솔(F12)에 요청·응답을 남긴다. 끄려면 콘솔에서 localStorage.tspLog = '0' */
 const LOG_ON = (() => { try { return localStorage.getItem('tspLog') !== '0' } catch { return true } })()
+// 바꾸는 동작의 암호(2026-11-12): 서버가 401(need_password)을 주면 한 번 묻고, 이 브라우저 창을 닫을 때까지 기억한다(sessionStorage).
+let PW: string | null = (() => { try { return sessionStorage.getItem('tsp_pw') } catch { return null } })()
+function withPw(init: RequestInit | undefined, method: string): RequestInit | undefined {
+  if (method === 'GET' || !PW) return init
+  return { ...(init ?? {}), headers: { ...((init?.headers as Record<string, string>) ?? {}), 'X-TSP-Password': PW } }
+}
+
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
   const t0 = performance.now()
   const method = init?.method ?? 'GET'
   if (LOG_ON && init?.body) console.debug(`[api] → ${method} ${url}`, (() => { try { return JSON.parse(String(init.body)) } catch { return init.body } })())
-  const r = await fetch(url, init)
+  let r = await fetch(url, withPw(init, method))
+  for (let tries = 0; r.status === 401 && method !== 'GET' && tries < 3; tries++) {
+    let why = ''; try { why = (await r.clone().json()).detail ?? '' } catch {}
+    const got = window.prompt(`${why}\n암호를 넣어 주세요(이 창을 닫을 때까지 기억합니다).`)
+    if (!got) break
+    PW = got; try { sessionStorage.setItem('tsp_pw', got) } catch {}
+    r = await fetch(url, withPw(init, method))
+  }
+  if (r.status === 401) { PW = null; try { sessionStorage.removeItem('tsp_pw') } catch {} }
   const ms = Math.round(performance.now() - t0)
   if (!r.ok) {
     let msg = r.statusText; try { msg = (await r.json()).detail ?? msg } catch {}
@@ -29,6 +44,16 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 }
 export const api = {
   meta: () => j<Meta>('/api/meta'),
+  varSources: () => j<any[]>('/api/variables/sources'),
+  varValues: (id: string, version?: string) => j<any>(`/api/variables/${encodeURIComponent(id)}/values` + (version ? `?version=${encodeURIComponent(version)}` : '')),
+  tickerValues: (id: string, version?: string) => j<any>(`/api/tickers/${encodeURIComponent(id)}/values` + (version ? `?version=${encodeURIComponent(version)}` : '')),
+  varEdit: (id: string, body: any) => j<any>(`/api/variables/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  varCheck: (source: string, source_code: string) => j<any>('/api/variables/check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, source_code }) }),
+  varAdd: (body: any) => j<any>('/api/variables', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  collectStatus: () => j<any>('/api/collect'),
+  collectStart: () => j<any>('/api/collect', { method: 'POST' }),
+  tickerCheck: (id: string) => j<any>('/api/tickers/check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) }),
+  tickerAdd: (body: any) => j<any>('/api/tickers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   submit: (config: any, sealed = false) => j<{ job: Job; config_hash: string }>('/api/experiments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config, sealed }) }),
   jobs: () => j<Job[]>('/api/jobs'),
   explain: (config: any, date?: string, epochs?: number) => j<any>('/api/explain?' + new URLSearchParams({ ...(date ? { date } : {}), ...(epochs ? { epochs: String(epochs) } : {}) }).toString(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config, sealed: false }) }),

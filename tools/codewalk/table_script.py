@@ -323,28 +323,28 @@ def build(cap: dict) -> dict:
            + (f" 설정은 결과 파일 {cap['config_file']} 에 기록된 것 그대로입니다(결과 화면의 숫자와 맞춰 보기 위해). configs/ 의 같은 이름 설정 파일은 그 뒤 모델 파라미터가 바뀌어 아직 결과가 없습니다." if cap["config_file"].startswith("results/") else ""))
     S("0. 시작",
       ("호출 순서: <b>prepare</b> 가 시드를 고정하고 " if is_ridge else
-       f"호출 순서: <b>prepare</b> 가 엔진 시드를 고정하고(cfg.seed = {cfg['seed']}: random·numpy·torch — LightGBM 의 행·열 뽑기는 이 시드가 아니라 {MODEL} 에 적힌 random_state = 0 을 씁니다) ")
+       f"호출 순서: <b>prepare</b> 가 엔진 시드를 고정하고(cfg.seed = {cfg['seed']}: random·numpy·torch — 폴드를 학습하기 직전에는 이 시드와 그 폴드의 첫 테스트 결정일로 폴드 시드를 다시 정해 난수를 맞추고, LightGBM 은 그 numpy 난수에서 행·열 뽑기 시드(random_state)를 뽑습니다) ")
       + "모델의 실제 파라미터(주기별 기본값 채움)를 정한 뒤 <b>build_dataset</b> 으로 결정일 × 재료 표 X 와 정답 y 를 만듭니다. "
       "<b>make_folds</b> 가 워크포워드 폴드를 만들고, <b>_walkforward_predict</b> 가 폴드마다 학습 표를 자르고 눈금을 맞춘 뒤 <b>m.fit</b> → <b>m.predict</b> 합니다.",
       code=C(EXP, src.lines(EXP, 'tr = ds.X.loc[f.train].join(ds.y.loc[f.train].rename("y")).dropna()', "if len(tr) < 30 or te_empty:",
-                            'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(tr[ds.feature_names].values)',
-                            "Xtr = scaler.transform(tr[ds.feature_names].values)", "Xte = scaler.transform(te_valid[ds.feature_names].values)",
-                            "n_tr, n_va = _split_fit(m, Xtr, ytr, _nval(tr.index, f), emb_v)", "pred.loc[te_valid.index] = m.predict(Xte)")
-             + ([] if is_ridge else [src.line(EXP, "_seed(cfg.seed)")]),
-             src.line(EXP, "pred.loc[te_valid.index] = m.predict(Xte)"), "_walkforward_predict", 1, 1),
+                            'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(fit_rows)',
+                            "Xtr = scaler.transform(tr[feat].values)", "Xte = scaler.transform(te_valid[feat].values)",
+                            "m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xfit_in, yfit_in, n_val_t, Xte, Xtr if want_fit else None, n_feat=len(feat))", "pred.loc[te_valid.index] = p")
+             + ([] if is_ridge else [src.line(EXP, "sd = fold_seed(cfg.seed, f.test[0], r)")]),
+             src.line(EXP, "pred.loc[te_valid.index] = p"), "_walkforward_predict", 1, 1),
       say=(("코드는 이런 순서로 불립니다. 먼저 시드를 고정하고 모델 설정을 정한 다음, 결정일마다 재료 표와 정답을 만듭니다. "
             "그다음 워크포워드 폴드를 나누고, 폴드마다 학습 표를 잘라 눈금을 맞춘 뒤, 학습하고 예측합니다. 화면의 코드는 그 마지막 부분, 폴드 하나를 처리하는 곳입니다.") if is_ridge else
            (f"코드는 이런 순서로 불립니다. 먼저 엔진 시드를 {cfg['seed']}로 고정하고 모델 설정을 정한 다음, 결정일마다 재료 표와 정답을 만듭니다. "
-            "다만 라이트지비엠의 행과 열 뽑기에는 이 시드가 아니라, 모델 파일에 적힌 시드 0이 쓰입니다. "
+            "폴드를 학습하기 직전에는 이 시드와 그 폴드의 날짜로 폴드 시드를 다시 정해 난수를 맞추고, 라이트지비엠은 그 난수에서 행과 열 뽑기 시드를 뽑습니다. "
             "그다음 워크포워드 폴드를 나누고, 폴드마다 학습 표를 잘라 눈금을 맞춘 뒤, 학습하고 예측합니다. 화면의 코드는 그 마지막 부분, 폴드 하나를 처리하는 곳입니다.")),
       notes={src.line(EXP, 'tr = ds.X.loc[f.train].join(ds.y.loc[f.train].rename("y")).dropna()'): f"학습 창의 재료 X 와 정답 y 를 옆으로 붙이고, 빈 칸이 있는 행은 뺍니다 → 이번 폴드 {len(tr)}행",
              src.line(EXP, "if len(tr) < 30 or te_empty:"): "학습 행이 30개 미만이거나 테스트 입력이 없으면 이 폴드는 건너뜁니다",
-             src.line(EXP, 'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(tr[ds.feature_names].values)'): f"눈금(평균·표준편차)을 학습 표로만 구합니다 — 재료 {K}개",
-             src.line(EXP, "Xtr = scaler.transform(tr[ds.feature_names].values)"): f"학습 표를 z 로 바꿈 → {len(tr)} × {K}",
-             src.line(EXP, "Xte = scaler.transform(te_valid[ds.feature_names].values)"): f"테스트 행도 학습 표의 평균·표준편차로 바꿈 → {len(te)} × {K}",
-             src.line(EXP, "n_tr, n_va = _split_fit(m, Xtr, ytr, _nval(tr.index, f), emb_v)"): "모델 학습 (검증을 쓰는 모델이면 학습 표 끝을 검증으로 떼어 냄)",
-             src.line(EXP, "pred.loc[te_valid.index] = m.predict(Xte)"): f"예측을 결정일 자리에 기록 → {t.date()} 에 {pct(cap['pred'].loc[t], 3)}",
-             **({} if is_ridge else {src.line(EXP, "_seed(cfg.seed)"): f"prepare 안: 엔진 시드 {cfg['seed']} 로 random·numpy·torch 고정 (LightGBM 은 모델 파일의 random_state = 0 을 따로 씀)"})},
+             src.line(EXP, 'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(fit_rows)'): f"눈금(평균·표준편차)을 학습 표로만 구합니다 — 재료 {K}개",
+             src.line(EXP, "Xtr = scaler.transform(tr[feat].values)"): f"학습 표를 z 로 바꿈 → {len(tr)} × {K}",
+             src.line(EXP, "Xte = scaler.transform(te_valid[feat].values)"): f"테스트 행도 학습 표의 평균·표준편차로 바꿈 → {len(te)} × {K}",
+             src.line(EXP, "m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xfit_in, yfit_in, n_val_t, Xte, Xtr if want_fit else None, n_feat=len(feat))"): "모델 학습·예측 (_fit_reps: 검증을 쓰는 모델이면 학습 표 끝을 검증으로 떼어 냄. 난수를 쓰는 모델은 시드 수만큼 반복해 평균)",
+             src.line(EXP, "pred.loc[te_valid.index] = p"): f"예측을 결정일 자리에 기록 → {t.date()} 에 {pct(cap['pred'].loc[t], 3)}",
+             **({} if is_ridge else {src.line(EXP, "sd = fold_seed(cfg.seed, f.test[0], r)"): f"_fit_reps 안: 실험 시드 {cfg['seed']} 와 이 폴드의 첫 테스트 결정일로 폴드 시드를 정해 random·numpy·torch 를 맞춤(LightGBM 은 그 numpy 난수에서 random_state 를 뽑음)"})},
       stack=stk_wf, nodes=["ds", "fold", "scale", "fit", "pred"])
     # ================================================================ 1. 대상과 정답
     if mode == "forecast":
@@ -478,11 +478,28 @@ def build(cap: dict) -> dict:
       checks=[chk(f"기술지표 {len(tech)}개 손 계산 = 엔진 (상대)", [th[c] for c in tech], X.loc[t, tech].values.astype(float), 1e-10, rel=True)])
     # ================================================================ 3. 재료 — 외부 변수 (변환·발표시차·달력 정렬)
     info_t = t  # stamp 모드·매매 모드: 정보 시점 = 결정일
-    vrows = []; hand = []; eng = []; bases = []; tf_hand = True
+    vrows = []; hand = []; eng = []; bases = []; tf_hand = True; any_period = False
     for vid, v in cap["variables"].items():
         name = vid if v["transform"] in ("", "none") else f"{vid}_{v['transform']}"
         raw = v["raw"]; raw.index = pd.DatetimeIndex(raw.index).normalize()
         rv = raw.dropna(); av_ = rv.values.astype(float); tf_ = (v["transform"] or "none").lower()
+        if v.get("basis") == "model_period" and tf_ in ("pct", "diff"):
+            # 변수 주기가 모델 주기보다 촘촘한 경우(일간 변수 → 월간·주간 모델, 2026-11-10): 결정일마다 '그날까지 공개된 마지막 원값'을 먼저 놓고,
+            # 이번 결정일 값과 바로 앞 결정일 값 사이의 변화를 구한다(= 모델 주기 한 칸의 변화). 엔진 함수를 부르지 않고 손으로.
+            av_idx = rv.index + pd.to_timedelta(v["lag"], unit="D")
+            def _known(d_):
+                ok_ = av_idx <= d_
+                return (int(np.flatnonzero(ok_)[-1]) if ok_.any() else None)
+            i_t = X.index.get_loc(t); j = _known(t); jp = _known(X.index[i_t - 1]) if i_t > 0 else None
+            if j is None or jp is None:
+                val = np.nan
+            else:
+                val = float(av_[j] / av_[jp] - 1) if tf_ == "pct" else float(av_[j] - av_[jp])
+            hand.append(val); eng.append(float(X.loc[t, name])); any_period = True
+            vrows.append([name, v["name"], v["freq"], v["transform"] + " (결정일 사이)", v["lag"], rv.index[j].strftime("%Y-%m-%d") if j is not None else "—",
+                          av_idx[j].strftime("%Y-%m-%d") if j is not None else "—", g(val, 5)])
+            bases.append((v["freq"], v["transform"], rv.index[j] if j is not None else None, vid))
+            continue
         if tf_ in ("", "none"):
             trv = rv
         elif tf_ in ("pct", "diff"):   # 전 관측 대비 변화율·차이를 배열로 직접 (엔진 apply_transform 을 부르지 않음)
@@ -548,6 +565,7 @@ def build(cap: dict) -> dict:
     S("3. 재료 — 외부 변수",
       f"외부 변수 {len(exo)}개는 ① 원래 주기에서 변환(pct = 전기 대비 변화율, diff = 전기 대비 차이) ② <b>발표시차</b>: 기준일 + lag 일 = 공개일, 공개일부터만 사용 "
       f"③ 결정일 달력에 맞춰 '그날까지 공개된 마지막 값'(ffill) 으로 놓입니다. "
+      + ("단, 주기가 모델보다 촘촘한 변수(표의 변환 칸에 '결정일 사이')는 순서가 다릅니다: 원값을 먼저 결정일에 맞춰 놓고(②③), 이번 결정일과 바로 앞 결정일 사이의 변화를 구합니다 — 모델 주기 한 칸의 변화입니다. " if any_period else "")
       + ((f"그래서 결정일 {t.date()} 에 {lab_old} {len(old)}개는 기준 달이 {_mw(gap_of.values())} 전({gap_det}), {lab_same} {len(same)}개는 결정일 당일 값입니다. " if same or old else "")
          if mode == "forecast" or not same_daily else
          f"그래서 결정일 {t.date()} 에 일간 시장 변수 {len(same)}개는 <b>그날의 값</b>(전 거래일 대비 하루 변화율·차이)을, 월간 경제 변수 {len(old)}개는 기준 달이 {mtxt} 전인 값을 씁니다. ")
@@ -702,16 +720,16 @@ def build(cap: dict) -> dict:
       + ("" if is_ridge else
          f" <b>나무 모델에서도 표준화는 중립이 아닙니다</b>: LightGBM 은 값을 구간으로 묶을 때 0 을 늘 경계로 따로 두므로(덤프의 기준 ±1e-35), 표준화하면 그 경계가 원래 단위의 0 이 아니라 "
          f"학습 평균 자리에 놓입니다 — 이 폴드의 기준 {node_n}개 중 {zero_n}개가 그 자리입니다(6. 학습 화면). 표준화하지 않았을 때의 결과는 이 영상에서 계산하지 않았습니다."),
-      code=C(EXP, src.lines(EXP, "scaler = (MinMaxScaler() if params.get(\"input_scaler\") == \"minmax\" else StandardScaler()).fit(tr[ds.feature_names].values)",
-                            "Xtr = scaler.transform(tr[ds.feature_names].values)", "Xte = scaler.transform(te_valid[ds.feature_names].values)"),
-             src.line(EXP, "scaler = (MinMaxScaler() if params.get(\"input_scaler\") == \"minmax\" else StandardScaler()).fit(tr[ds.feature_names].values)"), "_walkforward_predict", 2, 6),
+      code=C(EXP, src.lines(EXP, "scaler = (MinMaxScaler() if params.get(\"input_scaler\") == \"minmax\" else StandardScaler()).fit(fit_rows)",
+                            "Xtr = scaler.transform(tr[feat].values)", "Xte = scaler.transform(te_valid[feat].values)"),
+             src.line(EXP, "scaler = (MinMaxScaler() if params.get(\"input_scaler\") == \"minmax\" else StandardScaler()).fit(fit_rows)"), "_walkforward_predict", 2, 6),
       say=("단위가 서로 다른 재료를 같은 눈금으로 바꿉니다. 각 값에서 평균을 빼고 표준편차로 나누는데, 이 평균과 표준편차는 학습 표로만 계산합니다. "
            "테스트나 미래의 값은 쓰지 않습니다. 이렇게 바꾼 값 z는, 평소보다 표준편차 몇 칸만큼 크거나 작은지를 뜻합니다. "
            f"예를 들어 결정일 {t.date()}의 {nm(feats[jz], '는')} z가 {z[jz]:+.2f}로, 이 날 재료 가운데 평소에서 가장 멀리 떨어져 있습니다."
            + ("" if is_ridge else " 라이트지비엠에서도 이 표준화는 결과를 바꿀 수 있습니다. 값 0을 늘 구간 경계로 두는데, 표준화하면 그 경계가 학습 평균 자리로 가기 때문입니다.")),
-      notes={src.line(EXP, 'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(tr[ds.feature_names].values)'): "StandardScaler: 열마다 학습 표의 평균과 표준편차(n 으로 나눔)를 저장",
-             src.line(EXP, "Xtr = scaler.transform(tr[ds.feature_names].values)"): f"학습 표 → z ({len(tr)} × {K})",
-             src.line(EXP, "Xte = scaler.transform(te_valid[ds.feature_names].values)"): f"결정일 {t.date()} 의 재료 → 같은 평균·표준편차로 z (1 × {K})"},
+      notes={src.line(EXP, 'scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(fit_rows)'): "StandardScaler: 열마다 학습 표의 평균과 표준편차(n 으로 나눔)를 저장",
+             src.line(EXP, "Xtr = scaler.transform(tr[feat].values)"): f"학습 표 → z ({len(tr)} × {K})",
+             src.line(EXP, "Xte = scaler.transform(te_valid[feat].values)"): f"결정일 {t.date()} 의 재료 → 같은 평균·표준편차로 z (1 × {K})"},
       lab=lab_scale,
       stack=stk_wf, nodes=["scale"], edges=[("fold", "scale")],
       formula="z_j = (x_j − 평균_j) ÷ 표준편차_j   (표준편차는 n 으로 나눔, ddof = 0 — sklearn StandardScaler)",
@@ -833,10 +851,14 @@ def build(cap: dict) -> dict:
         all_leaves = [nd for t_ in trees for nd in leaves(t_["tree_structure"], {}).values()]
         d_max = max(depth(t_["tree_structure"]) for t_ in trees); l_min = min(nd["leaf_count"] for nd in all_leaves)
         same_sub = p["subsample"] == p["colsample_bytree"]
+        # 이 기록을 만들 때 LightGBM 이 쓴 시드. 2026-11-10 전 기록에는 없다(그때는 모델 파일이 0 으로 고정). 그 뒤로는 엔진이 폴드마다 정한 시드.
+        lgb_seed = int(cap["fold_seed"]) if cap.get("fold_seed") is not None else 0
+        seed_txt = (f"시드 {lgb_seed} — 엔진이 실험 시드 {cfg['seed']} 와 이 폴드의 첫 테스트 결정일로 폴드 시드를 정해 numpy 난수를 맞추고, 모델이 그 난수에서 뽑은 값" if cap.get("fold_seed") is not None
+                    else f"시드 0 — 이 기록을 만든 때에는 모델 파일에 고정, 엔진 시드 {cfg['seed']} 와 별개였음(2026-11-10 부터는 엔진이 폴드마다 정한 시드를 씀)")
         S("6. LightGBM 학습",
           f"LightGBM 은 <b>얕은 나무를 차례로 더하는</b> 그래디언트 부스팅입니다(목적함수 {dm['objective']} = 제곱오차). 시작값 F₀ = 학습 정답 {n_tr}개의 평균({pct(init, 3)}). "
           f"나무 m 은 지금까지의 예측이 못 맞힌 만큼(잔차 y − F_(m−1))을 맞히도록 만들어지고, 잎마다 '잔차 합 ÷ (행 수 + λ)' 에 학습률 {lr} 를 곱한 것이 그 잎 값이 되어 예측에 더해집니다. "
-          f"이 설정의 나무: 깊이 ≤ {p['max_depth']}, 잎 ≤ {p['num_leaves']}, 잎마다 행 ≥ {p['min_child_samples']}, 나무마다 행 {p['subsample']:.0%}·열 {p['colsample_bytree']:.0%} 무작위 추출(시드 0 — 모델 파일에 고정, 엔진 시드 {cfg['seed']} 와 별개), {p['n_estimators']}그루. "
+          f"이 설정의 나무: 깊이 ≤ {p['max_depth']}, 잎 ≤ {p['num_leaves']}, 잎마다 행 ≥ {p['min_child_samples']}, 나무마다 행 {p['subsample']:.0%}·열 {p['colsample_bytree']:.0%} 무작위 추출({seed_txt}), {p['n_estimators']}그루. "
           "실제로 만들어진 나무: " + " · ".join(f"잎 {k_}개 {v_}그루" for k_, v_ in sorted(nl_cnt.items(), reverse=True))
           + f", 나무마다 뽑힌 행 {min(roots)}~{max(roots)}개(전체 {n_tr}행 — 정확히 {p['subsample']:.0%} 가 아니라 나무마다 다름).",
           code=C(MODEL, src.span(MODEL, "def fit(self, X, y, X_val=None, y_val=None):", "self.est.fit(X, y)"), src.line(MODEL, "self.est.fit(X, y)"), "Model.fit", 4, 6),
@@ -846,7 +868,7 @@ def build(cap: dict) -> dict:
                f"질문은 많아야 {p['max_depth']}번, 잎 하나의 행은 {p['min_child_samples']}개 이상입니다. "
                + (f"나무마다 행과 열을 {p['subsample']:.0%}씩 무작위로 뽑는데, " if same_sub else f"나무마다 행은 {p['subsample']:.0%}, 열은 {p['colsample_bytree']:.0%}를 무작위로 뽑는데, ")
                + f"실제로 뽑힌 행은 나무마다 {min(roots)}개에서 {max(roots)}개로 달랐습니다."),
-          notes={src.line(MODEL, "kw = dict(self.params, subsample_freq=1, verbose=-1, random_state=0, n_jobs=1)"): f"subsample_freq=1: 나무마다 행을 새로 뽑음(이 폴드: 나무마다 {min(roots)}~{max(roots)}행) · random_state=0: 뽑기 시드를 여기서 고정(엔진 시드 {cfg['seed']} 는 LightGBM 에 전해지지 않음)",
+          notes={src.line(MODEL, "kw = dict(self.params, subsample_freq=1, verbose=-1, random_state=seed, n_jobs=1)"): f"subsample_freq=1: 나무마다 행을 새로 뽑음(이 폴드: 나무마다 {min(roots)}~{max(roots)}행) · random_state: {seed_txt}",
                  src.line(MODEL, 'cls = lgb.LGBMRegressor if self.target_type == "regression" else lgb.LGBMClassifier'): f"정답이 수익률(숫자) → LGBMRegressor, 목적함수 {dm['objective']}(제곱오차)",
                  src.line(MODEL, "if X_val is not None and len(X_val) > 10:"): "검증이 없어(X_val = None) 조기 종료(early_stopping) 갈래로 가지 않음",
                  src.line(MODEL, "self.est.fit(X, y)"): f"학습 표 {n_tr}행 × {K}열 → 나무 {nT}그루를 모두 만듦"},
@@ -855,7 +877,7 @@ def build(cap: dict) -> dict:
           tensors=[{"type": "table", "title": "실제 파라미터 (월간 기본값 + 설정)", "columns": ["파라미터", "값", "뜻"],
                     "rows": [["n_estimators", p["n_estimators"], "나무 수"], ["learning_rate", lr, "나무 하나의 반영 비율"],
                              ["max_depth / num_leaves", f"{p['max_depth']} / {p['num_leaves']}", f"질문 최대 {p['max_depth']}번 → 잎 최대 {min(2 ** p['max_depth'], p['num_leaves'])}개"],
-                             ["min_child_samples", p["min_child_samples"], "잎 하나의 최소 행"], ["subsample (매 나무)", p["subsample"], "행 추출 비율 — 시드 0 고정"], ["colsample_bytree", p["colsample_bytree"], "열 추출 비율"],
+                             ["min_child_samples", p["min_child_samples"], "잎 하나의 최소 행"], ["subsample (매 나무)", p["subsample"], f"행 추출 비율 — 시드 {lgb_seed}"], ["colsample_bytree", p["colsample_bytree"], "열 추출 비율"],
                              ["reg_lambda", lam, "잎 값을 0 쪽으로 당기는 벌점"]]}],
           checks=[chk(f"나무 {nT}그루가 설정을 지킴: 가장 깊은 깊이 {d_max} ≤ {p['max_depth']} · 가장 많은 잎 {max(nl_cnt)} ≤ {p['num_leaves']} · 가장 작은 잎의 행 {l_min} ≥ {p['min_child_samples']}",
                       [d_max <= p["max_depth"], max(nl_cnt) <= p["num_leaves"], l_min >= p["min_child_samples"]], [1, 1, 1], 0, kind="식")])
@@ -882,7 +904,7 @@ def build(cap: dict) -> dict:
         # 구간(bin)은 LightGBM 버전·환경에 따라 다를 수 있어 음성에는 쓰지 않는다(화면 설명·검증 줄에만). 다시 만들지 못하면 그 부분만 건너뜀.
         nb = None
         try:
-            dsb = lgb.Dataset(Zt, label=yt, params=dict(p, subsample_freq=1, verbose=-1, random_state=0, n_jobs=1, objective=dm["objective"]), free_raw_data=False).construct()
+            dsb = lgb.Dataset(Zt, label=yt, params=dict(p, subsample_freq=1, verbose=-1, random_state=lgb_seed, n_jobs=1, objective=dm["objective"]), free_raw_data=False).construct()
             nb = [dsb.feature_num_bin(j_) for j_ in range(K)]
         except Exception as e_:
             bin_why = f"lightgbm.Dataset 으로 구간을 다시 만들지 못함({type(e_).__name__})"; print("  ⚠", bin_why, e_)
@@ -1134,7 +1156,7 @@ def build(cap: dict) -> dict:
         Gm = G.mean(0); rfi = np.asarray(res["feature_importance"], dtype=float) if res and res.get("feature_names") == feats and res.get("feature_importance") else None
         orr = np.argsort(-(rfi if rfi is not None else Gm))[:5]
         after_fi = src.line(EXP, "def _finish_forecast(") if mode == "forecast" else 0
-        ln_fi = src.line(EXP, "fi = m.feature_importance()"); ln_ap = src.line(EXP, "importances.append(np.asarray(fi, dtype=float))")
+        ln_fi = src.line(EXP, "im = m.feature_importance()"); ln_ap = src.line(EXP, "importances.append(imp_f)")
         ln_mean = src.line(EXP, "fi_mean = np.mean(importances, axis=0).tolist() if importances else None", after=after_fi)
         ln_save = src.line(EXP, '"feature_importance": fi_mean', after=after_fi)
         j5, jl = int(o5[0]), int(og[0])
@@ -1225,7 +1247,7 @@ def build(cap: dict) -> dict:
         dmv, dmp = pm.get("dm_vs_zero"), pm.get("dm_vs_zero_p")
         has_dm = dmv is not None and dmp is not None and np.isfinite(dmv) and np.isfinite(dmp)
         dm_sig = has_dm and dmv > 0 and dmp < 0.05
-        ln_sig = src.line(EXP, "signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())", after=src.line(EXP, "folds, is_split = make_folds(cfg, ds, k)"))   # 개발 구간 평가(봉인 아님) 갈래
+        ln_sig = src.line(EXP, "signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())")   # 2026-11-12: 신호 변환이 _signal_from_prediction 함수로 옮겨짐   # 개발 구간 평가(봉인 아님) 갈래
         ln_bt = src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)")
         ln_dm = src.line(EXP, 'dm, dm_p = diebold_mariano(e.values, (0 - ev["target"]).values, h=k)')
         lab_tr = (lab_trade(pp[ok], yy[ok], thr, pf["exposure"], pm["rmse"], pm["dir_acc"]) if all(k_ in pf for k_ in ("exposure",)) and all(k_ in pm for k_ in ("rmse", "dir_acc")) else None)

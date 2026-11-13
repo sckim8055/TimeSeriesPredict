@@ -561,11 +561,11 @@ def build(cap: dict) -> dict:
            + f"학습 평균은 {g4(mu_s[j0])}, 표준편차는 {g4(sc_s[j0])}입니다. 평균을 빼고 표준편차로 나누면 {f(z0)}입니다. "
            "빈 칸은 앞 값으로 채우고, 그래도 남으면 학습 평균, 곧 표준화 뒤 0으로 채웁니다."),
       notes={src.line(EXP, "StandardScaler()).fit(full["): f"학습 폴드 {len(dates)}행(앞 값 채운 뒤)으로 변수별 평균·표준편차(n 으로 나눔)",
-             src.line(EXP, "Xf = scaler.transform(full[ds.feature_names].ffill().values)"): f"표준화 → [{len(dates)}, {K}]",
+             src.line(EXP, "Xf = scaler.transform(full[feat].ffill().values)"): f"표준화 → [{len(dates)}, {K}]",
              src.line(EXP, "fill_val = np.nanmean(Xf, axis=0)"): "빈 칸 채움값 = 표준화 뒤 열 평균(≈ 0)",
              src.line(EXP, "Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)"): f"남은 빈 칸을 채움값으로 (이 폴드는 빈 칸 {nnan}개)"},
       lab=lab_scale(raw[feats[j0]].values, feats[j0], dates[-1], mu_s[j0], sc_s[j0], Xw[-1][-1, j0], about=about_j),
-      code=C(EXP, src.lines(EXP, "StandardScaler()).fit(full[", "Xf = scaler.transform(full[ds.feature_names].ffill().values)", "fill_val = np.nanmean(Xf, axis=0)",
+      code=C(EXP, src.lines(EXP, "StandardScaler()).fit(full[", "Xf = scaler.transform(full[feat].ffill().values)", "fill_val = np.nanmean(Xf, axis=0)",
                             "Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)"), src.line(EXP, "StandardScaler()).fit(full["), "_walkforward_predict", 6, 4),
       stack=["engine/experiment.py · _walkforward_predict"], nodes=["scale"], edges=[("data", "scale")],
       formula=f"x′ = (x − 평균) ÷ 표준편차   {feats[j0]}: ({g4(v0)} − {neg(g4(mu_s[j0]))}) ÷ {g4(sc_s[j0])} = {f(z0)}",
@@ -1040,10 +1040,10 @@ def build(cap: dict) -> dict:
            f"결정월의 F11 값 {f(pr['level'])}에서 다음 달 예측은 {f(nxt)}로 나옵니다. 실제 변화율은 {pr['actual'] * 100:.4f}%였습니다."
            + (f" 이 실제 값은 봉인 구간인 {t_next:%Y-%m}의 F11을 씁니다." if seal_hit else "")),
       notes={L_CTX: f"테스트 달 바로 앞 {L - 1}행: {wd_[0]} ~ {wd_[L - 2]} (비움 달 {', '.join(emb_months)} 포함)",
-             src.line(EXP, "Xtf = scaler.transform(te_full[ds.feature_names].ffill().values)"): "학습 폴드의 눈금(평균·표준편차) 그대로",
-             src.line(EXP, "p = m.predict(Xtw)"): f"예측 → {pred_s}"},
+             src.line(EXP, "Xtf = scaler.transform(te_full[feat].ffill().values)"): "학습 폴드의 눈금(평균·표준편차) 그대로",
+             src.line(EXP, "m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xw, yw, _nval(win_idx, f), Xtw, Xw if (want_fit and len(Xw)) else None, n_feat=len(feat))"): f"예측 → {pred_s}"},
       lab=lab6,
-      code=C(EXP, src.lines(EXP, "ctx = ds.X.loc[: f.test[0]].iloc[-cfg.seq_len:-1]", "Xtf = scaler.transform(te_full[ds.feature_names].ffill().values)", "p = m.predict(Xtw)"),
+      code=C(EXP, src.lines(EXP, "ctx = ds.X.loc[: f.test[0]].iloc[-cfg.seq_len:-1]", "Xtf = scaler.transform(te_full[feat].ffill().values)", "m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xw, yw, _nval(win_idx, f), Xtw, Xw if (want_fit and len(Xw)) else None, n_feat=len(feat))"),
              L_CTX, "_walkforward_predict", 2, 4),
       stack=["engine/experiment.py · _walkforward_predict", f"{MODEL} · Model.predict"], nodes=["pred"], edges=[("epoch", "pred")],
       formula=f"ŷ = ŷ_z × σ_y + μ_y = {pn(zs)} × {ss} + {ms} = {pred_s}",
@@ -1053,6 +1053,15 @@ def build(cap: dict) -> dict:
               chk("기록 도구가 끝난 가중치로 다시 낸 예측 = 엔진(_walkforward_predict)이 낸 예측", pr["repeats"][0], pr["pred"], 1e-6, kind="rerun"),
               chk(f"실제 변화율 = 원자료(data 저장소) F11({t_next:%Y-%m}) ÷ F11({t_test:%Y-%m}) − 1", pr["actual"], act_raw, 1e-15, kind=kd_raw)])
     nrep = cap.get("n_replayed", 0)
+    # 난수 상태를 어떻게 맞췄나 — 기록에 따라 다르다. 2026-11-10 전 기록: 앞 폴드를 먼저 돌림. 그 뒤: 엔진이 폴드마다 시드를 그 폴드의 날짜로 정함.
+    if cap.get("fold_seed") is not None:
+        rng_txt = f" 엔진은 폴드를 학습하기 직전에 실험 시드와 그 폴드의 첫 테스트 결정월로 폴드 시드({cap['fold_seed']})를 정하므로, 마지막 폴드만 돌려도 실제 실험과 같은 난수를 씁니다."
+        rng_say = "엔진은 폴드를 학습하기 직전에, 실험 시드와 그 폴드의 날짜로 폴드 시드를 다시 정합니다. 그래서 마지막 폴드만 돌려도 실제 실험과 같은 난수를 씁니다."
+        rng_how, rng_how_say = "폴드 시드를 엔진과 같은 규칙으로 정했지만", "폴드 시드는 엔진과 같은 규칙으로 정했지만"
+    else:
+        rng_txt = f" 엔진은 시드를 실험 시작에 한 번만 고정하므로, 이 영상은 앞의 폴드 {nrep}개를 그대로 먼저 돌려(기록 없이) 난수 상태를 실제 실험과 같게 맞춘 뒤 마지막 폴드를 기록했습니다."
+        rng_say = f"엔진은 실험을 시작할 때 시드를 한 번만 고정합니다. 그래서 이 영상은 앞의 폴드 {nrep}개를 기록 없이 먼저 돌려 난수 상태를 실제 실험과 같게 맞춘 뒤, 마지막 폴드를 기록했습니다."
+        rng_how, rng_how_say = f"난수 상태는 LSTM 영상과 같은 방법(앞의 폴드 {nrep}개를 기록 없이 먼저 돌림)을 썼지만", f"난수 상태는 LSTM 영상과 같은 방법, 곧 앞의 폴드 {nrep}개를 기록 없이 먼저 돌리는 방법을 썼지만"
     ORD_SAY = ("첫", "두", "세", "네", "다섯")
 
     def res_diffs(jo, jr):
@@ -1105,11 +1114,11 @@ def build(cap: dict) -> dict:
           (f"이 예측을 결과 폴더의 같은 실험 결과 <b>{mr['file'].replace('_daily.parquet', '')}</b> 의 {pr['date'][:7]} 예측과 맞춰 봅니다: 차이 {mr['max_diff']:.1e}"
            + (" — <b>결과 화면의 숫자와 같은 계산</b>입니다." if same else " — 다릅니다.")
            + (" 왼쪽 표의 다른 결과 파일은 대조한 파일과 설정이나 실행 조건이 달라(표의 마지막 열, 결과 json 에서 읽음) 값이 다른 것이 정상입니다." if oth and same else "")
-           + f" 엔진은 시드를 실험 시작에 한 번만 고정하므로, 이 영상은 앞의 폴드 {nrep}개를 그대로 먼저 돌려(기록 없이) 난수 상태를 실제 실험과 같게 맞춘 뒤 마지막 폴드를 기록했습니다."),
+           + rng_txt),
           say=(f"이 예측을 결과 폴더에 저장된 같은 실험의 결과 파일과 맞춰 봅니다. 결정월 {pr['date'][:7]}의 예측 "
                + ("차이는 0으로, 결과 화면의 숫자와 같은 계산입니다. " if same else f"차이는 {mr['max_diff']:.1e}로 다릅니다. ")
                + oth_say
-               + f"엔진은 실험을 시작할 때 시드를 한 번만 고정합니다. 그래서 이 영상은 앞의 폴드 {nrep}개를 기록 없이 먼저 돌려 난수 상태를 실제 실험과 같게 맞춘 뒤, 마지막 폴드를 기록했습니다."),
+               + rng_say),
           stack=["results/forecast/" + mr["file"]], nodes=["pred"],
           tensors=[{"type": "table", "title": "결과 파일별 비교 (같은 결정월의 예측, 설정·실행 조건은 결과 json 에서)", "columns": ["결과 파일", "모델", f"{test_m} 예측 차이", "대조한 파일과 다른 점(괄호 = 대조 파일)"], "rows": rows_r}],
           hint=(dev_txt + "CPU 스레드 수만 다를 때는 덧셈 순서 차이로 끝자리가 다를 수 있습니다(이 설정에서는 재 보지 않음). "
@@ -1123,10 +1132,10 @@ def build(cap: dict) -> dict:
           (f"결과 폴더에는 이 설정 이름({cap['config']['name']})의 결과 파일이 {len(mr_rows)}개 있지만 모델이 모두 {', '.join(o.upper() for o in others)} 입니다(왼쪽 표). " if mr_rows else
            f"결과 폴더에 이 설정 이름({cap['config']['name']})의 결과 파일이 없습니다. ")
           + f"<b>{KN} 로 돌린 결과 파일은 없어서</b>, 이 영상의 {KN} 예측을 결과 화면의 숫자와 맞춰 보지는 못했습니다. "
-          f"난수 상태는 LSTM 영상과 같은 방법(앞의 폴드 {nrep}개를 기록 없이 먼저 돌림)을 썼지만, 비교할 결과 파일이 없습니다.",
+          f"{rng_how}, 비교할 결과 파일이 없습니다.",
           say=((f"결과 폴더에는 이 설정을 LSTM으로 돌린 결과 파일만 있고, {KN}로 돌린 결과 파일은 없습니다. " if mr_rows and others == ["lstm"] else f"결과 폴더에 {KN}로 돌린 결과 파일이 없습니다. ")
                + "그래서 이 영상의 예측을 결과 화면의 숫자와 맞춰 보지는 못했습니다. "
-               f"난수 상태는 LSTM 영상과 같은 방법, 곧 앞의 폴드 {nrep}개를 기록 없이 먼저 돌리는 방법을 썼지만, 비교할 결과 파일이 없습니다."),
+               f"{rng_how_say}, 비교할 결과 파일이 없습니다."),
           stack=["results/forecast"], nodes=["pred"],
           tensors=([{"type": "table", "title": "결과 폴더의 같은 설정 이름 결과 파일 (모델은 결과 json 의 model.file)", "columns": ["결과 파일", "모델"], "rows": [[a_, m_ or "?"] for a_, m_ in mr_rows]}] if mr_rows else []))
     n_ok = sum(c["ok"] for c in checks_all)

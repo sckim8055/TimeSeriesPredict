@@ -43,7 +43,8 @@ log_f = logging.getLogger("tsp.engine.fold")
 # ---------------------------------------------------------------------------
 class TargetSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")  # 모르는 키(오타)는 오류 — 조용히 기본값으로 돌지 않게(2026-11-10)
-    kind: Literal["return", "logreturn", "direction", "event"] = "return"
+    # volatility(2026-11-12): 수익률이 아니라 그 뒤 k 기간의 실현 변동성을 맞힌다(매매 모드·학습 모델만). 매매 규칙은 '예측 변동성이 높으면 비중을 줄임'
+    kind: Literal["return", "logreturn", "direction", "event", "volatility"] = "return"
     k: int = Field(1, ge=1, description="예측 지평(주기 수)")
     threshold: float = 0.0
 
@@ -69,6 +70,22 @@ class Validation(BaseModel):
     test_end: str | None = Field(None, description="테스트(평가) 종료일(포함). 비우면 봉인 시작 전날 또는 데이터 끝")
 
 
+def _norm_technical(tf: list[str] | None, use_technical: bool, freq: str, with_volume: bool) -> list[str] | None:
+    """기술지표 선택 목록 정규화: 기술지표를 끄면 None, 중복 제거, 만드는 순서대로, 전부면 None. 없는 이름은 남겨 두어 실행 때 select_technical 이 오류로 알린다."""
+    if tf is None or not use_technical:
+        return None
+    try:
+        from engine.features import technical_columns
+        allc = technical_columns(freq, with_volume=with_volume)
+    except Exception:  # noqa: BLE001 — 기술지표가 정의되지 않은 주기: 그대로 두고 실행 때 오류로 드러나게
+        return tf
+    known = [c for c in allc if c in set(tf)]
+    unknown = [c for c in dict.fromkeys(tf) if c not in set(allc)]
+    if not unknown and len(known) == len(allc):
+        return None
+    return known + unknown  # 빈 목록은 실행 때 오류(전부 빼려면 use_technical 을 끈다)
+
+
 class ExperimentConfig(BaseModel):
     # 모르는 키는 오류(전에는 무시 — 'frequncy' 같은 오타가 기본값으로 조용히 돌았다, 2026-11-10). '_' 로 시작하는 키(_comment)는 메모로 보고 버린다
     model_config = ConfigDict(extra="forbid")
@@ -80,26 +97,10 @@ class ExperimentConfig(BaseModel):
 
     @model_validator(mode="after")
     def _normalise_technical(self):
-        """technical_features 정규화 — 같은 입력이면 같은 해시가 되게: 기술지표를 끄면 None, 중복 제거, 만드는 순서대로, 전부면 None."""
-        tf = self.technical_features
-        if tf is None:
-            return self
-        if not self.use_technical:
-            object.__setattr__(self, "technical_features", None)
-            return self
-        try:
-            from engine.features import technical_columns
-            allc = technical_columns(self.frequency, with_volume=(self.mode != "forecast"))
-        except Exception:  # noqa: BLE001 — 기술지표가 정의되지 않은 주기: 그대로 두고 실행 때 오류로 드러나게
-            return self
-        known = [c for c in allc if c in set(tf)]
-        unknown = [c for c in dict.fromkeys(tf) if c not in set(allc)]  # 없는 이름은 남겨 두어 실행 때 select_technical 이 오류로 알린다
-        norm = known + unknown
-        if not unknown and len(known) == len(allc):
-            norm = None
-        elif not norm:
-            norm = []  # 빈 목록은 실행 때 오류(전부 빼려면 use_technical 을 끈다)
-        object.__setattr__(self, "technical_features", norm)
+        """technical_features 정규화 — 같은 입력이면 같은 해시가 되게(_norm_technical). 예측 연구 모드의 실제 주기(대상 변수의 주기)는 변수 사전이
+        있어야 알 수 있어, 여기서는 설정의 frequency 로 한 번 하고 실행 때 fill_defaults 가 실제 주기로 다시 한다."""
+        if self.technical_features is not None:
+            object.__setattr__(self, "technical_features", _norm_technical(self.technical_features, self.use_technical, self.frequency, self.mode != "forecast"))
         return self
 
     name: str = ""
@@ -127,10 +128,19 @@ class ExperimentConfig(BaseModel):
     validation: Validation = Validation()
     data_version: str = ""
     seed: int = 2025
+    n_seeds: int = Field(1, ge=1, le=50, description="난수에 따라 결과가 달라지는 모델(LSTM·GRU·BIVA·LightGBM)을 폴드마다 시드를 바꿔 몇 번 학습할지. "
+                                                     "예측은 그 평균을 쓰고 시드 사이 흩어짐을 결과에 남긴다. 결정적 모델(릿지·ARIMA 등)은 무시. 2026-11-10 추가, 해시에는 1 이 아닐 때만 들어간다")
+
+    select_top: int | None = Field(None, ge=1, description="입력 선별(2026-11-12): 폴드마다 '학습 창 안에서' 정답과의 |순위상관|이 높은 입력 N개만 골라 학습한다. "
+                                   "None = 고르지 않음(전부 사용, 순위만 결과에 남김). 표·창 입력 학습 모델만. 해시에는 None 이 아닐 때만 들어간다")
+
+    pool_tickers: list[str] = Field(default_factory=list, description="묶어 학습(2026-11-12): 여기 적은 종목의 (입력, 정답) 행을 폴드마다 '학습에만' 보탠다. "
+                                    "예측·평가는 대상 종목(ticker)만. 매매 모드·표 입력 모델(릿지·LightGBM)만. 해시에는 비어 있지 않을 때만 들어간다")
 
     def config_hash(self) -> str:
         # technical_features 는 2026-11-09 에 생긴 칸: 기본값(None = 전부)이면 해시에서 빼서 그 전 결과의 이름·재실행 연결을 그대로 둔다
-        ex = {"name"} | ({"technical_features"} if self.technical_features is None else set())
+        # n_seeds(2026-11-10)도 같다: 기본값 1 이면 해시에서 뺀다
+        ex = {"name"} | ({"technical_features"} if self.technical_features is None else set()) | ({"n_seeds"} if self.n_seeds == 1 else set()) | ({"select_top"} if self.select_top is None else set()) | ({"pool_tickers"} if not self.pool_tickers else set())
         return hashlib.sha1(self.model_dump_json(exclude=ex).encode()).hexdigest()[:12]
 
 
@@ -158,6 +168,12 @@ def pinned_model_params(model_file: str, recorded: dict | None, given: dict | No
         if k not in recorded and k not in out:
             out[k] = v
             notes.append(f"{k}={v} (이 결과를 낼 때의 값 — 결과 파일에 기록이 없어 그때 고정값으로 채움)")
+    # 처음부터 있던 파라미터의 '기본값'이 바뀐 경우(PIN_RECORDED — 예: SARIMA 의 D, 2026-11-10 에 1 → 0): 옛 결과에는 그때 값이 기록돼 있지만
+    # 설정에는 적혀 있지 않아(기본값으로 돌았으므로) 그대로 다시 돌리면 새 기본값이 들어간다 → 기록된 값이 지금 기본값과 다르면 그 값으로 고정한다.
+    for k in getattr(plugin, "PIN_RECORDED", ()) or ():
+        if k in recorded and k not in out and recorded[k] != (plugin.PARAMS.get(k) or {}).get("default"):
+            out[k] = recorded[k]
+            notes.append(f"{k}={recorded[k]} (이 결과를 낼 때 실제로 쓰인 값 — 그 뒤 기본값이 {plugin.PARAMS[k].get('default')} 로 바뀜)")
     return out, notes
 
 
@@ -187,9 +203,12 @@ class Dataset:
     lag_days_used: dict | None = None
     transforms_used: dict | None = None  # 변수별 실제 적용 변환 (설정 재정의 > 마스터 기본)
     levels: pd.DataFrame | None = None  # 변환하지 않은 수준값(발표시차·정렬 적용). levels 모델(VECM) 전용
+    transform_basis: dict | None = None  # 변수별 변환의 '한 칸': model_period(모델 주기) · native(변수의 원래 주기) · level(변화형 아님)
+    pool: list | None = None  # 묶어 학습: [(종목, 그 종목의 Dataset)] — 학습 행만 보탠다(pool_training_rows)
 
 
 _TR_RE = re.compile(r"^(pct|diff)(\d*)$")
+_FREQ_RANK = {"D": 0, "W": 1, "M": 2, "Q": 3, "H": 4, "Y": 5}  # 작을수록 촘촘한 주기
 
 
 def apply_transform(s: pd.Series, transform: str) -> pd.Series:
@@ -244,6 +263,7 @@ def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Data
     parts = []
     var_ids: list[str] = []
     level_cols: dict[str, pd.Series] = {}
+    tr_basis: dict[str, str] = {}
     if cfg.use_technical:
         parts.append(select_technical(technical_block(prices, freq, with_volume=(cfg.mode != "forecast")), cfg.technical_features))
     if cfg.variable_ids:
@@ -263,7 +283,14 @@ def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Data
                 raise KeyError(f"데이터 버전에 변수 {vid} 없음")
             v = reg.get(vid)
             tr = vt_map.get(vid, v.transform or "none")
-            raw = apply_transform(wide[vid].dropna(), tr)  # 변환은 원래 주기에서, 정렬 전에
+            # 변화형 변환(pct·diff·logdiff, 간격을 따로 적지 않은 것)의 '한 칸':
+            #   변수 주기가 모델 주기보다 촘촘하면(일간 변수 → 월간·주간 모델) 모델 주기 한 칸의 변화 = 결정일마다 알 수 있는 값(발표시차 적용)을 먼저 뽑고 그 사이의 변화.
+            #   그 밖(같은 주기, 또는 월간 변수 → 일간 모델)은 변수의 원래 주기에서 변화를 구한 뒤 결정일에 맞춘다.
+            # 2026-11-10 전에는 늘 원래 주기에서 먼저 변환해, 월간 모델에 들어간 일간 변수가 '그 달 마지막 하루의 변화'였다(점검 M4 — KOSPI 월간 행과 실제 월간 수익률의 상관 −0.06).
+            # pct5·diff20 처럼 간격을 적은 변환은 '변수의 원래 주기로 n 칸'이라는 뜻 그대로 둔다.
+            period_tr = tr.strip().lower() in ("pct", "diff", "logdiff") and _FREQ_RANK.get(str(v.freq), 0) < _FREQ_RANK.get(str(freq), 0)
+            tr_basis[vid] = "model_period" if period_tr else ("native" if tr not in ("", "none", "log") else "level")
+            raw = wide[vid].dropna() if period_tr else apply_transform(wide[vid].dropna(), tr)
             bad = raw.index[np.isinf(raw.values.astype(float))]
             if len(bad):
                 raise ValueError(
@@ -273,6 +300,11 @@ def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Data
             lag = lo_map.get(vid, v.lag_days)
             name = vid if tr in ("", "none") else f"{vid}_{tr}"
             cols[name] = cal.align_to_calendar(raw, info_calendar, lag_days=lag, fill=cfg.fill, apply_lag=cfg.apply_lag).set_axis(calendar)
+            if period_tr:
+                cols[name] = apply_transform(cols[name], tr)  # 결정일 사이(모델 주기 한 칸)의 변화
+                bad2 = cols[name].index[np.isinf(cols[name].values.astype(float))]
+                if len(bad2):
+                    raise ValueError(f"변수 {vid} 에 변환 {tr} 을 적용하면 무한대 값이 {len(bad2)}개 생깁니다 (예: {bad2[0].date()}) — transform 을 none 또는 diff 로 바꾸세요")
             level_cols[vid] = cal.align_to_calendar(wide[vid].dropna(), info_calendar, lag_days=lag, fill=cfg.fill, apply_lag=cfg.apply_lag).set_axis(calendar)
             _al = cols[name]
             _chg = _al.dropna()
@@ -303,7 +335,7 @@ def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Data
         print(f"  [lag 미확인] {len(unconf)}/{len(used)}개 변수가 마스터에서 lag 확인 안 됨 (결과 json 의 lag_unconfirmed 참조)")
     levels = pd.DataFrame(level_cols).reindex(calendar) if cfg.variable_ids else pd.DataFrame(index=calendar)
     log_d.debug("데이터셋: %s · %s · 가격/대상 %s", describe(X, "입력 X"), describe(y, "타겟 y"), describe(prices["close"], "close"))
-    return Dataset(prices, X, y, list(X.columns), cal.fill_leaks_future(cfg.fill), unconf, used, trs, levels)
+    return Dataset(prices, X, y, list(X.columns), cal.fill_leaks_future(cfg.fill), unconf, used, trs, levels, tr_basis)
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +343,20 @@ def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Data
 # ---------------------------------------------------------------------------
 # 결과 계산 방식이 바뀐 날. 결과 json 에 'engine_rev' 로 남고, tools/rerun_stale.py 가 이 값으로 옛 결과를 찾는다.
 # 2026-11-07: 창 입력 모델 눈금을 학습 폴드 전체 행으로 · 중복 변수 ID 의 변환·lag 설정을 대표 ID 로.
-ENGINE_REV = "2026-11-07"
+# 2026-11-10: 봉인 경계를 '쓰이는 가격' 기준으로(개발 평가가 h 행 일찍 끝남) · 모델보다 촘촘한 변수의 pct/diff 는 결정일 사이의 변화 ·
+#             폴드마다 시드(날짜로 정함)·시드 반복(n_seeds)·LightGBM 이 엔진 시드를 씀 · SARIMA 기본 D=0+상수항 · ARIMA·SARIMA 여러 출발점 추정 ·
+#             k>1 검정의 분산을 절단 핵+HLN 보정으로 · 학습 창 평균 기준 지표(cw_vs_mean 등)·기준 열(bench_mean) 추가.
+#             → 그 전 결과는 전부 '옛 방식'(V·Holm·순위에서 제외). 다시 돌려야 한다(tools/rerun_stale.py).
+ENGINE_REV = "2026-11-10"
+
+
+def fold_seed(seed: int, test_start, rep: int = 0) -> int:
+    """폴드 하나·반복 하나의 시드. 실험 시드, 그 폴드의 첫 테스트 결정일, 반복 번호(0부터)만으로 정한다.
+    왜 폴드마다 따로 정하나(2026-11-10): 그 전에는 실험 시작에 한 번만 시드를 고정해, 어떤 폴드의 난수는 앞 폴드들이 난수를 얼마나 썼는지에 달려 있었다.
+    그래서 (1) 폴드 하나만 다시 계산하면(계산 따라가기) 실험 때와 다른 값이 나왔고 (2) 이어 돌리기는 난수 상태를 통째로 저장해야 했고
+    (3) 폴드 구성이 조금만 달라도 뒤 폴드 전부가 달라졌다. 이제 폴드는 자기 날짜로 시드가 정해져 어떤 순서·묶음으로 돌려도 같은 값이 나온다."""
+    d = pd.Timestamp(test_start).strftime("%Y-%m-%d")
+    return int(hashlib.sha256(f"{int(seed)}|{d}|{int(rep)}".encode()).hexdigest()[:8], 16) % (2**31 - 1)
 
 
 def _seed(seed: int) -> None:
@@ -363,6 +408,28 @@ def _embargo(cfg, k: int) -> int:
 
 
 
+def seal_horizon(cfg, k: int) -> int:
+    """결정일 t 의 정답·수익이 쓰는 마지막 값이 몇 행 뒤인가: 매매 1+k(다음 날 시가에 사서 그 k 주기 뒤 시가까지), 예측 k."""
+    return k if cfg.mode == "forecast" else 1 + k
+
+
+def seal_cut(cfg, calendar_all: pd.DatetimeIndex, k: int) -> pd.Timestamp | None:
+    """봉인 시작일(sealed_from: '이 날부터의 값은 개발 중 쓰지 않는다')을 결정일 기준 경계로 바꾼다. 반환 = 첫 봉인 결정일(없으면 None).
+
+    결정일 t 의 정답(타겟)과 보유수익은 t+h 행까지의 값을 쓴다(h = seal_horizon). 그래서
+      개발  = 그 마지막 값의 날짜가 봉인 시작 전인 결정일  (t+h 행의 날짜 < sealed_from)
+      봉인  = 봉인 시작일 이후의 값이 하나라도 쓰이는 결정일 (t+h 행의 날짜 ≥ sealed_from)
+    으로 나눈다. 빠지는 날·겹치는 날이 없고, 개발 구간의 어떤 수치도 봉인 시작일 이후의 값을 쓰지 않는다.
+    2026-11-10 전에는 '결정일 < sealed_from' 으로만 잘라, 개발의 마지막 h 개 결정이 봉인 구간의 가격으로 채점됐다
+    (월간이면 봉인 첫 달의 수익이 개발 성과에 들어가고 봉인 평가에서는 빠졌다 — 점검 T5)."""
+    if not cfg.validation.sealed_from:
+        return None
+    sf = pd.Timestamp(cfg.validation.sealed_from)
+    n0 = int(calendar_all.searchsorted(sf))  # sealed_from 전의 행 수
+    c = max(0, n0 - seal_horizon(cfg, k))
+    return calendar_all[c] if c < len(calendar_all) else sf
+
+
 def make_folds(cfg, ds, k) -> tuple[list, bool]:
     """검증 설정으로 폴드 목록을 만든다(학습 모델 실행·규칙 모델 평가 구간·계산 따라가기(explain)가 모두 이 함수를 쓴다).
     1회 분할: 폴드 1개(테스트 시작 전 전부 − 비움 / 테스트 시작~종료). 워크포워드: calendar.walkforward_folds.
@@ -376,7 +443,7 @@ def make_folds(cfg, ds, k) -> tuple[list, bool]:
         if ts is None:
             raise ValueError("1회 분할에는 테스트 시작일(test_start)이 필요합니다")
         calendar_dev = calendar_all
-        sf = pd.Timestamp(v.sealed_from) if v.sealed_from else None
+        sf = seal_cut(cfg, calendar_all, k)  # 첫 봉인 결정일(가격 기준 경계를 결정일로 옮긴 것)
         if sf is not None:
             calendar_dev = calendar_dev[calendar_dev < sf]
         train_idx = calendar_dev[calendar_dev < ts]
@@ -392,7 +459,7 @@ def make_folds(cfg, ds, k) -> tuple[list, bool]:
         return [cal.Fold(train_idx, test_idx, val_from=vf)], True
     start_row = int(calendar_all.searchsorted(ts)) if ts is not None else None
     folds = cal.walkforward_folds(calendar_all, train_len=v.train_len, test_len=v.test_len, k=k, embargo=emb, start=start_row,
-                                  sealed_from=pd.Timestamp(v.sealed_from) if v.sealed_from else None)
+                                  sealed_from=seal_cut(cfg, calendar_all, k))
     if ts is not None and folds and folds[0].test[0] > ts:
         print(f"  [기간] 테스트 시작 {ts.date()} 에는 학습 창({v.train_len})이 모자라 첫 테스트가 {folds[0].test[0].date()} 부터입니다", flush=True)
     if te_end is not None:
@@ -427,7 +494,7 @@ def _split_fit(m, X, y, n_val: int, emb: int):
 
 
 def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, *, want_fit: bool = False, log: list | None = None,
-                         capture: dict | None = None):
+                         capture: dict | None = None, diags: list | None = None):
     """폴드 목록을 돌며 학습→예측. (pred, n_folds, importances[, fit]). 워크포워드·1회 분할·봉인 평가가 같은 코드를 쓴다.
     want_fit=True 면 학습 구간 적합값(in-sample)도 돌려준다 — 1회 분할(노트북 방식) 차트용. 적합값은 성과·검정에 절대 쓰지 않는다.
     capture: dict 를 주면 마지막으로 처리한 폴드의 중간 객체(학습 표·스케일러·적합된 모델·테스트 입력 등)를 담는다 — 계산 따라가기
@@ -441,6 +508,41 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
     n_folds = 0
     emb_v = _embargo(cfg, k)
     uses_val = bool(getattr(plugin.Model, "USES_VALIDATION", True))
+    # 시드 반복: 난수에 따라 달라지는 모델만. 결정적 모델은 여러 번 돌려도 같은 값이라 1번.
+    n_rep = int(cfg.n_seeds) if bool(getattr(plugin.Model, "STOCHASTIC", False)) else 1
+
+    def _fit_reps(f, X, y, n_val, X_te, X_fit=None, n_feat=None):
+        """폴드 하나를 시드 n_rep 개로 학습·예측. 반환 (첫 시드 모델, 학습 수, 검증 수, 예측 평균, 적합값 평균, 중요도 평균, 폴드 진단).
+        반복마다 fold_seed(실험 시드, 폴드 첫 테스트일, 반복 번호)로 전역 난수(random·numpy·torch)를 맞춘 뒤 모델을 만들고 학습한다
+        (모델에는 시드를 넘기지 않는다 — 절대 규칙 3. 자체 난수기를 쓰는 LightGBM 은 이 numpy 전역 난수에서 시드를 뽑는다)."""
+        ps, fits, imps, dgs = [], [], [], []
+        m0 = None; n_tr = n_va = 0
+        for r in range(n_rep):
+            sd = fold_seed(cfg.seed, f.test[0], r)
+            _seed(sd)
+            m = plugin.Model(params, n_features=int(n_feat or len(ds.feature_names)), target_type=target_type, device=device)
+            n_tr, n_va = _split_fit(m, X, y, n_val, emb_v)
+            ps.append(np.asarray(m.predict(X_te), dtype=float))
+            if X_fit is not None:
+                fits.append(np.asarray(m.predict(X_fit), dtype=float))
+            im = m.feature_importance()
+            if im is not None:
+                imps.append(np.asarray(im, dtype=float))
+            dgs.append(dict(getattr(m, "diag", None) or {}, seed=sd))
+            if m0 is None:
+                m0 = m
+        P = np.vstack(ps)
+        fd = {"test_start": str(pd.Timestamp(f.test[0]).date()), "n_train": int(n_tr), "n_val": int(n_va), "n_seeds": n_rep, "reps": dgs,
+              "pred_mean": float(np.mean(P)) if P.size else None,
+              # 시드 사이 흩어짐: 같은 결정일의 예측이 시드에 따라 얼마나 다른가(표준편차)의 폴드 평균. 시드 1개면 없음
+              "seed_sd": float(np.mean(np.std(P, axis=0, ddof=1))) if n_rep > 1 and P.shape[1] else None,
+              # 시간 방향 흩어짐: 이 폴드의 예측(시드 평균)이 결정일에 따라 얼마나 다른가. 0 이면 이 폴드는 상수 예측
+              "pred_sd": float(np.std(P.mean(axis=0))) if P.shape[1] > 1 else None,
+              # 상수 판정은 최댓값 − 최솟값으로(표준편차는 같은 값들에도 반올림 오차로 0 이 아닐 수 있다)
+              "pred_const": bool(np.ptp(P.mean(axis=0)) == 0.0) if P.shape[1] > 1 else None}
+        if diags is not None:
+            diags.append(fd)
+        return m0, n_tr, n_va, P.mean(axis=0), (np.mean(fits, axis=0) if fits else None), (np.mean(imps, axis=0) if imps else None), fd
 
     def _nval(idx: pd.DatetimeIndex, f) -> int:  # 학습 표본(행 또는 창의 결정일) 중 검증에 쓸 개수
         if not uses_val:
@@ -507,6 +609,13 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
             m = plugin.Model(params, n_features=1, target_type=target_type, device=device)
             m.fit(r_tr, np.array([]))
             _log(f, r_all.loc[f.train].dropna().index, pd.DatetimeIndex([]), te.index)
+            if getattr(m, "diag", None):  # 추정 진단(어느 출발점의 해를 썼나·로그우도) — 폴드 기록과 결과 요약에
+                dg_ = {k_: v_ for k_, v_ in m.diag.items() if k_ != "tried"}
+                if log is not None and log:
+                    log[-1]["model_diag"] = dg_
+                if diags is not None:
+                    diags.append({"test_start": str(pd.Timestamp(f.test[0]).date()), "n_train": int(len(r_tr)), "n_val": 0, "n_seeds": 1, "reps": [dg_],
+                                  "seed_sd": None, "pred_sd": None, "pred_const": None})
             def _agg(fc):  # 1기간 변화율 예측 k개 → 타겟 정의에 맞는 k기간 값
                 fc = np.asarray(fc, dtype=float)[:k]
                 return float(np.sum(np.log1p(fc))) if cfg.target.kind == "logreturn" else float(np.prod(1.0 + fc) - 1.0)
@@ -528,12 +637,34 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
         # 스케일러: 학습 구간에만 fit (절대규칙 2)
         # input_scaler: 모델이 요구하면 MinMax(학습 구간 최소0·최대1). BIVA 의 BRITS 는 보간 추정치가 sigmoid 출력(0~1)이라
         # 원본처럼 0~1 로 맞춘 입력이어야 보간이 제 범위에 들어간다. 그 밖은 표준화.
-        scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(tr[ds.feature_names].values)
-        fill_val = scaler.transform(tr[ds.feature_names].values).mean(axis=0)  # 빈 칸을 채울 '학습 구간 평균'(표준화면 0)
-        Xtr = scaler.transform(tr[ds.feature_names].values)
+        # 연관성 순위·입력 선별(2026-11-12): 이 폴드의 학습 행(tr)만으로 입력–정답의 |순위상관|을 잰다. select_top 이 있으면 상위 N 개 열만 쓴다.
+        # 전체 자료로 변수를 고른 뒤 같은 자료로 평가하면 미래를 보고 고른 셈이 된다 — 그래서 폴드 안에서 한다.
+        rel = fold_relevance(tr[ds.feature_names].values, tr["y"].values)
+        keep = list(range(len(ds.feature_names)))
+        if cfg.select_top:
+            if cfg.select_top > len(ds.feature_names):
+                raise ValueError(f"select_top({cfg.select_top})이 입력 변수 수({len(ds.feature_names)})보다 큽니다")
+            keep = sorted(np.argsort(-rel, kind="stable")[: cfg.select_top].tolist())
+        feat = [ds.feature_names[j] for j in keep]   # 이 폴드에서 쓰는 입력 열
+        # 묶어 학습(2026-11-12, 표 입력 모델만): 다른 종목의 행을 학습 앞쪽에 보탠다. 검증은 대상 종목의 뒤쪽 행 그대로 두고,
+        # 보태는 행은 정답이 쓰는 마지막 가격이 경계(검증을 쓰면 검증 시작일, 아니면 테스트 시작일) 앞인 것만(pool_training_rows).
+        pool_X = pool_y = None
+        n_val_t = _nval(tr.index, f)
+        if ds.pool and plugin.INPUT_SHAPE == "table":
+            if not (n_val_t >= 10 and len(tr) - n_val_t - emb_v >= 10):
+                n_val_t = 0   # 대상 종목만으로 검증을 못 쓰는 폴드는 보탠 뒤에도 검증 없이(_split_fit 와 같은 조건)
+            cut_d = tr.index[len(tr) - n_val_t] if n_val_t else f.test[0]
+            prs = [pool_training_rows(pds, f.train[0], cut_d, seal_horizon(cfg, k)) for _, pds in ds.pool]
+            prs = [r for r in prs if len(r)]
+            if prs:
+                pool_X = np.vstack([r[feat].values for r in prs]); pool_y = np.concatenate([r["y"].values for r in prs])
+        fit_rows = tr[feat].values if pool_X is None else np.vstack([pool_X, tr[feat].values])   # 눈금을 맞추는 학습 행(보탠 행 포함)
+        scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(fit_rows)
+        fill_val = scaler.transform(fit_rows).mean(axis=0)  # 빈 칸을 채울 '학습 구간 평균'(표준화면 0)
+        Xtr = scaler.transform(tr[feat].values)
         ytr = tr["y"].values
         te_valid = te.dropna()
-        Xte = scaler.transform(te_valid[ds.feature_names].values)
+        Xte = scaler.transform(te_valid[feat].values)
         if plugin.INPUT_SHAPE == "window":
             # window 는 연속 행이 필요 → 학습 구간 전체(X,y 정렬 유지)로 윈도우 생성
             full = ds.X.loc[f.train].join(ds.y.loc[f.train].rename("y"))
@@ -546,8 +677,8 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
                 print("  [경고] BRITS 보간을 켰는데 입력이 표준화(standard)입니다 — BRITS 보간값은 sigmoid(0~1) 출력이라 빈 칸이 0~1 로만 채워집니다. input_scaler=minmax 권장", flush=True)
             # 눈금: 창을 만드는 학습 폴드의 모든 행으로 맞춘다(빈 칸은 sklearn 이 무시). 2026-11-07 전에는 위의 '빈 칸 없는 행'(tr)으로만 맞춰
             # 늦게 시작하는 변수가 있으면 그보다 앞의 행이 학습 눈금 밖(MinMax 면 0~1 밖)으로 나갔다(repro_biva_orig: 135행 중 63행으로 맞춤 → −2.2~4.8).
-            scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(full[ds.feature_names].ffill().values)
-            Xf = scaler.transform(full[ds.feature_names].ffill().values)
+            scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(full[feat].ffill().values)
+            Xf = scaler.transform(full[feat].ffill().values)
             fill_val = np.nanmean(Xf, axis=0)  # 빈 칸을 채울 '학습 구간 평균'(표준화면 0)
             if not accepts_nan:
                 Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)
@@ -558,34 +689,42 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
             # 테스트: 학습 창 끝 seq_len-1 행을 앞에 붙여 첫 테스트일부터 윈도우 완성
             ctx = ds.X.loc[: f.test[0]].iloc[-cfg.seq_len:-1] if cfg.seq_len > 1 else ds.X.iloc[0:0]
             te_full = pd.concat([ctx, te])
-            Xtf = scaler.transform(te_full[ds.feature_names].ffill().values)
+            Xtf = scaler.transform(te_full[feat].ffill().values)
             if not accepts_nan:
                 Xtf = np.where(np.isnan(Xtf), fill_val[None, :], Xtf)
             Xtw, _ = cal.make_windows(Xtf, np.zeros(len(Xtf)), cfg.seq_len)
             te_idx = te.index
-            m: PluginBase = plugin.Model(params, n_features=len(ds.feature_names), target_type=target_type, device=device)
-            n_tr, n_va = _split_fit(m, Xw, yw, _nval(win_idx, f), emb_v)
+            m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xw, yw, _nval(win_idx, f), Xtw, Xw if (want_fit and len(Xw)) else None, n_feat=len(feat))
             _log(f, win_idx[:n_tr], win_idx[len(win_idx) - n_va:] if n_va else win_idx[:0], te_idx)
-            p = m.predict(Xtw)
             pred.loc[te_idx] = p[: len(te_idx)]
             if capture is not None:
                 capture.update(kind="window", fold=f, model=m, scaler=scaler, fill_val=fill_val, Xw=Xw, yw=yw, win_idx=win_idx, n_tr=n_tr, n_va=n_va,
                                Xtw=Xtw, te_idx=te_idx, te_full=te_full, accepts_nan=accepts_nan, pred=pd.Series(p[: len(te_idx)], index=te_idx))
-            if want_fit and len(Xw):
-                fit.loc[win_idx] = m.predict(Xw)[: len(win_idx)]
+            if fit_p is not None:
+                fit.loc[win_idx] = fit_p[: len(win_idx)]
         else:
-            m = plugin.Model(params, n_features=len(ds.feature_names), target_type=target_type, device=device)
-            n_tr, n_va = _split_fit(m, Xtr, ytr, _nval(tr.index, f), emb_v)
-            _log(f, tr.index[:n_tr], tr.index[len(tr) - n_va:] if n_va else tr.index[:0], te_valid.index)
-            pred.loc[te_valid.index] = m.predict(Xte)
+            n_pool = 0 if pool_X is None else len(pool_X)
+            Xfit_in, yfit_in = (Xtr, ytr) if not n_pool else (np.vstack([scaler.transform(pool_X), Xtr]), np.concatenate([pool_y, ytr]))
+            m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xfit_in, yfit_in, n_val_t, Xte, Xtr if want_fit else None, n_feat=len(feat))
+            if ds.pool:
+                fd["n_pool"] = int(n_pool)
+            _log(f, tr.index[:n_tr - n_pool], tr.index[len(tr) - n_va:] if n_va else tr.index[:0], te_valid.index)
+            pred.loc[te_valid.index] = p
             if capture is not None:
                 capture.update(kind="table", fold=f, model=m, scaler=scaler, tr=tr, te=te, te_valid=te_valid, Xtr=Xtr, ytr=ytr, Xte=Xte,
                                n_tr=n_tr, n_va=n_va, pred=pred.loc[te_valid.index].copy())
-            if want_fit:
-                fit.loc[tr.index] = m.predict(Xtr)
-        fi = m.feature_importance()
-        if fi is not None:
-            importances.append(np.asarray(fi, dtype=float))
+            if fit_p is not None:
+                fit.loc[tr.index] = fit_p
+        fd["relevance"] = rel.tolist()
+        if cfg.select_top:
+            fd["selected"] = keep
+        if imp_f is not None:
+            if len(keep) != len(ds.feature_names):   # 고르지 않은 입력의 중요도는 0 — 전체 변수 순서에 맞춰 놓는다
+                full_imp = np.zeros(len(ds.feature_names)); full_imp[keep] = imp_f
+                imp_f = full_imp
+            importances.append(imp_f)
+        if log is not None and log and fd.get("reps") and any(len(d) > 1 for d in fd["reps"]):
+            log[-1]["model_diag"] = fd["reps"][0] if n_rep == 1 else fd["reps"]
         n_folds += 1
     if ranks:
         from collections import Counter
@@ -600,6 +739,144 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
     return pred, n_folds, importances
 
 
+def _signal_from_prediction(cfg, pred: pd.Series, bench: pd.Series | None, target_type: str) -> pd.Series:
+    """예측 → 목표 포지션(0~1).
+    · 수익률·방향 타겟: 예측이 문턱을 넘으면 1(전부 보유), 아니면 0(현금).
+    · 변동성 타겟(2026-11-12): 방향은 맞히지 않는다 → '살까 말까'가 아니라 '얼마나 실을까'. 비중 = 기준 변동성 ÷ 예측 변동성 을 0~1 로 자른 값.
+      기준 변동성 = 그 결정일을 예측한 폴드의 학습 창 평균 변동성(bench — 결정일 이후 값을 쓰지 않고, 사용자가 숫자를 정할 필요가 없다).
+      예측이 평소(학습 창 평균)보다 높으면 그 비율만큼 줄이고, 낮으면 전부 보유(빌려서 더 싣지는 않는다). 예측이 0 이하면 전부 보유."""
+    if cfg.target.kind == "volatility":
+        w = (bench / pred.clip(lower=1e-12)).clip(0.0, 1.0)
+        return w.where(pred.notna() & bench.notna())
+    if target_type == "regression":
+        signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())
+    else:
+        signal = (pred > 0.5 + cfg.trade.threshold).astype(float).where(pred.notna())
+    return signal
+
+
+def pool_training_rows(pds: "Dataset", lo, cut, h: int) -> pd.DataFrame:
+    """묶어 학습에 보탤 행: 다른 종목 데이터셋 pds 에서 결정일이 lo 이상이고, 그 행의 정답이 쓰는 '마지막 가격의 날짜'(그 종목 달력으로 h = 1+k 행 뒤)가
+    cut(대상 종목의 검증 또는 테스트 시작일)보다 앞인 행만. 빈 칸이 있는 행은 뺀다. 열 = 입력들 + 'y'.
+    행 수가 아니라 날짜로 자르므로 거래일이 다른 종목이어도 경계 뒤의 가격이 학습에 들어오지 않는다."""
+    cal_ = pds.prices.index
+    pos = np.arange(len(cal_)) + int(h)
+    last = pd.Series(pd.NaT, index=cal_, dtype="datetime64[ns]")
+    ok = pos < len(cal_)
+    last.iloc[np.flatnonzero(ok)] = cal_[pos[ok]]
+    keep = (cal_ >= pd.Timestamp(lo)) & last.notna().values & (last.values < np.datetime64(pd.Timestamp(cut)))
+    return pds.X.loc[keep, pds.feature_names].join(pds.y.loc[keep].rename("y")).dropna()
+
+
+def fold_relevance(X: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """입력 열마다 정답과의 |스피어만 순위상관|. 폴드의 '학습 행'만 받는다 — 테스트 구간의 값은 여기에 들어오지 않는다(절대규칙 2: 변수 선택은 학습 구간만으로).
+    순위상관을 쓰는 이유: 크기가 큰 날 몇 개에 끌려가지 않고, 곧은 관계가 아니어도(한쪽으로 커지기만 하면) 잡는다. 정답이 0/1(분류)이어도 쓸 수 있다.
+    값이 변하지 않는 열·빈 칸뿐인 열은 0. 빈 칸은 그 열에서만 빼고 계산한다."""
+    from scipy.stats import rankdata
+
+    X = np.asarray(X, dtype=float); y = np.asarray(y, dtype=float)
+    out = np.zeros(X.shape[1])
+    for j in range(X.shape[1]):
+        ok = np.isfinite(X[:, j]) & np.isfinite(y)
+        if ok.sum() < 10:
+            continue
+        a, b = rankdata(X[ok, j]), rankdata(y[ok])
+        sa, sb = a.std(), b.std()
+        if sa > 0 and sb > 0:
+            out[j] = abs(float(np.mean((a - a.mean()) * (b - b.mean())) / (sa * sb)))
+    return out
+
+
+def relevance_summary(diags: list | None, names: list[str], select_top: int | None) -> dict | None:
+    """폴드별 연관성(diags 의 relevance)을 변수별 순위표로. 순위는 '폴드마다 학습 창 안에서 잰 값'의 요약이라 전체 자료를 보고 매긴 순위가 아니다.
+    - mean_abs_corr: 폴드 평균 |순위상관| · mean_rank: 폴드 평균 등수(1 = 가장 높음) · top_share: 상위 N 안에 든 폴드의 비율(선택 안정성)
+    - selected_share: 실제로 골라 쓴 폴드의 비율(select_top 을 켰을 때만). 낮으면 폴드마다 다른 변수가 뽑혔다는 뜻 — 믿을 순위가 아니다."""
+    rows = [d for d in (diags or []) if d.get("relevance") is not None]
+    if not rows or not names:
+        return None
+    R = np.array([d["relevance"] for d in rows], dtype=float)
+    if R.shape[1] != len(names):
+        return None
+    top_n = int(select_top) if select_top else min(10, len(names))
+    rk = np.argsort(np.argsort(-R, axis=1, kind="stable"), axis=1, kind="stable") + 1   # 폴드별 등수(동률은 열 순서)
+    feats = []
+    for j, n in enumerate(names):
+        f = {"name": n, "mean_abs_corr": float(R[:, j].mean()), "mean_rank": float(rk[:, j].mean()), "top_share": float((rk[:, j] <= top_n).mean())}
+        if select_top:
+            f["selected_share"] = float(np.mean([j in (d.get("selected") or []) for d in rows]))
+        feats.append(f)
+    feats.sort(key=lambda f: (f["mean_rank"], -f["mean_abs_corr"]))
+    return {"method": "폴드마다 학습 창 안에서 잰 입력–정답의 |스피어만 순위상관|", "n_folds": len(rows), "top_n": top_n, "selected": bool(select_top), "features": feats}
+
+
+def train_mean_benchmark(ds, folds) -> pd.Series:
+    """결정일마다 '그 결정일을 예측한 폴드의 학습 창 타겟 평균'(분류면 학습 창의 양(+) 비율). '평균만 아는 예측' — Clark–West·DM 의 기준.
+    학습 창(f.train)은 테스트 시작 앞 비움(embargo)까지 뺀 구간이라 이 평균에는 결정일 이후의 값이 들어가지 않는다. 모델과 무관하게 폴드와 타겟만으로 정해진다."""
+    b = pd.Series(np.nan, index=ds.prices.index, name="bench_mean")
+    for f in folds:
+        if not len(f.test):
+            continue
+        ytr = ds.y.loc[f.train].dropna()
+        if len(ytr):
+            b.loc[f.test] = float(ytr.mean())
+    return b
+
+
+def mean_benchmark_metrics(y: np.ndarray, pred: np.ndarray, bench: np.ndarray, k: int) -> dict:
+    """학습 창 평균(분류면 양(+) 비율)을 기준으로 한 지표(2026-11-10 독립 검토 F2).
+    - cw_vs_mean(_p): Clark–West, 한쪽 p — "평균을 아는 것 말고 예측 정보가 더 있는가". 변수의 정보를 말할 때는 이것.
+    - dm_vs_mean(_p): Diebold–Mariano, 양측 p — "이 방법이 '평균만 내는 예측'보다 정확한가". 음수 = 모델이 정확.
+    - rmse_mean, r2_oos_vs_mean = 1 − Σ(y−ŷ)²/Σ(y−평균)² (Campbell·Thompson 의 표본 밖 R²)."""
+    ok = np.isfinite(y) & np.isfinite(pred) & np.isfinite(bench)
+    if ok.sum() < 10:
+        return {}
+    y, pred, bench = y[ok], pred[ok], bench[ok]
+    cw, cw_p = clark_west(y, pred, bench, h=k)
+    dm, dm_p = diebold_mariano(pred - y, bench - y, h=k)
+    sse_b = float(((y - bench) ** 2).sum())
+    return {"cw_vs_mean": cw, "cw_vs_mean_p": cw_p, "dm_vs_mean": dm, "dm_vs_mean_p": dm_p, "rmse_mean": float(np.sqrt(((y - bench) ** 2).mean())),
+            "r2_oos_vs_mean": float(1 - ((y - pred) ** 2).sum() / sse_b) if sse_b > 0 else None, "n_vs_mean": int(ok.sum())}
+
+
+def diag_summary(diags: list | None) -> dict | None:
+    """폴드별 학습 진단(_walkforward_predict 의 diags)을 결과에 실을 요약으로. 계산에는 쓰지 않는다 — '모델이 실제로 학습됐는가'를 보여 주는 기록.
+    - seeds: 시드 수, 시드 정하는 규칙, 시드 사이 예측 표준편차의 폴드 평균(시드 2개 이상일 때)
+    - constant_folds: 테스트 예측이 한 폴드 안에서 전혀 변하지 않은 폴드 수(테스트가 2행 이상인 폴드 중)
+    - trees_used / epoch_used: 조기 종료 뒤 실제로 쓰인 트리 수·반복 수의 분포(모델이 남길 때만). share_le2 = 2 이하인 비율"""
+    if not diags:
+        return None
+    out: dict = {"n_folds": len(diags), "seeds": {"n_seeds": int(diags[0].get("n_seeds", 1)), "rule": "sha256('실험 시드|폴드 첫 테스트 결정일|반복 번호') 앞 8자리(16진) mod (2^31−1)"}}
+    sds = [d["seed_sd"] for d in diags if d.get("seed_sd") is not None]
+    if sds:
+        out["seeds"]["pred_sd_across_seeds_mean"] = float(np.mean(sds))
+    psd = [d["pred_sd"] for d in diags if d.get("pred_sd") is not None]
+    if psd:
+        out["constant_folds"] = int(sum(1 for d in diags if d.get("pred_const")))
+        out["folds_checked_for_constant"] = len(psd)
+        if sds and len(sds) == len(psd):
+            out["seeds"]["pred_sd_within_fold_mean"] = float(np.mean(psd))
+    reps = [r for d in diags for r in d.get("reps", [])]
+    for key in ("trees_used", "epoch_used"):
+        vals = np.array([r[key] for r in reps if r.get(key) is not None], dtype=float)
+        if len(vals):
+            q = np.percentile(vals, [0, 25, 50, 75, 100])
+            out[key] = {"min": float(q[0]), "p25": float(q[1]), "median": float(q[2]), "p75": float(q[3]), "max": float(q[4]),
+                        "share_le2": float(np.mean(vals <= 2)), "n": int(len(vals))}
+    gains = [r["llf_gain"] for r in reps if r.get("llf_gain") is not None]
+    if gains:  # 통계 모델의 여러 출발점 추정: 기본 출발점보다 로그우도가 높은 해를 찾은 폴드
+        from collections import Counter
+        out["multi_start"] = {"folds": len(gains), "improved_folds": int(sum(g > 0.01 for g in gains)), "max_llf_gain": float(max(gains)),
+                              "start_used": dict(Counter(r.get("start_used") for r in reps if r.get("llf_gain") is not None)),
+                              "not_converged_folds": int(sum(1 for r in reps if r.get("llf_gain") is not None and not r.get("converged")))}
+    es = [bool(r["early_stopping"]) for r in reps if "early_stopping" in r]
+    if es:
+        out["early_stopping_share"] = float(np.mean(es))
+    lim = [r.get("n_estimators") or r.get("epochs_max") for r in reps if (r.get("n_estimators") or r.get("epochs_max"))]
+    if lim:
+        out["limit"] = int(max(lim))
+    return out
+
+
 def sealed_folds(cfg, ds, k) -> list:
     """봉인 평가의 폴드(실행·미리보기가 같은 함수를 쓴다). 개발 평가와 같은 '규칙'으로, 테스트 시작만 봉인 시작일로 바꾼다.
     - 워크포워드: 봉인 첫날부터 테스트가 시작되는 폴드를 test_len 씩 밀며(실전과 같은 절차) 데이터 끝(설정의 end)까지. 마지막 폴드는 남은 날만큼.
@@ -610,9 +887,11 @@ def sealed_folds(cfg, ds, k) -> list:
     v = cfg.validation
     if not v.sealed_from:
         raise ValueError("봉인 평가에는 validation.sealed_from(봉인 시작일)이 필요합니다")
-    sf = pd.Timestamp(v.sealed_from)
     emb = _embargo(cfg, k)
     calendar_all = cal.trading_calendar(ds.prices)
+    sf = seal_cut(cfg, calendar_all, k)  # 첫 봉인 결정일 — 정답·수익에 봉인 시작일 이후 값이 처음 쓰이는 결정일(가격 기준 봉인 시작일보다 h 행 앞)
+    if int(calendar_all.searchsorted(pd.Timestamp(v.sealed_from))) >= len(calendar_all):
+        raise ValueError(f"봉인 시작일({v.sealed_from}) 이후 데이터가 없습니다 — 데이터 끝({calendar_all[-1].date()})")
     if v.mode == "split":
         train_idx = calendar_all[calendar_all < sf]
         train_idx = train_idx[:-emb] if emb and len(train_idx) > emb else train_idx
@@ -629,25 +908,63 @@ def sealed_folds(cfg, ds, k) -> list:
     return folds
 
 
-def _predict_sealed(cfg, plugin, params, ds, device, sealed_from, k, log: list | None = None):
+def _predict_sealed(cfg, plugin, params, ds, device, sealed_from, k, log: list | None = None, diags: list | None = None):
     """봉인 구간 예측(sealed_folds 의 폴드로 학습→예측)."""
     target_type = "classification" if cfg.target.kind in ("direction", "event") else "regression"
-    return _walkforward_predict(cfg, plugin, params, ds, device, sealed_folds(cfg, ds, k), k, target_type, log=log)
+    return _walkforward_predict(cfg, plugin, params, ds, device, sealed_folds(cfg, ds, k), k, target_type, log=log, diags=diags)
 
 
 def run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_trials_so_far: int = 1, device: str | None = None, sealed: bool = False, trial_sr_var: float | None = None) -> dict:
     """sealed=True 면 봉인 구간(sealed_from 이후)만 평가한다. 봉인 평가는 후보당 1회가 원칙 — 결과에 sealed=True 로 기록된다.
     결과의 periods 에 실제로 쓴 데이터·학습·검증·테스트 기간(첫 폴드·마지막 폴드)을 남긴다 — 논문 표에 그대로 옮길 값."""
+    from engine import runlog, sealpolicy
+    # 봉인 정책(seal_policy.json): 이 대상에 봉인 시작일이 정해져 있으면 설정이 그것을 지키는지 본다 — 비어 있으면 채우고, 어기면 멈춘다(engine/sealpolicy.py)
+    cfg, seal_note = sealpolicy.apply(cfg, sealed=sealed)
+    if seal_note and seal_note["status"] == "applied":
+        print(f"  [봉인 정책] 이 대상({seal_note['target']})의 봉인 시작일 {seal_note['policy_date']} 을 적용했습니다(설정에는 비어 있었음)", flush=True)
+    elif seal_note and seal_note["status"] == "override":
+        print(f"  [봉인 정책] 봉인 시작일 {seal_note['policy_date']} 을 일부러 넘깁니다 — 이유: {seal_note.get('reason')}. 이 결과는 봉인 구간을 본 것으로 기록됩니다", flush=True)
     _check_periods(cfg)
-    from engine import runlog
     started = runlog.now_utc()
     # 변수 치환·제외 내역(build_dataset 과 같은 규칙·같은 입력이라 같은 결과) — 결과의 run_record 에 남긴다
     var_detail = reg.resolve_detail(cfg.variable_ids) if cfg.variable_ids else None
     ov_notes = reg.remap_overrides(cfg.variable_ids, cfg.variable_transforms)[1] + reg.remap_overrides(cfg.variable_ids, cfg.lag_override)[1]
     fold_log: list = []
+    diags: list = []
     with step(log_e, f"실험 {cfg.name or cfg.model} ({cfg.mode})", logging.INFO, 모델=cfg.model, 변수=cfg.variable_ids, 기간={"start": cfg.start, "end": cfg.end, **cfg.validation.model_dump()}):
-        res = _run_experiment(cfg, dv, reg, n_trials_so_far=n_trials_so_far, device=device, sealed=sealed, trial_sr_var=trial_sr_var, fold_log=fold_log)
-    log_e.info("결과: 폴드 %s · 예측 %s개 · 지표 %s", res.get("n_folds"), res.get("n_predictions"), describe(res.get("prediction_metrics") or {}))
+        res = _run_experiment(cfg, dv, reg, n_trials_so_far=n_trials_so_far, device=device, sealed=sealed, trial_sr_var=trial_sr_var, fold_log=fold_log, diags=diags)
+    if cfg.pool_tickers:
+        npl = [d["n_pool"] for d in (diags or []) if "n_pool" in d]
+        res["pool"] = {"tickers": list(dict.fromkeys(cfg.pool_tickers)), "n_folds": len(npl), "rows_mean": float(np.mean(npl)) if npl else 0.0,
+                       "rows_min": int(min(npl)) if npl else 0, "rows_max": int(max(npl)) if npl else 0,
+                       "note": "다른 종목의 행은 학습에만 보탰다. 예측·지표·검정은 대상 종목만"}
+    res["feature_relevance"] = relevance_summary(diags, res.get("feature_names") or [], cfg.select_top)  # 입력 변수의 연관성 순위(폴드 안에서 잰 값)
+    res["model_diag"] = diag_summary(diags)  # 학습 진단(시드 수·조기 종료 지점·상수 예측 폴드). 표 입력·창 입력 모델만
+    md = res["model_diag"]
+    # 퇴화 판정을 넓힌다(2026-11-10): 그 전에는 '중요도 합이 0'일 때만 잡아, 트리가 1그루라도 생기면(중요도 > 0) 사실상 상수 예측이어도 표시되지 않았다.
+    # 이제 (가) 평가 구간 전체에서 예측이 한 값이거나 (나) 확인할 수 있는 모든 폴드에서 테스트 예측이 변하지 않으면 퇴화로 표시한다.
+    pm_ = res.get("prediction_metrics") or {}
+    if (pm_.get("pred_sd_ratio") is not None and pm_["pred_sd_ratio"] < 1e-12) or (md and md.get("folds_checked_for_constant") and md.get("constant_folds") == md["folds_checked_for_constant"]):
+        if not res.get("degenerate_model"):
+            print("  [경고] 예측이 변하지 않음(상수 예측) → 퇴화 모델로 표시", flush=True)
+        res["degenerate_model"] = True
+    if md:
+        tu = md.get("trees_used") or md.get("epoch_used")
+        if tu:
+            print(f"  [학습 진단] 실제로 쓰인 {'트리' if 'trees_used' in md else '반복'} 수: 중앙값 {tu['median']:.0f} (최소 {tu['min']:.0f} ~ 최대 {tu['max']:.0f}, 상한 {md.get('limit')}) · 2 이하인 비율 {tu['share_le2']:.0%}", flush=True)
+        if md.get("constant_folds"):
+            print(f"  [학습 진단] 테스트 예측이 폴드 안에서 전혀 변하지 않은 폴드 {md['constant_folds']}/{md['folds_checked_for_constant']}개", flush=True)
+        if md.get("multi_start"):
+            ms_ = md["multi_start"]
+            print(f"  [학습 진단] 여러 출발점 추정: {ms_['folds']}개 폴드 중 {ms_['improved_folds']}개에서 기본 출발점보다 로그우도가 높은 해(최대 +{ms_['max_llf_gain']:.3f}) · 쓰인 출발점 {ms_['start_used']} · 미수렴 {ms_['not_converged_folds']}개", flush=True)
+        if md["seeds"].get("pred_sd_across_seeds_mean") is not None:
+            print(f"  [학습 진단] 시드 {md['seeds']['n_seeds']}개 평균 · 시드 사이 예측 표준편차(폴드 평균) {md['seeds']['pred_sd_across_seeds_mean']:.6g}", flush=True)
+    if sealed:
+        # 봉인 수치는 기록(결과 파일·봉인 기록)이 저장된 뒤에만 보여 준다. 그 전에 로그에 찍으면, 저장 단계에서 실패한 실행이 '수치를 봤는데 개봉으로
+        # 세지 않는' 구멍이 된다(2026-11-10 독립 검토 F7).
+        log_e.info("결과: 폴드 %s · 예측 %s개 · (봉인 평가 — 지표는 기록을 저장한 뒤에 표시)", res.get("n_folds"), res.get("n_predictions"))
+    else:
+        log_e.info("결과: 폴드 %s · 예측 %s개 · 지표 %s", res.get("n_folds"), res.get("n_predictions"), describe(res.get("prediction_metrics") or {}))
     v = cfg.validation
     res["periods"] = {
         "data": res.get("period"),
@@ -660,6 +977,7 @@ def run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_t
         "last_fold": fold_log[-1] if fold_log else None,
         "test": [fold_log[0]["test"][0], fold_log[-1]["test"][1]] if fold_log and fold_log[0]["test"] and fold_log[-1]["test"] else None,
     }
+    res["seal_policy"] = seal_note  # 봉인 정책 적용 내역(정책이 없는 대상은 None)
     res["data_version"] = dv.id  # 실제로 읽은 버전(예측 모드는 설정에 적힌 값을 그대로 적어, --data-version 으로 돌리면 틀리거나 비었다 — 2026-11-10)
     rr = runlog.build_run_record(cfg=cfg, dv=dv, reg=reg, variables=var_detail, override_notes=ov_notes, started_utc=started, device=res.get("device"))
     rr["finished_utc"] = runlog.now_utc()
@@ -697,6 +1015,31 @@ def _check_periods(cfg: ExperimentConfig) -> None:
 
 
 
+def fill_defaults(cfg: ExperimentConfig, reg: Registry) -> ExperimentConfig:
+    """실행 때 채워지는 값을 채운 설정. 결과 파일의 config·config_hash 는 이 설정의 것이다.
+    · 창 길이 seq_len 기본값(주기별, 모델이 선언하면 그것)
+    · 예측 연구 모드의 기술지표 선택 목록을 '대상 변수의 실제 주기'로 다시 정규화 — 설정의 frequency 칸은 예측 연구 모드에서 쓰이지 않는데 정규화가
+      그 칸을 봐서, 같은 선택이 frequency 를 무엇으로 적었느냐에 따라 다른 해시가 됐다(2026-11-10 독립 검토 F18).
+    데이터를 읽지 않으므로 실행 전에 '결과와 같은 해시'를 알 수 있다 — 봉인 평가의 예약 줄이 이 해시를 쓴다(F7:
+    그 전에는 예약 줄에 채우기 전 해시를 적어, 중간에 죽은 실행이 같은 설정의 개봉 횟수에 잡히지 않았다)."""
+    upd: dict = {}
+    freq = cfg.frequency
+    if cfg.mode == "forecast" and cfg.target_variable:
+        try:
+            freq = reg.get(cfg.target_variable).freq
+        except Exception:  # noqa: BLE001 — 없는 대상 변수는 뒤에서 제 오류로 드러난다
+            pass
+        if cfg.technical_features is not None:
+            nt = _norm_technical(cfg.technical_features, cfg.use_technical, freq, False)
+            if nt != cfg.technical_features:
+                upd["technical_features"] = nt
+    if cfg.seq_len is None:
+        plugin = load_plugin(cfg.model)
+        dflt = {"D": 20, "W": 13, "M": 12, **(getattr(plugin, "SEQ_LEN_DEFAULT", None) or {})}  # 모델이 원본 기본을 선언하면 그것(BIVA 월간 6)
+        upd["seq_len"] = dflt.get(freq, 20)
+    return cfg.model_copy(update=upd) if upd else cfg
+
+
 def prepare(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, device: str = "cpu"):
     """실행 준비(실험 실행과 계산 따라가기가 같이 쓴다): 시드 고정 → 플러그인·타겟 종류 확인 → 주기별 기본값을 채운 실제 파라미터 →
     창 길이 기본값 → 데이터셋. 반환 (cfg, plugin, params, target_type, ds)."""
@@ -710,24 +1053,54 @@ def prepare(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, device: st
         raise ValueError(f"{plugin.NAME} 은(는) {target_type} 타겟을 지원하지 않습니다")
     freq_for_defaults = (reg.get(cfg.target_variable).freq if cfg.mode == "forecast" and cfg.target_variable else cfg.frequency)
     params = resolve_params(plugin.PARAMS, cfg.model_params, freq_for_defaults)
-    if cfg.seq_len is None:
-        dflt = {"D": 20, "W": 13, "M": 12, **(getattr(plugin, "SEQ_LEN_DEFAULT", None) or {})}  # 모델이 원본 기본을 선언하면 그것(BIVA 월간 6)
-        cfg = cfg.model_copy(update={"seq_len": dflt.get(freq_for_defaults, 20)})
+    cfg = fill_defaults(cfg, reg)  # 창 길이 기본값
     log_e.info("모델 %s(%s) · 장치 %s · 파라미터(받은 값 %s → 기본값 채운 실제 값) %s · 창 길이 %s", plugin.NAME, plugin.INPUT_SHAPE, device,
                describe(cfg.model_params), describe(params), cfg.seq_len if plugin.INPUT_SHAPE == "window" else "-")
     with step(log_d, "데이터셋 만들기(읽기→변환→발표시차 정렬→타겟)"):
         ds = build_dataset(cfg, dv, reg)
+        if cfg.pool_tickers:
+            ds.pool = _build_pool(cfg, plugin, dv, reg, ds)
     return cfg, plugin, params, target_type, ds
 
-def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_trials_so_far: int = 1, device: str | None = None, sealed: bool = False, trial_sr_var: float | None = None, fold_log: list | None = None) -> dict:
+
+def _build_pool(cfg: ExperimentConfig, plugin, dv: DataVersion, reg: Registry, ds: "Dataset") -> list:
+    """묶어 학습할 종목마다 같은 설정(입력·타겟·주기)으로 데이터셋을 만든다. 기술지표는 그 종목의 가격으로, 변수(시장·거시)는 날짜로 맞춘 같은 값."""
+    if cfg.mode != "trading":
+        raise ValueError("종목 묶어 학습(pool_tickers)은 매매 모드에서만 쓸 수 있습니다")
+    if plugin.INPUT_SHAPE != "table":
+        raise ValueError("종목 묶어 학습(pool_tickers)은 표 입력 모델(릿지·LightGBM)에서만 쓸 수 있습니다 — "
+                         "창 입력 모델(LSTM·GRU·BIVA)은 종목마다 창을 따로 만들어야 해 아직 지원하지 않고, 규칙·ARIMA 류는 다른 종목으로 학습하지 않습니다")
+    out = []
+    for t in dict.fromkeys(cfg.pool_tickers):
+        if t == cfg.ticker:
+            raise ValueError(f"종목 묶어 학습(pool_tickers)에 대상 종목 {t} 자신을 넣을 수 없습니다")
+        try:
+            pds = build_dataset(cfg.model_copy(update={"ticker": t, "pool_tickers": []}), dv, reg)
+        except FileNotFoundError:
+            raise ValueError(f"종목 묶어 학습(pool_tickers): 데이터 버전에 {t} 의 가격 자료가 없습니다 — 먼저 그 종목을 수집해야 합니다") from None
+        if pds.feature_names != ds.feature_names:
+            raise ValueError(f"종목 묶어 학습(pool_tickers): {t} 의 입력 열이 대상 종목과 다릅니다")
+        out.append((t, pds))
+    return out
+
+def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_trials_so_far: int = 1, device: str | None = None, sealed: bool = False, trial_sr_var: float | None = None, fold_log: list | None = None, diags: list | None = None) -> dict:
     t0 = time.time()
     device = device or default_device()
+    if cfg.target.kind == "volatility":
+        if sealed:
+            raise ValueError("변동성 타겟은 아직 봉인 평가를 할 수 없습니다 — 통과 기준(무엇을 이기면 통과인지)을 사전 분석 계획서에서 먼저 정해야 합니다")
+        if cfg.mode == "forecast":
+            raise ValueError("변동성 타겟은 매매 모드에서만 쓸 수 있습니다(예측 연구 모드의 대상은 가격이 아니라 지표 값입니다)")
+        if load_plugin(cfg.model).INPUT_SHAPE not in ("table", "window"):
+            raise ValueError("변동성 타겟은 입력 변수로 학습하는 모델(릿지·LightGBM·LSTM·GRU·BIVA)에서만 쓸 수 있습니다 — "
+                             "규칙 모델과 ARIMA·SARIMA·VECM 은 수익률(가격)을 맞히도록 만들어져 있습니다")
     cfg, plugin, params, target_type, ds = prepare(cfg, dv, reg, device=device)
     k = cfg.target.k
 
     pred = pd.Series(np.nan, index=ds.prices.index, name="prediction")
     importances: list[np.ndarray] = []
     n_folds = 0
+    bench = None  # 학습 창 타겟 평균(기준 예측). 학습 모델만
 
     if cfg.mode == "forecast" and plugin.INPUT_SHAPE == "rule":
         raise ValueError("예측 연구 모드에는 규칙(매매) 모델을 쓸 수 없습니다")
@@ -746,30 +1119,33 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
     elif sealed:
         # 봉인 평가: 개발 구간은 다시 계산하지 않는다(결과에 쓰지 않으므로). 봉인 폴드만 학습→예측
         fit = None
-        pred, n_folds, importances = _predict_sealed(cfg, plugin, params, ds, device, cfg.validation.sealed_from, k, log=fold_log)
-        if target_type == "regression":
-            signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())
-        else:
-            signal = (pred > 0.5 + cfg.trade.threshold).astype(float).where(pred.notna())
+        pred, n_folds, importances = _predict_sealed(cfg, plugin, params, ds, device, cfg.validation.sealed_from, k, log=fold_log, diags=diags)
+        bench = train_mean_benchmark(ds, sealed_folds(cfg, ds, k))
+        signal = _signal_from_prediction(cfg, pred, bench, target_type)
     else:
         folds, is_split = make_folds(cfg, ds, k)
+        bench = train_mean_benchmark(ds, folds)
         fit = None
         if is_split:
-            pred, n_folds, importances, fit = _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, want_fit=True, log=fold_log)
+            pred, n_folds, importances, fit = _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, want_fit=True, log=fold_log, diags=diags)
         else:
-            pred, n_folds, importances = _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, log=fold_log)
+            pred, n_folds, importances = _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, log=fold_log, diags=diags)
         # 신호 변환
-        if target_type == "regression":
-            signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())
-        else:
-            signal = (pred > 0.5 + cfg.trade.threshold).astype(float).where(pred.notna())
+        signal = _signal_from_prediction(cfg, pred, bench, target_type)
 
     cost = CostModel(fee_rate=cfg.trade.fee_rate, slippage_bp=cfg.trade.slippage_bp)
     ppy = {"D": 252, "W": 52, "M": 12}[cfg.frequency]
-    sealed_from = pd.Timestamp(cfg.validation.sealed_from) if cfg.validation.sealed_from else None
+    # 아래의 sealed_from 은 '첫 봉인 결정일'이다(설정의 sealed_from 은 값 기준 — seal_cut 설명 참고)
+    _cal_all = cal.trading_calendar(ds.prices)
+    sealed_from = seal_cut(cfg, _cal_all, k)
+    seal_info = None if sealed_from is None else {
+        "sealed_from": cfg.validation.sealed_from, "first_sealed_decision": str(sealed_from.date()), "horizon_rows": seal_horizon(cfg, k),
+        "rule": "개발 = 정답·수익의 마지막 값 날짜 < sealed_from 인 결정일, 봉인 = 그 밖(빠짐·겹침 없음)"}
     if cfg.mode == "forecast":
-        return _finish_forecast(cfg, plugin, params, ds, device, pred, fit if cfg.validation.mode == "split" else None,
-                                importances, n_folds, k, target_type, sealed, sealed_from, t0, fold_log=fold_log)
+        res = _finish_forecast(cfg, plugin, params, ds, device, pred, fit if cfg.validation.mode == "split" else None,
+                               importances, n_folds, k, target_type, sealed, sealed_from, t0, fold_log=fold_log, bench=bench)
+        res["seal_boundary"] = seal_info
+        return res
     if sealed:
         if sealed_from is None:
             raise ValueError("봉인 평가에는 validation.sealed_from 이 필요합니다")
@@ -784,6 +1160,8 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
     daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)
     daily_full["prediction"] = pred
     daily_full["target"] = ds.y
+    if bench is not None:
+        daily_full["bench_mean"] = bench.where(pred.notna())  # 기준 예측(학습 창 타겟 평균). 예측이 있는 결정일만
     if plugin.INPUT_SHAPE != "rule" and cfg.validation.mode == "split" and fit is not None:
         daily_full["fit"] = fit  # 학습 구간 적합값(차트용). 성과·검정에는 쓰지 않는다
     # 성과는 '신호가 있는 구간'(첫 신호~마지막 신호)에서만 계산한다. 그 밖은 B&H 와 비교할 수 없다.
@@ -800,7 +1178,18 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
     pred_metrics: dict[str, float] = {}
     if plugin.INPUT_SHAPE != "rule" and len(ev) > 5:
         e = ev["prediction"] - ev["target"]
-        if target_type == "regression":
+        if cfg.target.kind == "volatility":
+            # 변동성은 늘 양수라 '방향'·'0 예측과의 비교'는 뜻이 없다. 기준은 둘: 학습 창 평균(아래 mean_benchmark_metrics)과
+            # '최근 k 기간의 변동성이 그대로 이어진다'(naive — 변동성은 이어지는 성질이 강해 이것을 이기기가 어렵다).
+            nv = cal.naive_volatility(ds.prices, k).reindex(ev.index)
+            okn = nv.notna()
+            dm, dm_p = diebold_mariano(e[okn].values, (nv[okn] - ev["target"][okn]).values, h=k)
+            sd_t = float(ev["target"].std())
+            pred_metrics = {"rmse": float(np.sqrt((e**2).mean())), "mae": float(e.abs().mean()),
+                            "rmse_naive": float(np.sqrt(((nv[okn] - ev["target"][okn]) ** 2).mean())), "dm_vs_naive": dm, "dm_vs_naive_p": dm_p,
+                            "corr": float(np.corrcoef(ev["prediction"], ev["target"])[0, 1]) if ev["prediction"].std() > 0 and sd_t > 0 else None,
+                            "pred_sd_ratio": float(ev["prediction"].std() / sd_t) if sd_t > 0 else None}
+        elif target_type == "regression":
             pred_metrics = {
                 "rmse": float(np.sqrt((e**2).mean())),
                 "mae": float(e.abs().mean()),
@@ -812,6 +1201,10 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
             # 0 예측은 모델에 내포된다 → '변수에 예측 정보가 있는가'는 Clark–West 로 본다(DM 은 '이 방법이 0예측보다 정확한가', 2026-11-10)
             cw, cw_p = clark_west(ev["target"].values, ev["prediction"].values, 0.0, h=k)
             pred_metrics.update(cw_vs_zero=cw, cw_vs_zero_p=cw_p)
+            # 0 예측의 오차와 예측의 흩어짐(2026-11-10): rmse 만으로는 '모델이 거의 상수를 내는지' 알 수 없다.
+            # pred_sd_ratio = 예측의 표준편차 ÷ 정답의 표준편차. 0 에 가까우면 예측이 날마다 거의 같다(조기 종료로 트리 1~2그루 등).
+            sd_t = float(ev["target"].std())
+            pred_metrics.update(rmse_zero=float(np.sqrt((ev["target"] ** 2).mean())), pred_sd_ratio=float(ev["prediction"].std() / sd_t) if sd_t > 0 else None)
         else:
             from sklearn.metrics import roc_auc_score
 
@@ -825,6 +1218,9 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
             pred_metrics.update(dm_vs_zero=dm, dm_vs_zero_p=dm_p, dm_baseline="brier_vs_0.5")
             cw, cw_p = clark_west(yb, ev["prediction"].values, 0.5, h=k)
             pred_metrics.update(cw_vs_zero=cw, cw_vs_zero_p=cw_p)
+        if "bench_mean" in daily:
+            pred_metrics.update(mean_benchmark_metrics(ev["target"].values.astype(float), ev["prediction"].values.astype(float),
+                                                       daily["bench_mean"].reindex(ev.index).values.astype(float), k))
 
     # 신뢰도
     valid = daily.dropna(subset=["net_return", "hold_return"])
@@ -851,13 +1247,15 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         "n_features": len(ds.feature_names),
         "feature_names": ds.feature_names,
         "feature_importance": fi_mean,
+        "trade_rule_used": ({"kind": "volatility_target", "rule": "비중 = 학습 창 평균 변동성 ÷ 예측 변동성 (0~1 로 자름)"} if cfg.target.kind == "volatility"
+                            else {"kind": "rule" if plugin.INPUT_SHAPE == "rule" else "threshold", "threshold": cfg.trade.threshold}),
         "degenerate_model": degenerate,
         "sealed_evaluation": bool(sealed),
         "evaluation_period": [str(daily.index[0].date()), str(daily.index[-1].date())],
         "leak_warning": ds.leak_warning,
         "lag_days_used": ds.lag_days_used,
         "lag_unconfirmed": ds.lag_unconfirmed,
-        "transforms_used": ds.transforms_used,
+        "transforms_used": ds.transforms_used, "transform_basis": ds.transform_basis,
         "prediction_metrics": pred_metrics,
         "performance": perf,
         "period": [str(daily.index[0].date()), str(daily.index[-1].date())],
@@ -866,6 +1264,7 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         "variable_first_date": {c: (str(ds.X[c].first_valid_index().date()) if ds.X[c].first_valid_index() is not None else None) for c in ds.feature_names if not c.startswith("A_")},
         "device": device,
         "seconds": round(time.time() - t0, 1),
+        "seal_boundary": seal_info,
         "_daily": daily_full,  # 전체 기간(워밍업·봉인 포함). 성과는 evaluation_period 로 잘라 계산했다
     }
 
@@ -914,6 +1313,8 @@ def forecast_metrics(daily_full: pd.DataFrame, kind: str, k: int, target_type: s
         dm, p = diebold_mariano(e.values, e0.values, h=k); pm.update(dm_vs_zero=dm, dm_vs_zero_p=p)
         dm, p = diebold_mariano(e.values, en.values, h=k); pm.update(dm_vs_naive=dm, dm_vs_naive_p=p)
         cw, p = clark_west(ev["target"].values, ev["prediction"].values, 0.0, h=k); pm.update(cw_vs_zero=cw, cw_vs_zero_p=p)
+        sd_t = float(ev["target"].std())
+        pm["pred_sd_ratio"] = float(ev["prediction"].std() / sd_t) if sd_t > 0 else None  # 예측의 흩어짐 ÷ 정답의 흩어짐(0 에 가까우면 거의 상수 예측)
         daily_full.attrs["k"] = k
         pm.update(forecast_level_metrics(daily_full, kind))
         pm["skill_vs_naive"] = float(1 - pm["rmse"] / pm["rmse_naive"]) if pm.get("rmse_naive") else None
@@ -928,10 +1329,13 @@ def forecast_metrics(daily_full: pd.DataFrame, kind: str, k: int, target_type: s
         cw, p = clark_west(yb, ev["prediction"].values, 0.5, h=k); pm.update(cw_vs_zero=cw, cw_vs_zero_p=p)
         nb = ev["naive"].clip(0, 1).values
         dm, p = diebold_mariano(ev["prediction"].values - yb, nb - yb, h=k); pm.update(dm_vs_naive=dm, dm_vs_naive_p=p)
+    if "bench_mean" in daily_full:
+        pm.update(mean_benchmark_metrics(ev["target"].values.astype(float), ev["prediction"].values.astype(float),
+                                         daily_full["bench_mean"].reindex(ev.index).values.astype(float), k))
     return pm, ev
 
 
-def _finish_forecast(cfg, plugin, params, ds, device, pred, fit, importances, n_folds, k, target_type, sealed, sealed_from, t0, fold_log: list | None = None) -> dict:
+def _finish_forecast(cfg, plugin, params, ds, device, pred, fit, importances, n_folds, k, target_type, sealed, sealed_from, t0, fold_log: list | None = None, bench=None) -> dict:
     """예측 연구 모드 마무리: 체결·비용 없음. 오차 지표 + 0예측·naive(지속) 대비 DM. 봉인 처리는 매매 모드와 같은 규칙."""
     if sealed:
         if sealed_from is None:
@@ -952,6 +1356,8 @@ def _finish_forecast(cfg, plugin, params, ds, device, pred, fit, importances, n_
         pfl = pd.Series(np.nan, index=level.index)
     daily_full = pd.DataFrame({"level": level, "target": y, "prediction": pred, "naive": naive,
                                "actual_future_level": level.shift(-k), "pred_future_level": pfl.where(pred.notna())})
+    if bench is not None:
+        daily_full["bench_mean"] = bench.where(pred.notna())  # 기준 예측(학습 창 타겟 평균). 예측이 있는 결정일만
     if fit is not None:
         daily_full["fit"] = fit
     pm, ev = forecast_metrics(daily_full, cfg.target.kind, k, target_type)
@@ -965,7 +1371,7 @@ def _finish_forecast(cfg, plugin, params, ds, device, pred, fit, importances, n_
         "data_version": cfg.data_version, "code_version": _code_version(), "engine_rev": ENGINE_REV, "n_folds": n_folds, "n_features": len(ds.feature_names),
         "feature_names": ds.feature_names, "feature_importance": fi_mean, "degenerate_model": degenerate,
         "sealed_evaluation": bool(sealed), "evaluation_period": [str(ev.index[0].date()), str(ev.index[-1].date())],
-        "leak_warning": ds.leak_warning, "lag_days_used": ds.lag_days_used, "lag_unconfirmed": ds.lag_unconfirmed, "transforms_used": ds.transforms_used,
+        "leak_warning": ds.leak_warning, "lag_days_used": ds.lag_days_used, "lag_unconfirmed": ds.lag_unconfirmed, "transforms_used": ds.transforms_used, "transform_basis": ds.transform_basis,
         "prediction_metrics": pm, "performance": {}, "period": [str(daily_full.index[0].date()), str(daily_full.index[-1].date())],
         "prediction_period": [str(ev.index[0].date()), str(ev.index[-1].date())], "n_predictions": int(len(ev)),
         "variable_first_date": {c: (str(ds.X[c].first_valid_index().date()) if ds.X[c].first_valid_index() is not None else None) for c in ds.feature_names if not c.startswith("A_")},
@@ -976,9 +1382,13 @@ def _finish_forecast(cfg, plugin, params, ds, device, pred, fit, importances, n_
 def trial_sharpe_variance(results_dir: str | Path, periods_per_year: int) -> float | None:
     """지금까지 저장된 실험들의 기간 샤프 분산 (Deflated Sharpe 의 V). 같은 주기(periods_per_year)의 결과만. 2개 미만이면 None.
     results_dir 는 모드별 폴더(results/trading)여야 한다 — 2026-11-04 이주 뒤 cli 가 results/ 바로 아래를 넘겨 V 가 늘 None(근사 1/(n−1))이었다(2026-11-06 수정).
-    봉인 평가 결과는 '시도'가 아니므로 뺀다. 계산 방식이 지금과 다른 옛 결과(engine_rev 불일치)도 뺀다."""
+    봉인 평가 결과는 '시도'가 아니므로 뺀다. 계산 방식이 지금과 다른 옛 결과(engine_rev 불일치)도 뺀다.
+    화면에서 지운 결과(history/ 의 …_deleted)는 넣는다 — 지워도 '해 본 시도'라는 사실은 남고, 빼면 결과를 지워서 V 를 줄일 수 있었다(독립 검토 F21).
+    같은 설정을 다시 돌려 밀려난 옛 판(history/ 의 나머지)은 넣지 않는다(같은 시도를 두 번 세지 않는다)."""
     srs = []
-    for p in Path(results_dir).glob("*.json"):
+    d_ = Path(results_dir)
+    files = list(d_.glob("*.json")) + (list((d_ / "history").glob("*_deleted*.json")) if (d_ / "history").exists() else [])
+    for p in files:
         if p.name in ("experiment_counter.json", "sealed_log.json") or p.name.startswith("ablation_"):
             continue
         try:
@@ -1032,15 +1442,31 @@ def save_result(res: dict, out_dir: str | Path) -> Path:
     final_j, final_p = out / f"{stem}.json", out / f"{stem}_daily.parquet"
     tmp_j, tmp_p = out / f".{stem}.json.tmp", out / f".{stem}_daily.parquet.tmp"
     daily = res.pop("_daily")
+    archived: list[str] = []
     try:
+        # 새 결과 두 파일을 임시 이름으로 '먼저 다' 만든다 — json 으로 못 바꾸는 값이나 디스크 오류는 옛 결과를 옮기기 전에 드러난다.
+        # (2026-11-10 독립 검토 F17: 전에는 옛 결과를 옮긴 뒤에 새 json 을 써서, 거기서 실패하면 제 이름에 결과가 없었다.)
         daily.to_parquet(tmp_p)
-        archived = runlog.archive_existing(out, stem)
-        if archived:
-            res.setdefault("run_record", {})["replaced_previous"] = archived
-            print(f"  [실행 기록] 같은 이름의 옛 결과를 옮김: {', '.join(archived)}")
         tmp_j.write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
-        os.replace(tmp_p, final_p)
-        os.replace(tmp_j, final_j)
+        archived = runlog.archive_existing(out, stem)
+        try:
+            if archived:
+                res.setdefault("run_record", {})["replaced_previous"] = archived
+                print(f"  [실행 기록] 같은 이름의 옛 결과를 옮김: {', '.join(archived)}")
+                tmp_j.write_text(json.dumps(res, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+            os.replace(tmp_p, final_p)
+            os.replace(tmp_j, final_j)
+        except BaseException:
+            # 옮긴 뒤에 실패하면 옛 결과를 제자리로 되돌린다(새 파일이 반만 놓였으면 치운다)
+            for f_ in (final_p, final_j):
+                if f_.exists():
+                    f_.unlink()
+            for rel in archived:
+                src = out / rel
+                dst = final_p if rel.endswith("_daily.parquet") else final_j
+                if src.exists():
+                    src.rename(dst)
+            raise
     finally:
         res["_daily"] = daily
         for t in (tmp_j, tmp_p):

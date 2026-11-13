@@ -293,9 +293,26 @@ def return_moments(r: pd.Series) -> tuple[float, float]:
     return float(_skew(x)), float(kurtosis(x, fisher=False))  # fisher=False: 정규=3 기준(True 면 정규=0)
 
 
+def _long_run_var(dc: np.ndarray, h: int) -> float:
+    """평균의 표준오차에 쓰는 장기 분산(dc = 평균을 뺀 값). h=1: 표본 분산 그대로.
+    h>1: 겹치는 기간(lag 1 … h−1)의 자기공분산을 가중치 1 로 더한다(절단 핵, Diebold·Mariano 1995 의 원 방식 — h 기간 앞 예측의 오차는 이론상 MA(h−1)).
+    2026-11-10 전에는 Bartlett 가중치(1 − lag/h)였다. 그 가중치는 겹침을 덜 반영해, 겹치는 타겟(h>1)과 지속적인 설명변수 조합에서 명목 5% 검정이
+    7~8% 를 기각했다(독립 검토의 모의실험: h=5·AR(0.95) 설명변수 7.2~8.1%, 절단 핵 3.9~4.6%). h=1 의 값은 그대로다.
+    절단 핵은 음수가 될 수 있다 → 그때만 Bartlett 가중치로 다시 계산한다(양수 보장)."""
+    n = len(dc)
+    var = float(dc @ dc / n)
+    if h <= 1:
+        return var
+    cov = [float(dc[lag:] @ dc[:-lag] / n) for lag in range(1, min(h, n))]
+    v = var + 2 * sum(cov)
+    if v <= 0:
+        v = var + 2 * sum((1 - lag / h) * c for lag, c in enumerate(cov, 1))
+    return float(v)
+
+
 def diebold_mariano(e1: np.ndarray, e2: np.ndarray, *, h: int = 1, power: int = 2) -> tuple[float, float]:
     """Diebold–Mariano(1995) 검정. e1, e2 = 두 모델의 예측 오차(같은 구간). 손실 = |e|^power.
-    H0: 평균 손실 차이 = 0. 반환 (DM 통계량, 양측 p값). h>1이면 Newey-West(h−1 lag) 분산.
+    H0: 평균 손실 차이 = 0. 반환 (DM 통계량, 양측 p값). h>1이면 겹치는 기간(h−1 lag)을 반영한 분산 + 소표본 보정(아래).
     통계량 < 0 이면 모델1 손실이 작다(모델1이 낫다).
 
     쉬운 설명
@@ -316,34 +333,45 @@ def diebold_mariano(e1: np.ndarray, e2: np.ndarray, *, h: int = 1, power: int = 
         return float("nan"), float("nan")
     mean = d.mean()
     dc = d - mean
-    var = dc @ dc / n  # 손실 차이의 분산(자기 자신)
-    for lag in range(1, h):  # h>1: 겹치는 기간만큼 이웃 날과의 공분산을 더함(Newey-West, 가중치 1 − lag/h)
-        w = 1 - lag / h
-        var += 2 * w * (dc[lag:] @ dc[:-lag]) / n
+    var = _long_run_var(dc, h)  # h>1: 겹치는 기간만큼 이웃 날과의 공분산을 더함(_long_run_var)
     if var <= 0:
         return float("nan"), float("nan")
-    dm = mean / np.sqrt(var / n)  # 평균 ÷ 평균의 표준오차 = 표준정규 통계량
-    return float(dm), float(2 * (1 - norm.cdf(abs(dm))))  # 양측 p값
+    dm = mean / np.sqrt(var / n)  # 평균 ÷ 평균의 표준오차
+    if h > 1:
+        # 소표본 보정(Harvey·Leybourne·Newbold 1997): 통계량에 sqrt((n + 1 − 2h + h(h−1)/n)/n) 을 곱하고 t(n−1) 분포로 p값.
+        # h=1 에서는 이 보정이 sqrt((n−1)/n) 로 사실상 1 이라 넣지 않는다(h=1 값은 2026-11-10 전과 같다).
+        from scipy.stats import t as _t
+
+        dm = dm * np.sqrt(max(n + 1 - 2 * h + h * (h - 1) / n, 0.0) / n)
+        return float(dm), float(2 * _t.sf(abs(dm), n - 1))
+    return float(dm), float(2 * (1 - norm.cdf(abs(dm))))  # 양측 p값(표준정규)
 
 
 def clark_west(y: np.ndarray, f_model: np.ndarray, f_bench: np.ndarray | float = 0.0, *, h: int = 1) -> tuple[float, float]:
     """Clark–West(2007) 검정 — 기준 예측(f_bench)이 모델에 '내포'될 때(모델의 계수가 모두 0 이면 기준과 같아질 때) 쓰는 검정.
-    반환 (통계량, 한쪽 p값). 통계량이 클수록 '모델이 기준보다 낫다'. H0: 모집단에서 모델이 기준보다 나을 것이 없다(변수에 예측 정보가 없다).
+    반환 (통계량, 한쪽 p값). 통계량이 클수록 '모델이 기준보다 낫다'. H0: 모집단에서 모델이 기준보다 나을 것이 없다.
+
+    무엇을 기준으로 주느냐에 따라 묻는 것이 다르다 (2026-11-10 독립 검토로 고침)
+      · 기준 = 학습 창의 타겟 평균(분류면 학습 창의 양(+) 비율)  → "평균을 아는 것 말고, 변수(와 모델)에 예측 정보가 더 있는가". 변수의 정보를 말하려면 이것을 쓴다.
+      · 기준 = 0 (분류 0.5)  → H0 은 E[y·f] = 0. 타겟 평균이 0 이 아니면 '평균만 맞히는' 예측도 기각한다(절편도 정보로 센다).
+        모의실험: 정보 없는 변수 + 절편 모델의 기각률이 평균 0 근처(일간 수익률)에서 7%, 평균이 뚜렷한 자료(F11 월간 증가율)에서 100%,
+        분류는 양(+) 비율 0.53 에서 30%. 그래서 0 기준 결과는 '예측이 실제와 같은 쪽으로 움직이는가(평균 포함)'로만 읽고, '변수에 정보가 있다'의 증거로 쓰지 않는다.
 
     왜 DM 과 따로 두는가
-      변수에 정보가 전혀 없어도, 모델은 표본에서 계수를 추정하므로 예측이 0 주변에서 흔들리고 그만큼 제곱오차가 기준보다 '커진다'.
+      변수에 정보가 전혀 없어도, 모델은 표본에서 계수를 추정하므로 예측이 기준 주변에서 흔들리고 그만큼 제곱오차가 기준보다 '커진다'.
       DM 은 이 추정 잡음을 포함한 오차를 그대로 비교한다 → "이 방법을 이 학습 창으로 쓰면 기준보다 정확한가"(Giacomini–White 2006 의 해석, 실용 질문)에 답한다.
-      CW 는 그 잡음만큼(Σ(f_bench − f_model)²) 모델의 제곱오차를 깎아 비교한다 → "변수에 예측 정보가 있는가"(과학 질문)에 답한다.
+      CW 는 그 잡음만큼(Σ(f_bench − f_model)²) 모델의 제곱오차를 깎아 비교한다 → "기준에 없는 예측 정보가 모델에 있는가"(과학 질문)에 답한다.
       그래서 정보 없는 변수를 넣은 모델은 DM 으로 '기준보다 유의하게 나쁨'이 나올 수 있고(사실: 그 방법은 더 부정확하다),
-      그것을 '변수에 정보가 없다'의 증거로 읽으면 안 된다. 반대로 CW 가 유의해도 그 방법이 기준보다 정확하다는 뜻은 아니다.
+      그것을 '정보가 없다'의 증거로 읽으면 안 된다. 반대로 CW 가 유의해도 그 방법이 기준보다 정확하다는 뜻은 아니다.
 
     계산
       날마다  adj_t = (y_t − f_bench_t)² − [ (y_t − f_model_t)² − (f_bench_t − f_model_t)² ]
-      기준이 0 예측이면 adj_t = 2·y_t·f_model_t  (예측과 실제가 같은 방향으로 함께 움직이는가)
-      통계량 = adj 의 평균 ÷ 평균의 표준오차. h>1 이면 겹치는 기간만큼 Newey–West(h−1 lag, 가중치 1 − lag/h) 분산.
-      p값은 한쪽(통계량이 클수록 작음). 표준정규 근사 — Clark·West 는 이 근사가 약간 보수적(실제 기각률이 명목보다 조금 낮음)이라고 보고했다.
+      기준이 0 예측이면 adj_t = 2·y_t·f_model_t
+      통계량 = adj 의 평균 ÷ 평균의 표준오차. h>1 이면 겹치는 기간(h−1 lag)을 반영한 분산(_long_run_var — 절단 핵).
+      p값은 한쪽(통계량이 클수록 작음), 표준정규 근사. h=1·굴리는 창에서 이 근사는 약간 보수적이다(Clark·West 보고, 독립 검토 모의실험 3.9~4.9%).
+      h>1 의 크기는 절단 핵으로 3.9~4.6% 였다(같은 모의실험) — 그 밖의 설정에서는 확인하지 않았다.
     한계: 굴리는 창(rolling window)에서 근사가 가장 잘 맞고, 기준이 모델에 내포되지 않으면(예: 서로 다른 변수를 쓰는 두 모델) 쓰지 않는다 — 그때는 DM.
-    분류(확률) 예측은 y·f 를 0.5 만큼 옮겨 같은 식을 쓴다(clark_west(y, p, 0.5)).
+    분류(확률) 예측도 같은 식(Brier 손실). 기준은 학습 창의 양(+) 비율 또는 0.5.
     자료가 10개 미만이거나 분산이 0 이면 NaN.
     """
     from scipy.stats import norm
@@ -358,10 +386,7 @@ def clark_west(y: np.ndarray, f_model: np.ndarray, f_bench: np.ndarray | float =
         return float("nan"), float("nan")
     mean = adj.mean()
     dc = adj - mean
-    var = dc @ dc / n
-    for lag in range(1, h):
-        w = 1 - lag / h
-        var += 2 * w * (dc[lag:] @ dc[:-lag]) / n
+    var = _long_run_var(dc, h)
     if var <= 0:
         return float("nan"), float("nan")
     t = mean / np.sqrt(var / n)

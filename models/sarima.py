@@ -1,7 +1,10 @@
 """SARIMA(p,d,q)(P,D,Q,s) — 계절 ARIMA. INPUT_SHAPE='series'.
 
 원 노트북(노트북2)의 SARIMAX(order=(1,1,1), seasonal_order=(1,1,1,12)) 를 변화율 입력에 맞춰 옮긴 것:
-수준값의 d=1 은 변화율 입력에서 d=0 과 같다. 계절 차분 D 는 그대로 둔다(기본 1, 12기간 전 대비).
+수준값의 d=1 은 변화율 입력에서 d=0 과 같다.
+계절 차분 D(2026-11-10): 기본 0. 그 전에는 노트북의 D=1 을 그대로 옮겼는데, 입력이 이미 변화율이라 계절 차분을 또 하면 과차분이다 — F11 월간 120 폴드 중
+87개에서 계절 MA 계수 |Θ|>0.9(중앙값 −0.967): 차분을 MA 가 되돌리는 교과서적 신호. 변화율에 계절 단위근이 있다는 근거(검정)도 없었다.
+D=0 이면 상수항을 넣는다(trend=auto) — 변화율의 평균(물가라면 양수)을 0 으로 두지 않기 위해. 노트북 재현은 D=1, trend=n 으로.
 s 는 주기별 기본값: 일간 5(한 주), 주간 52, 월간 12. 일간 5 는 요일 효과 가정이라 근거가 약하다 — 월간 데이터에 쓰는 것이 본래 용도.
 추정 제약(2026-11-06): enforce_stationarity·enforce_invertibility 를 파라미터로 둔다. 기본은 예(True) — statsmodels 와 원 노트북
 (`SARIMAX(훈련, order=(1,1,1), seasonal_order=(1,1,1,12)).fit(disp=False)`)의 기본과 같다. 그 전 이 도구는 둘 다 아니오(False)로 고정이었다.
@@ -19,7 +22,7 @@ import warnings
 
 import numpy as np
 
-from models.base import SeriesModel
+from models.base import SeriesModel, fit_multi_start
 
 NAME = "SARIMA"
 INPUT_SHAPE = "series"
@@ -29,7 +32,8 @@ PARAMS = {
     "d": {"group": "차수", "type": "int", "default": 0, "min": 0, "max": 2, "desc": "비계절 차분 — 입력이 변화율이므로 보통 0"},
     "q": {"group": "차수", "type": "int", "default": 1, "min": 0, "max": 6, "desc": "비계절 이동평균 차수"},
     "P": {"group": "차수", "type": "int", "default": 1, "min": 0, "max": 3, "desc": "계절 자기회귀 차수"},
-    "D": {"group": "차수", "type": "int", "default": 1, "min": 0, "max": 1, "desc": "계절 차분 — 1 이면 s기간 전 대비"},
+    "D": {"group": "차수", "type": "int", "default": 0, "min": 0, "max": 1,
+          "desc": "계절 차분 — 기본 0(하지 않음). 입력이 이미 변화율이라 계절 차분을 또 하면 과차분이 된다(2026-11-10 전 기본은 1 — F11 120 폴드 중 87개에서 계절 MA 계수가 −1 근처에 붙었다). 1 이면 s기간 전 대비"},
     "Q": {"group": "차수", "type": "int", "default": 1, "min": 0, "max": 3, "desc": "계절 이동평균 차수"},
     "s": {"group": "차수", "default_by_freq": {"D": 5, "W": 52, "M": 12}, "type": "int", "default": 12, "min": 2, "max": 365, "desc": "계절 주기(기간 수) — 월간 12, 주간 52, 일간 5"},
     "enforce_stationarity": {"type": "bool", "default": True, "group": "추정 제약",
@@ -39,9 +43,16 @@ PARAMS = {
 }
 PARAMS["scale"] = {"type": "float", "default": 100.0, "min": 1.0, "max": 1e6, "group": "추정 제약",
                    "desc": "추정용 배율 — 변화율에 이 수를 곱해 추정하고 예측을 다시 나눈다. 모형·예측식은 같고(φ·θ 는 배율과 무관) 최우추정의 수치 조건만 좋아진다(변화율 분산이 1e−5 수준이면 잘 수렴하지 않음). 1 = 배율 없음(2026-11-07 전)"}
+PARAMS["trend"] = {"type": "str", "choices": ["auto", "c", "n"], "default": "auto", "group": "차수",
+                   "desc": "상수항 — auto(기본): 차분을 하지 않으면(d=0, D=0) 상수항을 넣고(변화율의 평균이 0 이 아니므로), 차분을 하면 넣지 않는다. c: 항상 넣음. n: 넣지 않음(2026-11-10 전의 동작)"}
 PARAM_GROUPS = ["차수", "추정 제약"]
+PARAMS["starts"] = {"type": "str", "choices": ["multi", "default"], "default": "multi", "group": "추정 제약",
+                    "desc": "최우추정의 출발점 — multi(기본): 정해진 출발점 7개에서 추정해 로그우도가 가장 높은 해를 쓴다(가능도에 극대점이 여러 개일 수 있어서. 폴드마다 어느 출발점이 뽑혔는지·기본 출발점보다 얼마나 높은지 결과의 학습 진단에 남는다). default: 기본 출발점 하나(2026-11-10 전)"}
 # 결과 파일의 model.params 에 이 키가 없으면(2026-11-06 전 결과) 그 실험은 이 값으로 돌았다 — 같은 실험을 다시 돌릴 때 엔진이 채운다
-LEGACY_DEFAULTS = {"enforce_stationarity": False, "enforce_invertibility": False, "scale": 1.0}
+# D 는 넣지 않는다: D 는 처음부터 있던 파라미터라 옛 결과에도 그때 값(1)이 기록돼 있다. trend 는 2026-11-10 에 생긴 칸이라 옛 결과에는 없다 → 그때 값(n)
+LEGACY_DEFAULTS = {"enforce_stationarity": False, "enforce_invertibility": False, "scale": 1.0, "starts": "default", "trend": "n"}
+# 기본값이 바뀐 파라미터: 옛 결과를 같은 실험으로 다시 돌릴 때(봉인 평가 등) 결과에 기록된 값으로 고정한다(engine.experiment.pinned_model_params)
+PIN_RECORDED = ("D",)
 
 
 class Model(SeriesModel):
@@ -52,8 +63,13 @@ class Model(SeriesModel):
         self.scale = float(p.get("scale", 1.0) or 1.0)  # 수치 배율(위 설명) — 추정·예측 모두 r × scale 단위, 예측은 다시 나눔
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.res = SARIMAX(r * self.scale, order=(p["p"], p["d"], p["q"]), seasonal_order=(p["P"], p["D"], p["Q"], p["s"]),
-                               enforce_stationarity=p["enforce_stationarity"], enforce_invertibility=p["enforce_invertibility"]).fit(disp=False, maxiter=200)
+            tr = str(p.get("trend", "n") or "n")
+            if tr == "auto":
+                tr = "c" if (int(p["d"]) == 0 and int(p["D"]) == 0) else "n"
+            self.trend_used = tr
+            mod = SARIMAX(r * self.scale, order=(p["p"], p["d"], p["q"]), seasonal_order=(p["P"], p["D"], p["Q"], p["s"]), trend=tr,
+                          enforce_stationarity=p["enforce_stationarity"], enforce_invertibility=p["enforce_invertibility"])
+            self.res, self.diag = fit_multi_start(mod, starts=str(p.get("starts", "default")))  # 여러 출발점 중 로그우도 최대(models/base.py)
 
     def forecast(self, history: np.ndarray, steps: int) -> np.ndarray:
         with warnings.catch_warnings():

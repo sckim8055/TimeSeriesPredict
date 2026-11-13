@@ -261,6 +261,30 @@ def append_master_rows(path: str | Path, rows: list[dict], *, sheet: str = "vari
     return n
 
 
+def update_master_row(path: str | Path, vid: str, changes: dict, *, sheet: str = "variables") -> None:
+    """마스터 엑셀에서 id 가 vid 인 줄의 칸들을 고친다(2026-11-13, 화면에서 발표시차·변환 고치기). 서식·다른 줄·다른 시트는 건드리지 않는다.
+    머리글에 없는 칸(예: 오래된 사전에 note 열이 없음)은 머리글 끝에 열을 만든다. 없는 id 면 KeyError."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path)
+    ws = wb[sheet]
+    hdr = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
+    if "id" not in hdr:
+        raise ValueError("마스터에 id 열이 없습니다")
+    for k in changes:
+        if k not in hdr:
+            ws.cell(row=1, column=len(hdr) + 1, value=k)
+            hdr.append(k)
+    col_id = hdr.index("id") + 1
+    for r in range(2, ws.max_row + 1):
+        if str(ws.cell(row=r, column=col_id).value or "").strip() == vid:
+            for k, val in changes.items():
+                ws.cell(row=r, column=hdr.index(k) + 1, value=val)
+            wb.save(path)
+            return
+    raise KeyError(vid)
+
+
 def _to_bool(s: object) -> bool:
     return str(s).strip().lower() in ("true", "1", "y", "yes")
 

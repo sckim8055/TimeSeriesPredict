@@ -50,3 +50,16 @@ def to_price_frame(df: pd.DataFrame, mapping: dict[str, str], date_col: str) -> 
     out = out.set_index("date").sort_index()
     out = out[["open", "high", "low", "close", "volume"]].astype(float)
     return out[~out.index.duplicated(keep="last")]
+
+
+def scrub_secrets(text: object) -> str:
+    """글자에서 접속 키를 지운다(*** 로). 통신 오류 문구에는 요청 주소가 통째로 들어 있고 그 주소에 키가 있다 — 그대로 화면·로그·manifest 에 쓰면 키가 새어 나간다(2026-11-12).
+    지우는 것: ① 환경 변수 가운데 이름이 KEY·TOKEN·SECRET·PW·PASSWORD 로 끝나거나 그 말을 담은 것의 값(8자 이상) ② 주소의 api_key=·serviceKey=·key=·token= 뒤의 값."""
+    import os
+    import re
+
+    s = str(text)
+    for k, v in os.environ.items():
+        if v and len(v) >= 8 and re.search(r"(KEY|TOKEN|SECRET|PASSWORD|_PW)", k.upper()):
+            s = s.replace(v, "***")
+    return re.sub(r"(?i)\b(api_key|apikey|servicekey|service_key|key|token|password)=([^&\s'\")]+)", r"\1=***", s)

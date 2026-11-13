@@ -55,6 +55,7 @@ def sheet_headers(master_path: str | Path) -> dict[str, tuple[list, set[int]]]:
         for sh, _ in DATA_SHEETS:
             if sh not in wb.sheetnames:
                 continue
+            wb[sh].reset_dimensions()  # 시트의 크기 표시가 낡아 있어도 실제 줄을 끝까지 읽는다(engine/store.read_data_sheets 와 같은 이유)
             rows = wb[sh].iter_rows(values_only=True)
             hdr = list(next(rows, ()))
             filled: set[int] = set()

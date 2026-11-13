@@ -442,10 +442,10 @@ def build(cap: dict) -> dict:
       say=(f"단위가 다른 변수를 같은 눈금으로 바꿉니다. 원본처럼 최소를 0, 최대를 1로 맞춥니다. 최소와 최대는 학습 폴드의 행만으로 정하고, 빈 칸은 무시합니다. "
            f"테스트 기간의 값은 쓰지 않습니다. 예를 들어 F11의 학습 최소는 {f(smin[j11])}, 최대는 {f(smax[j11])}입니다. 그래서 {last.strftime('%Y-%m')}의 값 {f(v11)}은 {f(s11)}이 됩니다."),
       notes={src.line(EXP, "StandardScaler()).fit(full["): f"MinMax: 학습 폴드 행으로 열마다 최소·최대(빈 칸 무시). F11 {f(smin[j11])} ~ {f(smax[j11])}",
-             src.line(EXP, "Xf = scaler.transform(full[ds.feature_names].ffill().values)"): "앞 값으로 채운 뒤(ffill) 0~1 로 바꿈 — 변수가 시작되기 전 칸은 NaN 그대로"},
+             src.line(EXP, "Xf = scaler.transform(full[feat].ffill().values)"): "앞 값으로 채운 뒤(ffill) 0~1 로 바꿈 — 변수가 시작되기 전 칸은 NaN 그대로"},
       lab=lab_minmax(raw["F11"].values, "F11", last.strftime("%Y-%m"), smin[j11], smax[j11], full_scaled_[-1, j11]),
       code=C(EXP, src.lines(EXP, "scaler = (MinMaxScaler() if params.get(\"input_scaler\") == \"minmax\" else StandardScaler()).fit(full[",
-                            "Xf = scaler.transform(full[ds.feature_names].ffill().values)"),
+                            "Xf = scaler.transform(full[feat].ffill().values)"),
              src.line(EXP, "StandardScaler()).fit(full["), "_walkforward_predict", 6, 6),
       stack=["engine/experiment.py · _walkforward_predict"], nodes=["scale"], edges=[("data", "scale")],
       formula=f"x′ = (x − 최소) ÷ (최대 − 최소)   F11: ({f(v11)} − {f(smin[j11])}) ÷ ({f(smax[j11])} − {f(smin[j11])}) = {f(s11)}",
@@ -470,8 +470,8 @@ def build(cap: dict) -> dict:
            + ("이 폴드에는 중간 빈 칸이 없어서, 남은 빈 칸은 모두 변수가 시작되기 전의 칸입니다. " if n_mid == 0 else "")
            + "BIVA는 이 빈 칸을 비어 있는 그대로 받아 BRITS가 채웁니다. 다른 창 모델은 학습 평균으로 채웁니다."),
       notes={src.line(EXP, "if not accepts_nan:"): "BIVA 는 빈 칸(NaN)을 받는 모델(ACCEPTS_NAN) → 평균으로 채우는 이 줄을 건너뜀"},
-      code=C(EXP, src.lines(EXP, "Xf = scaler.transform(full[ds.feature_names].ffill().values)", "if not accepts_nan:", "Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)"),
-             src.line(EXP, "Xf = scaler.transform(full[ds.feature_names].ffill().values)"), "_walkforward_predict", 8, 6),
+      code=C(EXP, src.lines(EXP, "Xf = scaler.transform(full[feat].ffill().values)", "if not accepts_nan:", "Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)"),
+             src.line(EXP, "Xf = scaler.transform(full[feat].ffill().values)"), "_walkforward_predict", 8, 6),
       stack=["engine/experiment.py · _walkforward_predict"], nodes=["scale"],
       tensors=[H("눈금 맞춘 학습 폴드 (0~1)", full_scaled, rows=every, cols=feats, shape=[len(dates), K], scale="01", numbers=False, cellH=4, rowLabelW=64, note="빗금 = NaN(BRITS 가 채움)")])
 
@@ -602,7 +602,7 @@ def build(cap: dict) -> dict:
       "LSTMCell 입력으로도 함께 들어갑니다([c_c ; m]).",
       say="먼저 어느 칸이 비었는지 표시합니다. m이 1이면 관측된 칸, 0이면 빈 칸입니다. 이 표시는 뒤에서 손실을 관측 칸에서만 재고, 빈 칸만 추정값으로 바꾸는 데 쓰이며, LSTM 셀의 입력으로도 함께 들어갑니다.",
       notes={ev_mask.line: f"NaN 이 아니면 1(관측), NaN 이면 0(빈 칸) — 이 배치의 빈 칸 {cap['batch']['n_nan']}개"},
-      code=C(RITS, [src.line(RITS, "if direct == 'forward':"), src.line(RITS, "values = data", after=150), ev_mask.line], ev_mask.line, "RITS.forward", 4, 4),
+      code=C(RITS, [src.line(RITS, "if direct == 'forward':"), src.line(RITS, "values = data", after=src.line(RITS, "def forward(self, data, direct):")), ev_mask.line], ev_mask.line, "RITS.forward", 4, 4),
       stack=stk_rits("forward"), nodes=["fwd"],
       formula="m = 1 − isnan(x)   (관측 1, 빈 칸 0)",
       tensors=[BH("masks m (흰색 0 = 빈 칸, 진한 색 1 = 관측)", masks_f, rows_w[0], scale="01")])
@@ -612,7 +612,7 @@ def build(cap: dict) -> dict:
     from models.biva_src.BIVA_RITS import Model as RitsM  # 원본 규칙 대조용(같은 모듈의 원본 함수)
     from types import SimpleNamespace
     rr = RitsM(SimpleNamespace(seq_len=L, channels=K, rnn_hid_size=4, imputed_weight=1.0))
-    d_orig = rr.delta_calc_orig(masks_f)
+    d_orig = rr.delta_calc(masks_f)
     # 실제 예: 늘 비어 있는 변수와 그 오른쪽(관측) 변수
     dex = ""
     for j in range(1, K - 1):
@@ -624,21 +624,21 @@ def build(cap: dict) -> dict:
       "<b>δ(델타)</b>는 '마지막 관측 뒤로 얼마나 지났나'를 나타내려는 수입니다. 원본 delta_calc 의 규칙은 이렇습니다. 첫 시점은 0. 그다음부터는 "
       "① 같은 변수가 바로 앞 시점에 비었으면 <b>같은 시점 왼쪽 이웃 변수(d−1)의 δ + 1</b>, ② 아니고 왼쪽 이웃 변수가 지금 관측되었으면 1, ③ 그 밖에는 0. "
       "곧 원본 코드는 δ 값을 같은 변수의 앞 시점 δ 가 아니라 <b>같은 시점 바로 왼쪽 열의 δ</b> 에서 이어 받습니다. 그래서 같은 변수가 계속 비어 있어도 δ 가 시간에 따라 쌓이지 않고, "
-      "이웃 변수의 빈 칸에 영향을 받습니다. 원본 그대로 두었습니다. 오른쪽은 이 규칙을 담은 원본 함수 delta_calc_orig 이고, 실제 실행은 값이 똑같은 빠른 버전(delta_calc, [TSP 수정 #6])으로 했습니다(아래 검증).",
+      "이웃 변수의 빈 칸에 영향을 받습니다. 원본 그대로 두었습니다. 오른쪽이 실제로 실행된 원본 함수 delta_calc 입니다.",
       say=("델타는 마지막 관측 뒤로 얼마나 지났는지를 나타내려는 수입니다. 원본 코드의 규칙은 이렇습니다. 첫 시점은 0입니다. 그다음부터는, 첫째, 같은 변수가 바로 앞 시점에 비어 있었으면 "
            "같은 시점 왼쪽 이웃 변수의 델타에 1을 더합니다. 둘째, 그렇지 않고 왼쪽 이웃 변수가 지금 관측되었으면 1입니다. 셋째, 그 밖에는 0입니다. "
            "곧 원본 코드는 델타 값을 같은 변수의 앞 시점 델타가 아니라, 같은 시점 바로 왼쪽 열의 델타에서 이어 받습니다. 그래서 같은 변수가 계속 비어 있어도 델타가 시간에 따라 쌓이지 않고, "
            "이웃 변수의 빈 칸에 영향을 받습니다. 논문의 정의와 다르지만, 원본 그대로 두었습니다. "
-           "오른쪽은 이 규칙을 담은 원본 함수이고, 실제 실행은 값이 똑같은 빠른 버전으로 했습니다."),
+           "오른쪽이 실제로 실행된 원본 함수입니다."),
       notes={src.line(RITS, "delta[b,t,d] = delta[b,t,d-1]+t-(t-1)"): "같은 변수가 앞 시점에 비었으면: 왼쪽 이웃 변수(d−1)의 δ + 1  (t−(t−1) = 1)",
              src.line(RITS, "delta[b,t,d] = t - (t-1)"): "왼쪽 이웃 변수가 지금 관측되었으면 1 — 아무 조건도 아니면 0 그대로"},
       lab=lab_delta(masks_f[0].numpy().astype(int).tolist(), win[0], dlt[0].numpy().tolist()),
-      code=C(RITS, src.span(RITS, "def delta_calc_orig(self, masks):", "return delta", after=130), src.line(RITS, "delta[b,t,d] = delta[b,t,d-1]+t-(t-1)"), "delta_calc_orig (원본 규칙)", 2, 2),
+      code=C(RITS, src.span(RITS, "def delta_calc(self, masks):", "return delta"), src.line(RITS, "delta[b,t,d] = delta[b,t,d-1]+t-(t-1)"), "delta_calc (원본 그대로)", 2, 2),
       stack=stk_rits("forward") + ["delta_calc"], nodes=["fwd"],
       formula="δ[t,d] = 0 (t = 0);  m[t−1,d] = 0 이면 δ[t,d−1] + 1;  아니고 m[t,d−1] = 1 이면 1;  그 밖은 0   (위에서부터 먼저 맞는 규칙)" + dex,
       tensors=[{**BH("deltas δ", dlt, rows_w[0], scale="auto01"), "rowsEach": rows_w}],
-      checks=[chk("빠른 delta_calc(TSP 수정 #6) = 원본 delta_calc_orig", dlt, d_orig, 0)],
-      hint="실행은 [TSP 수정 #6] delta_calc 로 했습니다. 이는 원본 delta_calc_orig 와 값이 완전히 같은 빠른 버전입니다(원본은 배치×시점×변수마다 파이썬 반복). 오른쪽 코드는 원본 규칙입니다. 같음은 위 검증 줄과 tests/test_biva_src.py 가 확인합니다.\n"
+      checks=[chk("실행 중 기록한 δ = 원본 delta_calc 로 다시 계산한 δ", dlt, d_orig, 0)],
+      hint="실행은 원본 delta_calc 그대로 했습니다(배치×시점×변수마다 파이썬 반복 — 원본 그대로라 느립니다. 2026-11-12 사용자 결정).\n"
            "원본 규칙의 특징: d=0 열에서 d−1 = −1 은 파이썬 음수 색인이라 마지막 열(변수 34)을 가리킵니다. 그 시점의 마지막 열 δ 는 아직 계산 전이라 0 이고, 마스크는 마지막 변수의 것을 씁니다. "
            "BRITS 논문의 δ 정의(같은 변수의 마지막 관측 이후 지난 시간: 앞 시점이 관측이면 1, 비었으면 앞 δ + 1)와 다릅니다. 논문과 코드의 차이는 docs/biva_paper_vs_code.md.")
     ev_h0 = tr.one(RITS, contains="h = Variable(torch.zeros", direct="forward")
@@ -651,7 +651,7 @@ def build(cap: dict) -> dict:
            f"이제 시점마다 같은 계산 {nb_}줄을 {L}번 반복합니다."),
       notes={ev_h0.line: f"기억 h = 0  [{B}, {p['rnn_hid_size']}]", ev_h0.line + 1: f"셀 상태 c = 0  [{B}, {p['rnn_hid_size']}]",
              src.line(RITS, "for t in range(self.seq_len):"): f"시점 t = 0 … {L - 1} (τ1 … τ{L}) 마다 아래 {nb_}줄"},
-      code=C(RITS, [ev_h0.line, ev_h0.line + 1, src.line(RITS, "x_loss = 0.0"), src.line(RITS, "imputations = []", after=170), src.line(RITS, "for t in range(self.seq_len):")], ev_h0.line, "RITS.forward", 3, 4),
+      code=C(RITS, [ev_h0.line, ev_h0.line + 1, src.line(RITS, "x_loss = 0.0"), src.line(RITS, "imputations = []", after=src.line(RITS, "x_loss = 0.0")), src.line(RITS, "for t in range(self.seq_len):")], ev_h0.line, "RITS.forward", 3, 4),
       stack=stk_rits("forward"), nodes=["fwd"],
       tensors=[{"type": "num", "title": "시작 상태", "items": [{"label": "h", "value": f"[{B}, {p['rnn_hid_size']}] 모두 0"}, {"label": "c", "value": f"[{B}, {p['rnn_hid_size']}] 모두 0"}, {"label": "x_loss", "value": "0"}]}])
 

@@ -28,11 +28,13 @@ manifest.json 의 collect_runs = 이 버전에 수집을 실행한 기록(같은
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import traceback
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
@@ -46,7 +48,9 @@ from engine.derived import compute_derived  # noqa: E402
 from engine.registry import Registry, append_master_rows  # noqa: E402
 from engine.store import DataVersion, excel_to_long  # noqa: E402
 
-TICKERS = ["091160", "091230"]  # KODEX 반도체, TIGER 반도체
+from engine import tickers as tickers_mod  # noqa: E402
+
+TICKERS = [t["id"] for t in tickers_mod.DEFAULT]  # 기본 종목(파일이 없을 때). 실제 목록은 data/tickers.json — main() 에서 읽는다
 MASTER = "variable_master.xlsx"
 
 
@@ -60,6 +64,7 @@ def main() -> int:
     ap.add_argument("--data-dir", default=str(ROOT / "data"))
     ap.add_argument("--refresh", action="store_true", help="--version 재사용 시 이미 있는 변수도 다시 받는다")
     ap.add_argument("--version", default=None, help="기존 버전 ID 를 주면 그 폴더에 이어서 받고(실패한 출처 재시도) 가격을 다시 조립한다")
+    ap.add_argument("--allow-shrink", action="store_true", help="새로 받은 자료가 직전 버전보다 짧아도(줄 수 감소·시작일이 늦어짐) 그대로 쓴다. 기본은 직전 값을 두고 실패로 기록")
     a = ap.parse_args()
     sources = {s.strip() for s in a.sources.split(",")}
     data_dir = Path(a.data_dir)
@@ -94,11 +99,15 @@ def main() -> int:
         by_src.setdefault(reg.get(vid).source, []).append(reg.get(vid))
     print("마스터:", len(reg), "변수 /", {k: len(v) for k, v in by_src.items()})
 
-    ALL_SOURCES = {"datago", "yf", "pykrx", "fred", "ecos", "krx", "xlsx", "derived"}
     carry_from = None
-    if not a.version and not ALL_SOURCES <= sources:
-        # 일부 출처만 받는 새 버전: 나머지는 직전 버전에서 이어받는다. 전에는 받은 것만 든 버전이 '최신'이 되어
-        # (예: --sources xlsx → 가격 없는 버전) 그 뒤 실험이 돌지 않았다(2026-11-10 점검 N6)
+    if a.version and not (data_dir / "versions" / a.version / "manifest.json").exists():
+        # --version 은 '있는 버전에 이어 받기'다. 없는 id(오타)를 주면 새 버전 폴더가 조용히 생겼다(독립 검토 F22)
+        print(f"데이터 버전 {a.version} 이(가) 없습니다 — --version 은 이미 있는 버전에 이어 받을 때만 씁니다. 새 버전을 만들려면 --version 을 빼세요.")
+        return 2
+    if not a.version:
+        # 새 버전은 '직전 버전의 전부'에서 시작하고, 이번에 받는 데 성공한 것만 새 값으로 바꾼다(2026-11-10 독립 검토 F1).
+        # 그 전에는 요청한 출처는 이어받지 않아, 그 출처가 실패하면(접속 불가·키 없음) 자료가 빠진 버전이 '최신'이 되고 종료 코드도 0 이었다
+        # — 가격이 2007년부터가 아니라 2020년부터인 버전으로 실험이 조용히 돌았다(폴드 149 → 23).
         done = sorted(p.name for p in (data_dir / "versions").glob("*") if (p / "manifest.json").exists()) if (data_dir / "versions").exists() else []
         carry_from = done[-1] if done else None
         if carry_from and "derived" not in sources:
@@ -118,13 +127,13 @@ def main() -> int:
         price_src = {"datago": "datago", "yf": "yf", "pykrx": "naver"}
         for f in sorted(src_dir.glob("prices_*_*.parquet")):
             tag = f.stem.rsplit("_", 1)[-1]
-            if any(price_src[k] == tag for k in price_src if k not in sources):
+            if tag in price_src.values():  # 출처별 원 가격 파일 전부(요청한 출처도 — 받는 데 성공하면 새 파일로 바뀐다)
                 shutil.copy2(f, dv.dir / f.name); carried[f.name] = _sha(f)
         for f in sorted(src_dir.glob("variables_*.parquet")):
             key = f.stem[len("variables_"):]
             fam = "xlsx" if key.startswith("xlsx") else key
-            if fam in sources or fam == "derived":
-                continue
+            if fam == "xlsx" and "xlsx" in sources:
+                continue  # 엑셀 자료는 사전 파일에서 그대로 다시 읽는다(통신이 없어 '받지 못함'이 없다. 읽지 못하면 위의 엑셀 검사에서 이미 멈춘다)
             d = pd.read_parquet(f)
             want = "XLSX" if fam == "xlsx" else file_src.get(fam)
             # 사전에서 출처가 바뀌었거나 없어진 변수는 이어받지 않는다(한 변수 = 한 출처)
@@ -135,11 +144,31 @@ def main() -> int:
                 keep.to_parquet(dv.dir / f.name, index=False)
             if len(keep):
                 carried[f.name] = _sha(f) + ("" if len(keep) == len(d) else f" (변수 {d['variable_id'].nunique() - keep['variable_id'].nunique()}개 제외)")
-        print(f"  [이어받음] 받지 않는 출처의 자료 {len(carried)}개 파일을 직전 버전 {carry_from} 에서 가져왔습니다")
+        print(f"  [이어받음] 직전 버전 {carry_from} 의 자료 {len(carried)}개 파일에서 시작합니다 — 이번에 받는 데 성공한 것만 새 값으로 바뀝니다")
     log: dict[str, str] = dict(prev.get("collect_log", {}))
     run_log: dict[str, str] = {}   # 이번 실행에서 시도한 것만(collect_runs 에 덧붙임)
     items: dict[str, dict] = {}    # 변수별 받은 줄 수·첫날·마지막 날(이번 실행)
     superseded: list[str] = []     # 이번 실행으로 읽지 않게 된 옛 엑셀 자료 파일
+    kept_previous: dict[str, str] = {}  # 받지 못해(또는 받은 것이 더 짧아) 직전 버전 값을 그대로 둔 항목 → 이유
+    source_notes: dict[str, str] = {}   # 실패는 아니지만 남겨 둘 처리(예: 교차검증 출처의 이동 창을 직전 자료와 이음)
+    prev_start = None
+    if carry_from:
+        try:
+            prev_start = json.loads((data_dir / "versions" / carry_from / "manifest.json").read_text(encoding="utf-8")).get("start")
+        except Exception:  # noqa: BLE001
+            prev_start = None
+    # 줄어듦 검사: 수집 시작일(--start)이 직전과 같을 때만 뜻이 있다(시작일을 늦추면 짧아지는 것이 정상)
+    check_shrink = bool(carry_from) and not a.allow_shrink and (prev_start is None or str(prev_start) == str(a.start))
+
+    def _shrunk(new_n: int, new_first, old_n: int, old_first) -> str | None:
+        """새로 받은 것이 직전보다 짧으면 이유 글자, 아니면 None."""
+        if not check_shrink or not old_n:
+            return None
+        if new_n < old_n:
+            return f"받은 줄 수 {new_n} < 직전 {old_n}"
+        if new_first is not None and old_first is not None and pd.Timestamp(new_first) > pd.Timestamp(old_first):
+            return f"받은 자료의 시작 {pd.Timestamp(new_first).date()} 이 직전 {pd.Timestamp(old_first).date()} 보다 늦음"
+        return None
     t_start = pd.Timestamp.now(tz="UTC").isoformat()
     print(f"데이터 버전 {dv.id} → {dv.dir}")
 
@@ -149,14 +178,21 @@ def main() -> int:
             log[name] = run_log[name] = "ok"
             print(f"  [ok] {name}")
         except Exception as e:  # noqa: BLE001
-            log[name] = run_log[name] = f"fail: {e.__class__.__name__}: {e}"
-            print(f"  [fail] {name}: {e}")
-            traceback.print_exc(limit=1)
+            # 오류 문구에는 요청 주소(접속 키가 든)가 들어 있을 수 있다 → 키를 지운 글자만 기록·출력한다(adapters.base.scrub_secrets)
+            from adapters.base import scrub_secrets
+            why = scrub_secrets(f"{e.__class__.__name__}: {e}")
+            log[name] = run_log[name] = f"fail: {why}"
+            print(f"  [fail] {name}: {why}")
+            print("    " + scrub_secrets(traceback.format_exc(limit=1)).strip().replace("\n", "\n    "))
 
     already = set(dv.read_variables()["variable_id"].unique()) if a.version and not a.refresh else set()
+    already -= set(prev.get("kept_previous") or {})  # 지난번에 받지 못해 직전 값을 그대로 둔 변수는 '이미 있음'이 아니다 — 다시 받는다
 
     def collect_rows(vars_, fetch, src_name):
         rows = []
+        got: set[str] = set()
+        pf = dv.dir / f"variables_{src_name}.parquet"
+        prev_df = pd.read_parquet(pf) if (carry_from and pf.exists()) else None  # 직전 버전에서 이어받은 이 출처의 자료
         existing = dv.read_variables([v.id for v in vars_ if v.id in already]) if already else None
         if existing is not None and not existing.empty:
             rows.append(existing)
@@ -166,24 +202,75 @@ def main() -> int:
                 continue
             def f(v=v):
                 s = fetch(v)
-                rows.append(pd.DataFrame({"variable_id": v.id, "date": s.index, "value": s.values}))
                 ss = s.dropna()
+                if prev_df is not None:
+                    old = prev_df[prev_df["variable_id"] == v.id].dropna(subset=["value"])
+                    why = _shrunk(len(ss), ss.index.min() if len(ss) else None, len(old), old["date"].min() if len(old) else None)
+                    if why:
+                        raise RuntimeError(f"받은 자료가 직전 버전보다 짧습니다({why}) — 직전 값을 그대로 둡니다. 일부러 줄인 것이면 --allow-shrink")
+                rows.append(pd.DataFrame({"variable_id": v.id, "date": s.index, "value": s.values}))
+                got.add(v.id)
                 items[v.id] = {"source": v.source, "source_code": v.source_code, "n": int(len(ss)),
                                "first": str(pd.Timestamp(ss.index.min()).date()) if len(ss) else None,
                                "last": str(pd.Timestamp(ss.index.max()).date()) if len(ss) else None}
             attempt(f"{src_name} {v.id} ({v.source_code})", f)
+        if prev_df is not None:
+            # 이번에 받지 못한 변수는 직전 버전의 값을 그대로 둔다(빠뜨리지 않는다). 무엇을 그대로 두었는지는 기록한다
+            for v in vars_:
+                if v.id in got or v.id in already:
+                    continue
+                old = prev_df[prev_df["variable_id"] == v.id]
+                if len(old):
+                    rows.append(old[["variable_id", "date", "value"]])
+                    kept_previous[v.id] = run_log.get(f"{src_name} {v.id} ({v.source_code})", "받지 못함")
         if rows:
             dv.write_variables(pd.concat(rows), source=src_name)
 
+    def write_prices_checked(name: str, df):
+        """받은 가격이 직전 버전의 같은 출처 파일보다 짧으면 쓰지 않고 오류(직전 파일이 그대로 남는다)."""
+        pf = dv.dir / f"prices_{name}.parquet"
+        if carry_from and pf.exists():
+            old = pd.read_parquet(pf)
+            why = _shrunk(len(df), df.index.min() if len(df) else None, len(old), old.index.min() if len(old) else None)
+            if why and name.endswith("_naver") and len(df):
+                # 네이버 수정주가(교차검증용)는 '최근 N일'만 주는 이동 창이라 받을 때마다 시작일이 밀린다 — 실패로 보지 않는다(2026-11-12).
+                # 겹치는 날 값이 같으면 직전 앞부분 + 새 자료로 잇고, 다르면(수정주가가 소급해 바뀜) 직전 파일을 그대로 둔다.
+                common = old.index.intersection(df.index)
+                cols = [c for c in ("open", "high", "low", "close") if c in old.columns and c in df.columns]
+                same = len(common) > 0 and bool(np.allclose(old.loc[common, cols].to_numpy(float), df.loc[common, cols].to_numpy(float), rtol=1e-9, atol=1e-9, equal_nan=True))
+                if same:
+                    merged = pd.concat([old[old.index < df.index.min()], df]).sort_index()
+                    dv.write_prices(name, merged[~merged.index.duplicated(keep="last")])
+                    source_notes[f"prices {name}"] = f"이동 창({why}) — 겹치는 {len(common)}일 값이 같아 직전 앞부분에 새 자료를 이었다"
+                else:
+                    source_notes[f"prices {name}"] = f"이동 창({why}) — 겹치는 날 값이 달라(수정주가 소급 변경) 직전 파일을 그대로 두었다"
+                print(f"  [참고] {name}: {source_notes[f'prices {name}']}")
+                return
+            if why:
+                kept_previous[f"prices {name}"] = why
+                raise RuntimeError(f"받은 가격이 직전 버전보다 짧습니다({why}) — 직전 값을 그대로 둡니다. 일부러 줄인 것이면 --allow-shrink")
+        dv.write_prices(name, df)
+
+    def no_key(src: str, env: str, what: str):
+        """요청한 출처인데 접속 키가 없다 — 조용히 건너뛰지 않고 '받지 못함'으로 기록한다(직전 버전 값은 그대로)."""
+        msg = f"fail: .env 에 {env} 가 없어 받지 못함"
+        log[f"{src} ({what})"] = run_log[f"{src} ({what})"] = msg
+        print(f"  [fail] {src}: .env 파일에 {env} 가 없어 {what}을(를) 받지 못했습니다" + (" — 직전 버전 값을 그대로 둡니다" if carry_from else ""))
+
     # 1) 가격 — 출처별로 전부 받아 둔다 (prices_<t>_datago / _yf / _naver). 2) 에서 합친다.
     prices_done: set[str] = set()
+    tick_rows = tickers_mod.load(data_dir)
+    TICKERS = [t["id"] for t in tick_rows]                       # noqa: N806 — 종목 목록 파일(data/tickers.json)
+    ETFS = [t["id"] for t in tick_rows if t["kind"] == "etf"]    # noqa: N806 — 공식 출처는 ETF 시세 API 라 ETF 에만 묻는다
     have: dict[str, set[str]] = {t: set() for t in TICKERS}
+    if "datago" in sources and not os.environ.get("DATAGO_API_KEY"):
+        no_key("datago", "DATAGO_API_KEY", "공식 가격(2020~)")
     if "datago" in sources and os.environ.get("DATAGO_API_KEY"):
         from adapters import datago_adapter as dg
 
-        for t in TICKERS:
+        for t in ETFS:
             def f(t=t):
-                dv.write_prices(f"{t}_datago", dg.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "datago")))
+                write_prices_checked(f"{t}_datago", dg.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "datago")))
                 have[t].add("datago")
             attempt(f"datago prices {t} (공식, 2020~)", f)
     if "yf" in sources:
@@ -191,7 +278,7 @@ def main() -> int:
 
         for t in TICKERS:
             def f(t=t):
-                dv.write_prices(f"{t}_yf", yf.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "yf")))
+                write_prices_checked(f"{t}_yf", yf.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "yf")))
                 have[t].add("yf")
             attempt(f"yf prices {t} (원주가, 2009~; 공식과 종가 100% 일치 확인 2026-11-03)", f)
         collect_rows(by_src.get("YF", []), lambda v: yf.fetch_series(v.source_code, a.start, a.end, cache=RawCache(data_dir, "yf")), "yf")
@@ -200,7 +287,7 @@ def main() -> int:
 
         for t in TICKERS:
             def f(t=t):
-                dv.write_prices(f"{t}_naver", pk.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "pykrx")))
+                write_prices_checked(f"{t}_naver", pk.fetch_prices(t, a.start, a.end, cache=RawCache(data_dir, "pykrx")))
                 have[t].add("naver")
             attempt(f"pykrx prices {t} (네이버 수정주가, 교차검증용)", f)
 
@@ -239,6 +326,10 @@ def main() -> int:
         attempt(f"assemble prices {t}", f)
 
     # 3) 변수
+    if "fred" in sources and by_src.get("FRED") and not os.environ.get("FRED_API_KEY"):
+        no_key("fred", "FRED_API_KEY", f"FRED 변수 {len(by_src['FRED'])}개")
+    if "ecos" in sources and by_src.get("ECOS") and not os.environ.get("ECOS_API_KEY"):
+        no_key("ecos", "ECOS_API_KEY", f"ECOS 변수 {len(by_src['ECOS'])}개")
     if "fred" in sources and os.environ.get("FRED_API_KEY"):
         from adapters import fred_adapter as fr
 
@@ -260,7 +351,7 @@ def main() -> int:
 
             collect_rows(by_src.get("KRX", []), lambda v: kx.fetch_series(v.source_code, a.start, a.end, cache=RawCache(data_dir, "krx")), "krx")
         else:
-            print("  [건너뜀] KRX 변수가 마스터에 있지만 .env 에 KRX_ID/KRX_PW 가 없습니다")
+            no_key("krx", "KRX_ID/KRX_PW", f"KRX 변수 {len(by_src['KRX'])}개")
     if "xlsx" in sources:
         def fx():
             long = excel_to_long(master_path, reg)
@@ -331,10 +422,28 @@ def main() -> int:
            "carried_from": ({"version": carry_from, "files": carried} if carry_from else None), "superseded": superseded, "multi_source_ids": multi,
            "library_versions": {p: _ver(p) for p in ("pandas", "yfinance", "pykrx", "fredapi", "requests", "openpyxl")},
            "log": run_log, "items": items, "checks": {**chk.as_dict(), "near_duplicates": near}}
+    # 요청한 항목 가운데 받지 못한 것(지금까지의 실행을 통틀어 마지막 상태가 실패인 것). 하나라도 있으면 이 버전은 '일부 받지 못함'(incomplete)이다:
+    # 실험이 데이터 버전을 적지 않았을 때 자동으로 고르는 '최신'에서 빠지고(engine.store.latest_version_id), 종료 코드는 2.
+    failed_items = sorted(k for k, v in log.items() if str(v).startswith("fail"))
+    incomplete = bool(failed_items)  # 값이 하나도 없는 변수(missing)는 사전의 상태이지 '받기 실패'가 아니다 — 위에서 경고만 한다
+    run.update(kept_previous=kept_previous, notes=source_notes, failed_items=sorted(k for k, v in run_log.items() if str(v).startswith("fail")))
     dv.write_manifest({"collect_log": log, "collect_runs": list(prev.get("collect_runs", [])) + [run],
                        "start": a.start, "end": a.end, "tickers": sorted(prices_done),
-                       "master": MASTER, "master_sha256": run["master_sha256"], "variables_collected": len(collected), "variables_missing": missing})
+                       "master": MASTER, "master_sha256": run["master_sha256"], "variables_collected": len(collected), "variables_missing": missing,
+                       "incomplete": incomplete, "failed_items": failed_items, "kept_previous": kept_previous, "notes": source_notes})
     print("완료. manifest:", dv.dir / "manifest.json")
+    if incomplete:
+        from engine.store import latest_version_id
+        use = latest_version_id(data_dir)
+        print(f"\n[주의] 받지 못한 항목이 {len(failed_items)}개 있습니다.")
+        for k in failed_items[:20]:
+            print(f"  · {k}: {str(log[k])[:160]}")
+        if kept_previous:
+            print(f"  → 그중 {len(kept_previous)}개는 직전 버전({carry_from})의 값을 그대로 두었습니다: {sorted(kept_previous)[:15]}")
+        print(f"  이 버전({dv.id})은 '일부 받지 못함'으로 표시되어, 데이터 버전을 적지 않은 실험은 이 버전을 쓰지 않습니다"
+              + (f"(지금 자동으로 쓰이는 버전: {use})." if use and use != dv.id else "(온전한 버전이 없어 이 버전이 쓰입니다)."))
+        print(f"  받지 못한 원인(접속·키)을 고친 뒤 같은 버전에 이어 받으세요: python collect.py --version {dv.id}")
+        return 2
     return 0 if prices_done else 1
 
 

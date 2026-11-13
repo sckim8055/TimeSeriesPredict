@@ -120,3 +120,15 @@ def test_match_result_stops_when_result_files_change(monkeypatch):
         pytest.skip("결과 폴더 구성이 다름")
     with pytest.raises(RuntimeError, match="결과 파일 목록"):
         common.match_result(*key, {"2023-12-01": 0.0})
+
+
+def test_trace_realigns_shifted_lines_by_code_text(tmp_path):
+    """기록 뒤에 위쪽 코드가 줄어 줄 번호가 밀려도, 기록된 줄 글자로 지금 줄을 찾는다. 지워진 코드는 stale 표시(2026-11-12)."""
+    from tools.codewalk.common import _realign
+    from tools.codewalk.trace import Event
+    lines = (ROOT / "models/biva_src/BIVA_RITS.py").read_text(encoding="utf-8").split("\n")
+    n = next(i + 1 for i, s in enumerate(lines) if "def forward(self, data, direct):" in s)
+    moved = Event(seq=0, file="/x/tsp/models/biva_src/BIVA_RITS.py", line=n + 20, func="forward", code=lines[n - 1], depth=1)
+    gone = Event(seq=1, file="/x/tsp/models/biva_src/BIVA_RITS.py", line=n, func="delta_calc", code="        prev_missing = masks[:, :-1, :] == 0", depth=2)
+    a, b = _realign([moved, gone])
+    assert a.line == n and b.meta.get("stale") is True and b.line == n

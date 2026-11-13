@@ -1,0 +1,412 @@
+{
+ "config": {
+  "name": "",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "volatility",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "technical_features": null,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "ridge",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 21,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261103T141116Z",
+  "seed": 2025,
+  "n_seeds": 1,
+  "select_top": null,
+  "pool_tickers": []
+ },
+ "config_hash": "b6c1a0ba4e06",
+ "model": {
+  "file": "ridge",
+  "name": "Ridge",
+  "input_shape": "table",
+  "params": {
+   "alpha": 1.0
+  }
+ },
+ "data_version": "20261103T141116Z",
+ "code_version": "7b369ce-dirty",
+ "engine_rev": "2026-11-10",
+ "n_folds": 149,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": [
+  0.000897447597916808,
+  0.0010022034792003844,
+  0.0014195413823801485,
+  0.001400646850835506,
+  0.0008380320901879299,
+  0.0008379839277489697,
+  0.002536288933036603,
+  0.005992013162419243,
+  0.0020752617322227973,
+  0.0009119497233468322,
+  0.0006915443969095332,
+  0.0009280247593208251,
+  0.003356471990817195,
+  0.003491139261955822,
+  0.002181425022715689,
+  0.005147295959508923,
+  0.0005242082105646435,
+  0.0006648731668532187
+ ],
+ "trade_rule_used": {
+  "kind": "volatility_target",
+  "rule": "비중 = 학습 창 평균 변동성 ÷ 예측 변동성 (0~1 로 자름)"
+ },
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "transform_basis": {},
+ "prediction_metrics": {
+  "rmse": 0.010562273303376475,
+  "mae": 0.0077371335440206135,
+  "rmse_naive": 0.014223800163817395,
+  "dm_vs_naive": -13.523250543112221,
+  "dm_vs_naive_p": 0.0,
+  "corr": 0.33246862554903306,
+  "pred_sd_ratio": 0.37864589136219473,
+  "cw_vs_mean": 6.93743632798546,
+  "cw_vs_mean_p": 1.9964030428809565e-12,
+  "dm_vs_mean": -3.5907573802910706,
+  "dm_vs_mean_p": 0.0003297184539376996,
+  "rmse_mean": 0.011069009869581042,
+  "r2_oos_vs_mean": 0.0894637251153354,
+  "n_vs_mean": 3122
+ },
+ "performance": {
+  "n_periods": 3122,
+  "total_return": 0.11870746023464096,
+  "cagr": 0.00909551588780344,
+  "ann_vol": 0.24274312676373253,
+  "sharpe": 0.15891747418743418,
+  "sortino": 0.23328158411851835,
+  "mdd": -0.47803208321459645,
+  "win_rate": 0.520618556701031,
+  "benchmark_total_return": 0.795184490306436,
+  "benchmark_cagr": 0.04836146106250183,
+  "benchmark_mdd": -0.46494921971761083,
+  "excess_total_return": -0.676477030071795,
+  "excess_mean_per_period": -0.0001855964893765072,
+  "n_trades": 1507,
+  "turnover": 129.17889735749097,
+  "exposure": 0.9332739936818691,
+  "total_cost": 0.08396628328236913,
+  "bootstrap_p_excess": 0.996,
+  "deflated_sharpe_p": 0.9753365553738773,
+  "return_skew": -0.1993253527024956,
+  "return_kurt": 4.393377962891283,
+  "trial_sr_var": null,
+  "n_trials_so_far": 99
+ },
+ "period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "prediction_period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "n_predictions": 3122,
+ "variable_first_date": {},
+ "device": "cuda",
+ "seconds": 5.0,
+ "seal_boundary": {
+  "sealed_from": "2025-01-01",
+  "first_sealed_decision": "2024-12-27",
+  "horizon_rows": 2,
+  "rule": "개발 = 정답·수익의 마지막 값 날짜 < sealed_from 인 결정일, 봉인 = 그 밖(빠짐·겹침 없음)"
+ },
+ "feature_relevance": {
+  "method": "폴드마다 학습 창 안에서 잰 입력–정답의 |스피어만 순위상관|",
+  "n_folds": 149,
+  "top_n": 10,
+  "selected": false,
+  "features": [
+   {
+    "name": "A_ret_5",
+    "mean_abs_corr": 0.1780962495824322,
+    "mean_rank": 3.12751677852349,
+    "top_share": 1.0
+   },
+   {
+    "name": "A_ma_ratio_20",
+    "mean_abs_corr": 0.1780277078846305,
+    "mean_rank": 3.1879194630872485,
+    "top_share": 1.0
+   },
+   {
+    "name": "A_rsi_14",
+    "mean_abs_corr": 0.17714365084418873,
+    "mean_rank": 3.557046979865772,
+    "top_share": 1.0
+   },
+   {
+    "name": "A_ma_ratio_5",
+    "mean_abs_corr": 0.16517326812501626,
+    "mean_rank": 5.4630872483221475,
+    "top_share": 0.9463087248322147
+   },
+   {
+    "name": "A_ret_3",
+    "mean_abs_corr": 0.15971374645333308,
+    "mean_rank": 6.147651006711409,
+    "top_share": 0.7919463087248322
+   },
+   {
+    "name": "A_ret_10",
+    "mean_abs_corr": 0.1575448301668134,
+    "mean_rank": 6.557046979865772,
+    "top_share": 0.9731543624161074
+   },
+   {
+    "name": "A_ma_ratio_60",
+    "mean_abs_corr": 0.1436300554126992,
+    "mean_rank": 7.221476510067114,
+    "top_share": 0.8657718120805369
+   },
+   {
+    "name": "A_ret_20",
+    "mean_abs_corr": 0.14094154278406684,
+    "mean_rank": 7.966442953020135,
+    "top_share": 0.912751677852349
+   },
+   {
+    "name": "A_ma_ratio_120",
+    "mean_abs_corr": 0.1272127448575918,
+    "mean_rank": 9.604026845637584,
+    "top_share": 0.46308724832214765
+   },
+   {
+    "name": "A_ret_2",
+    "mean_abs_corr": 0.13352010209200618,
+    "mean_rank": 9.778523489932885,
+    "top_share": 0.5503355704697986
+   },
+   {
+    "name": "A_macd",
+    "mean_abs_corr": 0.11867934338389069,
+    "mean_rank": 10.791946308724832,
+    "top_share": 0.33557046979865773
+   },
+   {
+    "name": "A_macd_hist",
+    "mean_abs_corr": 0.126997756961987,
+    "mean_rank": 10.912751677852349,
+    "top_share": 0.436241610738255
+   },
+   {
+    "name": "A_vol_20",
+    "mean_abs_corr": 0.10133007276018151,
+    "mean_rank": 10.973154362416107,
+    "top_share": 0.38926174496644295
+   },
+   {
+    "name": "A_vol_60",
+    "mean_abs_corr": 0.08064097362664154,
+    "mean_rank": 13.63758389261745,
+    "top_share": 0.12080536912751678
+   },
+   {
+    "name": "A_ret_1",
+    "mean_abs_corr": 0.09410951608891573,
+    "mean_rank": 13.74496644295302,
+    "top_share": 0.12080536912751678
+   },
+   {
+    "name": "A_macd_signal",
+    "mean_abs_corr": 0.08021601973946528,
+    "mean_rank": 14.248322147651006,
+    "top_share": 0.09395973154362416
+   },
+   {
+    "name": "A_vol_ratio_5",
+    "mean_abs_corr": 0.03321963265837874,
+    "mean_rank": 16.906040268456376,
+    "top_share": 0.0
+   },
+   {
+    "name": "A_vol_ratio_20",
+    "mean_abs_corr": 0.029945147535624786,
+    "mean_rank": 17.174496644295303,
+    "top_share": 0.0
+   }
+  ]
+ },
+ "model_diag": {
+  "n_folds": 149,
+  "seeds": {
+   "n_seeds": 1,
+   "rule": "sha256('실험 시드|폴드 첫 테스트 결정일|반복 번호') 앞 8자리(16진) mod (2^31−1)"
+  },
+  "constant_folds": 0,
+  "folds_checked_for_constant": 149
+ },
+ "periods": {
+  "data": [
+   "2012-04-19",
+   "2024-12-26"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 149,
+  "first_fold": {
+   "train": [
+    "2009-09-30",
+    "2012-04-16"
+   ],
+   "val": null,
+   "test": [
+    "2012-04-19",
+    "2012-05-18"
+   ],
+   "n_train": 635,
+   "n_val": 0,
+   "n_test": 21
+  },
+  "last_fold": {
+   "train": [
+    "2021-11-10",
+    "2024-12-03"
+   ],
+   "val": null,
+   "test": [
+    "2024-12-06",
+    "2024-12-26"
+   ],
+   "n_train": 754,
+   "n_val": 0,
+   "n_test": 14
+  },
+  "test": [
+   "2012-04-19",
+   "2024-12-26"
+  ]
+ },
+ "seal_policy": {
+  "target": "091160",
+  "mode": "trading",
+  "policy_date": "2025-01-01",
+  "configured": "2025-01-01",
+  "status": "ok"
+ },
+ "run_record": {
+  "run_id": "20261112T133934Z_f8cc63",
+  "job_id": "20261112_223929_48084b",
+  "started_utc": "2026-11-12T13:39:34+00:00",
+  "finished_utc": "2026-11-12T13:39:40+00:00",
+  "command": [
+   "F:\\works\\TimeSeriesPredict\\cli.py",
+   "run",
+   "F:\\works\\TimeSeriesPredict\\results\\jobs\\configs\\20261112_223929_48084b.json"
+  ],
+  "host": {
+   "platform": "Windows-11-10.0.26300-SP0",
+   "python": "3.14.5",
+   "machine": "AMD64",
+   "device": "cuda"
+  },
+  "libraries": {
+   "numpy": "2.5.4",
+   "pandas": "2.3.3",
+   "scipy": "1.18.1",
+   "scikit-learn": "1.9.1",
+   "statsmodels": "0.15.0",
+   "lightgbm": "4.7.0",
+   "torch": "2.11.0+cu128",
+   "pydantic": "2.14.2",
+   "pyarrow": "26.0.0",
+   "openpyxl": "3.1.5"
+  },
+  "master": {
+   "path": "F:\\works\\TimeSeriesPredict\\data\\variable_master.xlsx",
+   "sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed",
+   "snapshot": "master_history/8655f2ccbbfb.xlsx"
+  },
+  "data_version": {
+   "id": "20261103T141116Z",
+   "manifest_sha256": "759565217dd6d72d253307334f60ba4309ea8a5ebefc974736557a8daa6da394",
+   "created_utc": "2026-11-04T00:19:43.623005+00:00",
+   "n_collect_runs": 0,
+   "collect_master_sha256": null
+  },
+  "variables": {
+   "requested": [],
+   "used": [],
+   "substituted": [],
+   "merged": [],
+   "excluded": []
+  },
+  "override_notes": [],
+  "notes": [],
+  "ledger_before": {
+   "seq": 0,
+   "sha": "5d5538d7db3688ec566261256b9d69efd2c6082b4f25d2e8934bc481dd062fa5"
+  }
+ }
+}

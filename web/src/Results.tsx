@@ -15,13 +15,19 @@ function verdict(r: ResultRow): { cls: 'pass' | 'warn' | 'fail' | 'muted'; text:
     if (z) return { cls: 'muted', text: "'변화 없음'은 이기지만 '지난 변화 그대로'와 차이 없음" }
     return { cls: 'muted', text: '유의하지 않음' }
   }
+  if (r.target_kind === 'volatility') {
+    // 변동성 타겟: 통과 기준을 아직 정하지 않았다(사전 분석 계획서에서 정함) → 통과 배지를 주지 않고 사실만 적는다
+    const info = r.cw_mean_p != null && r.cw_mean_p < 0.05
+    const vsNaive = r.dm_vs_naive == null ? '' : r.dm_vs_naive < 0 ? (r.dm_naive_p < 0.05 ? ' · 최근 변동성 그대로보다 정확' : ' · 최근 변동성 그대로와 비슷') : (r.dm_naive_p < 0.05 ? ' · 최근 변동성 그대로보다 부정확' : ' · 최근 변동성 그대로와 비슷')
+    return { cls: 'muted', text: (info ? '변동성: 평균 이상의 예측 정보 있음(CW)' : '변동성: 평균 이상의 정보 증거 없음') + vsNaive + ' · 통과 기준 미정' }
+  }
   const ml = r.dm_p != null
   const passDM = ml ? (r.dm_vs_zero < 0 && r.dm_p < 0.05) : true
   const passBoot = r.p_excess != null && r.p_excess < 0.05
   const passDefl = r.deflated_p != null && r.deflated_p < 0.05
   if (passDM && passBoot && passDefl) return { cls: 'pass', text: '기준 통과(개발 구간)' }
-  // DM 은 '이 방법을 이 학습 창으로 쓰면 0예측보다 정확한가'를 본다 — 추정 잡음 때문에 정보 없는 변수만 넣어도 이렇게 나온다. 변수에 정보가 있는지는 CW 로 본다
-  if (ml && r.dm_vs_zero > 0 && r.dm_p < 0.05) return { cls: 'fail', text: r.cw_p != null && r.cw_p < 0.05 ? '0예측보다 오차 큼(추정 잡음) · 변수 정보는 있음(CW)' : '0예측보다 오차 큼(이 학습 창 기준)' }
+  // DM 은 '이 방법을 이 학습 창으로 쓰면 0예측보다 정확한가'를 본다 — 추정 잡음 때문에 정보 없는 변수만 넣어도 이렇게 나온다. 예측 정보가 있는지는 '학습 창 평균' 기준 CW 로 본다(0 기준 CW 는 평균만 맞혀도 유의해진다)
+  if (ml && r.dm_vs_zero > 0 && r.dm_p < 0.05) return { cls: 'fail', text: r.cw_mean_p != null && r.cw_mean_p < 0.05 ? '0예측보다 오차 큼(추정 잡음) · 평균 이상의 예측 정보는 있음(CW)' : '0예측보다 오차 큼(이 학습 창 기준)' }
   return { cls: 'muted', text: '유의하지 않음' }
 }
 
@@ -55,7 +61,7 @@ export default function Results({ initial, mode = 'trading' }: { initial?: strin
         <div><b>예측 오차 (모델)</b><span>k기간 뒤 <em>값</em>을 맞혔을 때 평균 몇 % 틀렸나(MAPE). 작을수록 좋음.</span></div>
         <div><b>지난 변화 그대로</b><span>"지난 k기간 변화가 한 번 더 반복된다"고 찍은 오차. 모델이 꼭 이겨야 하는 기준(naive).</span></div>
         <div><b>변화 없음</b><span>"지금 값에서 멈춘다"고 찍은 오차. 가장 쉬운 기준.</span></div>
-        <div><b>보정 p (Holm)</b><span>같은 문제(대상·k·평가 구간)를 푼 결과 m개를 <b>함께 비교</b>하므로, 각 p 를 m 에 맞춰 키운 값. "모델 X 는 naive 보다 유의하게 좋다"고 쓰려면 이 값이 0.05 미만이어야 함.</span></div>
+        <div><b>보정 p (Holm)</b><span>같은 문제(대상·k·맞히는 방식)를 푼 결과 m개를 <b>함께 비교</b>하므로, "naive 보다 낫다"의 한쪽 p 를 m 에 맞춰 키운 값. "모델 X 는 naive 보다 유의하게 좋다"고 쓰려면 이 값이 0.05 미만이어야 함. naive 보다 나쁜 모델은 1 에 가깝게 나옴.</span></div>
         <div><b>naive 대비 오차 배율</b><span>모델 오차 ÷ '지난 변화 그대로' 오차. <b>×1 미만이면 모델 승</b>(×0.8 = 오차 20% 작음, ×1.4 = 40% 큼). <b>판정 p값 &lt; 0.05</b> 여야 우연이 아님.</span></div>
       </div> : <p className="lead">'같은 구간의 Buy&Hold 와 비교합니다. 성과(샤프·CAGR)보다 먼저 볼 것은 판정 열입니다 — 퇴화·누출이면 수치가 좋아도 무효이고, "유의하지 않음"은 우연과 구별이 안 된다는 뜻입니다.'</p>}
       <div className="toolbar">
@@ -89,7 +95,7 @@ export default function Results({ initial, mode = 'trading' }: { initial?: strin
                 <td><span className={'badge ' + v.cls}>{v.text}</span></td>
                 <td className="num"><strong>{pct(r.level_mape, 2)}</strong></td><td className="num">{pct(r.level_mape_naive, 2)}</td><td className="num">{pct(r.level_mape_zero, 2)}</td>
                 <td className="num"><span className={r.skill_vs_naive == null ? '' : r.skill_vs_naive > 0 ? 'pos' : 'neg'} title="모델 오차 ÷ '지난 변화 그대로' 오차 (MAPE). 1 미만이면 모델이 더 정확">{r.skill_vs_naive == null ? '–' : '×' + (1 - r.skill_vs_naive).toFixed(2)}</span></td>
-                <td className="num">{pct(r.dir_acc)}</td><td className="num">{num(r.dm_naive_p)}</td><td className="num" title={r.family_size ? `같은 문제를 푼 결과 ${r.family_size}개로 보정` : ''}>{num(r.p_holm)}{r.family_size ? <span className="hint"> /{r.family_size}</span> : null}</td><td className="num">{r.n_predictions}</td>
+                <td className="num">{pct(r.dir_acc)}</td><td className="num">{num(r.dm_naive_p)}</td><td className="num" title={r.family_size ? `'naive 보다 낫다'의 한쪽 p 를 같은 문제를 푼 결과 ${r.family_size}개로 보정. 이 화면의 결과 전부(${r.p_holm_all_m}개)로 보정하면 ${num(r.p_holm_all)}` : ''}>{num(r.p_holm)}{r.family_size ? <span className="hint"> /{r.family_size}</span> : null}</td><td className="num">{r.n_predictions}</td>
                 <td>{String(r.mtime).slice(5, 16).replace('T', ' ')}</td>
               </tr>) : (
               <tr key={r.file} className={sel === r.file ? 'sel' : ''} onClick={() => setSel(r.file)}>
@@ -157,7 +163,7 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
         {s?.full && <ActualVsPred full={s.full} />}
         {imp.length > 0 && <div className="panel"><h3>변수 중요도 (폴드 평균, 상위 15)</h3>
           {imp.map(([n, x]) => <div key={n} style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 2fr) 3fr 60px', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 2 }} title={r.feature_descriptions?.[n] ?? ''}><span>{n}{r.feature_descriptions?.[n] ? <span className="hint"> — {r.feature_descriptions[n]}</span> : null}</span><div style={{ background: '#eceff3', height: 10, borderRadius: 2 }}><div style={{ width: (100 * x / maxImp) + '%', background: '#23466e', height: 10, borderRadius: 2 }} /></div><span className="num">{num(x, 4)}</span></div>)}
-          {r.degenerate_model && <p className="hint">중요도가 전부 0 — 상수 예측. 파라미터가 학습 표본 수에 비해 큽니다.</p>}
+          {r.degenerate_model && <p className="hint">예측이 변하지 않습니다(상수 예측). 파라미터가 학습 표본 수에 비해 큽니다.</p>}
         </div>}
         {!r.sealed_evaluation && !r.ensemble_members && <SealedPanel stem={stem} r={r} />}
       </div>
@@ -182,7 +188,19 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
             <dt>{r.n_folds > 1 ? '첫 폴드' : '폴드'}</dt><dd>학습 {r.periods.first_fold.train?.join('~')} ({r.periods.first_fold.n_train}){r.periods.first_fold.val && <> · 검증 {r.periods.first_fold.val.join('~')} ({r.periods.first_fold.n_val})</>} · 테스트 {r.periods.first_fold.test?.join('~')} ({r.periods.first_fold.n_test})</dd>
             {r.n_folds > 1 && <><dt>마지막 폴드</dt><dd>학습 {r.periods.last_fold.train?.join('~')} ({r.periods.last_fold.n_train}){r.periods.last_fold.val && <> · 검증 {r.periods.last_fold.val.join('~')} ({r.periods.last_fold.n_val})</>} · 테스트 {r.periods.last_fold.test?.join('~')}</dd></>}</dl>}
           <dl className="kv"><dt>예측 수</dt><dd>{r.n_predictions} ({r.n_folds} 폴드)</dd><dt>방향정확도</dt><dd>{pct(pm.dir_acc)}{pm.dir_acc_naive != null && <> (naive {pct(pm.dir_acc_naive)})</>}</dd><dt>RMSE</dt><dd>{num(pm.rmse, 5)}{pm.rmse_naive != null && <> · naive {num(pm.rmse_naive, 5)} · 0예측 {num(pm.rmse_zero, 5)}</>}</dd><dt>DM vs 0예측</dt><dd>{num(pm.dm_vs_zero, 2)} (p {num(pm.dm_vs_zero_p)}) {pm.dm_vs_zero != null && (pm.dm_vs_zero < 0 ? '← 0예측보다 오차 작음' : '← 0예측보다 오차 큼')} <span className="hint">이 방법·이 학습 창의 정확도 비교(추정 잡음 포함)</span></dd>
-            {pm.cw_vs_zero != null && <><dt>CW vs 0예측</dt><dd>{num(pm.cw_vs_zero, 2)} (한쪽 p {num(pm.cw_vs_zero_p)}) {pm.cw_vs_zero_p < 0.05 ? '← 변수에 예측 정보가 있다는 증거' : '← 예측 정보의 증거 없음'} <span className="hint">Clark–West: 추정 잡음을 뺀 비교</span></dd></>}
+            {pm.cw_vs_mean != null && <><dt>CW vs 학습 창 평균</dt><dd>{num(pm.cw_vs_mean, 2)} (한쪽 p {num(pm.cw_vs_mean_p)}) {pm.cw_vs_mean_p < 0.05 ? '← 평균을 아는 것 이상의 예측 정보가 있다는 증거' : '← 평균 이상의 예측 정보의 증거 없음'} <span className="hint">Clark–West: 추정 잡음을 뺀 비교. 기준 = 폴드마다 학습 창의 타겟 평균{pm.r2_oos_vs_mean != null && <> · 표본 밖 R² {num(pm.r2_oos_vs_mean, 4)}</>}</span></dd></>}
+            {pm.cw_vs_zero != null && <><dt>CW vs 0예측</dt><dd>{num(pm.cw_vs_zero, 2)} (한쪽 p {num(pm.cw_vs_zero_p)}) <span className="hint">예측이 실제와 같은 쪽으로 움직이는가(평균 포함) — 타겟 평균이 0 이 아니면 평균만 맞혀도 유의해지므로 변수 정보의 증거로 쓰지 않음</span></dd></>}
+            {pm.rmse_naive != null && r.config?.target?.kind === 'volatility' && <><dt>변동성 예측</dt><dd>RMSE {num(pm.rmse, 5)} · 최근 변동성 그대로(naive) {num(pm.rmse_naive, 5)} · DM {num(pm.dm_vs_naive, 2)} (p {num(pm.dm_vs_naive_p)}) · 상관 {num(pm.corr, 3)} <span className="hint">매매 규칙: 비중 = 학습 창 평균 변동성 ÷ 예측 변동성(0~1). 방향은 맞히지 않음</span></dd></>}
+            {r.pool && <><dt>종목 묶어 학습</dt><dd>{r.pool.tickers.join(', ')} 의 행을 학습에만 보탬 — 폴드당 {num(r.pool.rows_min, 0)}~{num(r.pool.rows_max, 0)}행(평균 {num(r.pool.rows_mean, 0)}). <span className="hint">{r.pool.note}</span></dd></>}
+            {r.feature_relevance && <><dt>입력의 연관성 순위</dt><dd><details><summary>{r.feature_relevance.selected ? `폴드마다 상위 ${r.feature_relevance.top_n}개만 사용` : '전부 사용(순위만 기록)'} · 1위 {r.feature_relevance.features[0]?.name} — 펼쳐 보기</summary>
+              <span className="hint">{r.feature_relevance.method}. {r.feature_relevance.n_folds}개 폴드의 요약 — 전체 자료를 보고 매긴 순위가 아닙니다. '상위 비율'이 낮으면 폴드마다 순위가 바뀐다는 뜻(믿을 순위가 아님).</span>
+              <table><thead><tr><th>#</th><th>입력</th><th>평균 |순위상관|</th><th>평균 등수</th><th>상위 {r.feature_relevance.top_n} 안에 든 폴드</th>{r.feature_relevance.selected && <th>실제로 쓰인 폴드</th>}</tr></thead>
+                <tbody>{r.feature_relevance.features.slice(0, 40).map((f: any, i: number) => <tr key={f.name}><td>{i + 1}</td><td>{f.name}</td><td className="num">{num(f.mean_abs_corr, 3)}</td><td className="num">{num(f.mean_rank, 1)}</td><td className="num">{pct(f.top_share, 0)}</td>{r.feature_relevance.selected && <td className="num">{pct(f.selected_share, 0)}</td>}</tr>)}</tbody></table></details></dd></>}
+            {pm.pred_sd_ratio != null && <><dt>예측의 흩어짐</dt><dd>{num(pm.pred_sd_ratio, 3)} <span className="hint">예측 표준편차 ÷ 실제 표준편차. 0 에 가까우면 날마다 거의 같은 값을 냄</span></dd></>}
+            {r.model_diag && <><dt>학습 진단</dt><dd>시드 {r.model_diag.seeds?.n_seeds}개{r.model_diag.seeds?.pred_sd_across_seeds_mean != null && <> (시드 사이 예측 표준편차 {num(r.model_diag.seeds.pred_sd_across_seeds_mean, 5)})</>}
+              {r.model_diag.trees_used && <> · 쓰인 트리 수 중앙값 {num(r.model_diag.trees_used.median, 0)} (상한 {r.model_diag.limit}, 2그루 이하 {pct(r.model_diag.trees_used.share_le2, 0)})</>}
+              {r.model_diag.epoch_used && <> · 쓰인 반복 수 중앙값 {num(r.model_diag.epoch_used.median, 0)} (상한 {r.model_diag.limit})</>}
+              {r.model_diag.constant_folds > 0 && <> · 상수 예측 폴드 {r.model_diag.constant_folds}/{r.model_diag.folds_checked_for_constant}</>}</dd></>}
             {pm.dm_vs_naive != null && <><dt>DM vs naive</dt><dd>{num(pm.dm_vs_naive, 2)} (p {num(pm.dm_vs_naive_p)}) {pm.dm_vs_naive < 0 ? '← naive 보다 나음' : '← naive 보다 나쁨'}</dd></>}
             {pm.level_rmse != null && <><dt>수준값 오차</dt><dd>RMSE {num(pm.level_rmse, 3)} · MAPE {pct(pm.level_mape, 2)}</dd></>}
             {pm.auc != null && <><dt>AUC</dt><dd>{num(pm.auc)}</dd></>}</dl></div>

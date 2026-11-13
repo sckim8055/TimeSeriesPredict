@@ -12,7 +12,7 @@ const MODEL_GROUPS: [string, string][] = [['series', '통계 모델 (대상 자�
 const FC_KIND_LABEL: Record<string, string> = { return: '값 예측 — 변화율로 학습 (권장)', logreturn: '값 예측 — 로그 변화율로 학습', direction: '방향 예측 — 오를까 내릴까' }
 const UNIT: Record<string, string> = { D: '거래일', W: '주', M: '개월' }
 const lagEvidence = (note: string) => (note || '').split(' | ').find(x => x.startsWith('[lag 검증'))?.replace(/^\[lag 검증 [0-9-]+\] /, '') ?? ''
-const KIND_LABEL: Record<string, string> = { return: '수익률(회귀)', logreturn: '로그수익률(회귀)', direction: '방향(분류)', event: '임계치 초과(분류)' }
+const KIND_LABEL: Record<string, string> = { return: '수익률(회귀)', logreturn: '로그수익률(회귀)', direction: '방향(분류)', event: '임계치 초과(분류)', volatility: '변동성 — 앞으로 얼마나 출렁일까 (k 는 5 이상 권장)' }
 const DEFAULT_VALIDATION: Record<string, { train_len: number; test_len: number }> = { D: { train_len: 756, test_len: 21 }, W: { train_len: 156, test_len: 4 }, M: { train_len: 60, test_len: 1 } }
 const DEFAULT_SEQ: Record<string, number> = { D: 20, W: 13, M: 12 }
 const PERIOD_DAYS: Record<string, number> = { D: 1, W: 7, M: 31, Q: 92, A: 366 }
@@ -69,6 +69,8 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
   const [seqLen, setSeqLen] = useState<number | ''>('')
   const [dataVersion, setDataVersion] = useState(meta.data_versions.at(-1)?.id ?? '')
   const [seed, setSeed] = useState<number>(meta.defaults.seed ?? 2025)
+  const [poolTickers, setPoolTickers] = useState<string[]>([])   // 종목 묶어 학습: 다른 종목의 행을 학습에만 보탠다
+  const [selectTop, setSelectTop] = useState<string>('')   // 입력 선별: 폴드마다 연관성 높은 입력 N개만. 비우면 전부
   const [domainFilter, setDomainFilter] = useState<string>('전체')
   const [kindFilter, setKindFilter] = useState<'all' | 'file' | 'api' | 'derived'>('all')
   const [busy, setBusy] = useState(false)
@@ -139,6 +141,8 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
   })()
   const config = {
     name: name || undefined, mode, target_variable: isForecast ? targetVar : null, ...(isForecast ? { forecast_info_time: infoTime } : {}), ticker, frequency: isForecast ? targetFreq : freq, target: { kind, k, threshold }, variable_ids: selected,
+    ...(selectTop !== '' && Number(selectTop) >= 1 ? { select_top: Number(selectTop) } : {}),
+    ...(!isForecast && model.input_shape === 'table' && poolTickers.filter(t => t !== ticker).length ? { pool_tickers: poolTickers.filter(t => t !== ticker) } : {}),
     variable_transforms: Object.fromEntries(selected.filter(v => transforms[v] != null && transforms[v] !== (meta.variables.find(x => x.id === v)?.transform ?? 'none')).map(v => [v, transforms[v]])),  // 기본값과 같으면 보내지 않음
     lag_override: Object.fromEntries(selected.filter(v => lagOverride[v] != null && lagOverride[v] !== meta.variables.find(x => x.id === v)?.lag_days).map(v => [v, lagOverride[v]])),
     use_technical: useTechnical, ...(useTechnical && techSel ? { technical_features: techSel } : {}), fill, model: modelFile, model_params: params,
@@ -217,7 +221,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           <div className="field"><label>{isForecast ? '맞히는 방식' : '타겟 종류'}</label><select value={kind} onChange={e => setKind(e.target.value)}>{Object.entries(isForecast ? FC_KIND_LABEL : KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
           <div className="field"><label>{isForecast ? `몇 ${UNIT[targetFreq] ?? '기간'} 뒤를 맞히나 (k)` : '예측 지평 k (주기 수)'}</label><input type="number" min={1} value={k} onChange={e => setK(+e.target.value)} /></div>
           {kind === 'event' && <div className="field"><label>이벤트 임계치</label><input type="number" step="0.001" value={threshold} onChange={e => setThreshold(+e.target.value)} /></div>}
-          <div className="field"><label>데이터 버전</label><select value={dataVersion} onChange={e => setDataVersion(e.target.value)}>{meta.data_versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select></div>
+          <div className="field"><label>데이터 버전</label><select value={dataVersion} onChange={e => setDataVersion(e.target.value)}>{meta.data_versions.map(v => <option key={v.id} value={v.id}>{v.id}{v.incomplete ? ' (일부 받지 못함)' : ''}</option>)}</select></div>
         </div>
 
         {isForecast ? <div className="problem">
@@ -303,7 +307,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
         {Array.from(byGroup.entries()).map(([g, vars]) => (
           <div key={g} style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-              <strong style={{ fontSize: 13 }}>{g}</strong>
+              <strong style={{ fontSize: 13 }}>{g || '(묶음 없음)'}</strong>
               <button className="chip" onClick={() => toggleGroup(vars)}>그룹 전체</button>
             </div>
             <div className="varlist">
@@ -356,6 +360,12 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           {isForecast && <div className="field"><label>외생변수 정보 시점</label><select value={infoTime} onChange={e => setInfoTime(e.target.value as any)}><option value="stamp">대상 기준일 t (보수적)</option><option value="release">대상 값 공개 시점 t+lag (현실적)</option></select></div>}
           <div className="field"><label>검증 방식</label><select value={valMode} onChange={e => setValMode(e.target.value as any)}><option value="walkforward">워크포워드(창을 밀며 반복 재학습)</option><option value="split">1회 분할(학습·검증·테스트 날짜 지정)</option></select></div>
           <div className="field"><label>시드</label><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} /></div>
+          <div className="field"><label>연관성 높은 입력만 쓰기 <span className="hint">개수 · 비우면 전부</span></label><input value={selectTop} onChange={e => setSelectTop(e.target.value.replace(/[^0-9]/g, ''))} placeholder="비움 = 전부 사용" />
+            <span className="hint">폴드마다 학습 구간 안에서만 연관성을 재서 고릅니다(미래를 보고 고르지 않음). 비워도 연관성 순위는 결과에 나옵니다.</span></div>
+          {!isForecast && model.input_shape === 'table' && meta.tickers.length > 1 && <div className="field"><label>종목 묶어 학습 <span className="hint">다른 종목의 행을 학습에만 보탬</span></label>
+            <div>{meta.tickers.filter(t => t.id !== ticker).map(t => { const have = meta.data_versions.find(v => v.id === dataVersion)?.tickers?.includes(t.id) ?? true
+              return <label key={t.id} style={{ display: 'block', fontWeight: 'normal' }}><input type="checkbox" disabled={!have} checked={poolTickers.includes(t.id)} onChange={e => setPoolTickers(e.target.checked ? [...poolTickers, t.id] : poolTickers.filter(x => x !== t.id))} /> {t.name} ({t.id}){have ? '' : ' — 이 데이터 버전에 가격이 없습니다(데이터 가져오기 필요)'}</label> })}</div>
+            <span className="hint">예측·평가·검정은 고른 종목({ticker})의 날짜에서만 합니다. 같은 지수를 따르는 ETF(예: KODEX·TIGER 반도체)는 거의 같은 값이라 보태도 새 정보가 적습니다.</span></div>}
         </div>
         <details className="techlist">
           <summary>이 칸들은 모든 모델에 똑같이 적용됩니다 — 용어 설명 보기</summary>

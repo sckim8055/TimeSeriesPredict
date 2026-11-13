@@ -50,6 +50,7 @@ def capture(model: str = "ridge", config: str | None = None, data_root: Path | N
     var_ids, _ = reg.resolve_many(cfg.variable_ids) if cfg.variable_ids else ([], [])
     wide = dv.wide(var_ids) if var_ids else pd.DataFrame()
     variables = {vid: {"raw": wide[vid].dropna(), "lag": int(ds.lag_days_used[vid]), "transform": ds.transforms_used[vid], "freq": reg.get(vid).freq,
+                       "basis": (getattr(ds, "transform_basis", None) or {}).get(vid, "native"),  # model_period = 결정일 사이의 변화(2026-11-10), native = 원래 주기의 변화
                        "name": reg.get(vid).name, "unit": reg.get(vid).unit, "desc": describe_feature(vid if ds.transforms_used[vid] in ("", "none") else f"{vid}_{ds.transforms_used[vid]}", reg)}
                  for vid in var_ids}
     out = {"model": model, "config_file": config, "config": json.loads(cfg.model_dump_json()), "params": params, "target_type": target_type,
@@ -57,7 +58,8 @@ def capture(model: str = "ridge", config: str | None = None, data_root: Path | N
            "prices": ds.prices, "X": ds.X, "y": ds.y, "feats": feats, "desc": {c: describe_feature(c, reg) for c in feats}, "variables": variables,
            "n_folds": len(folds), "fold": {"train": list(folds[-1].train), "test": list(folds[-1].test)},
            "tr": cap["tr"], "te_valid": cap["te_valid"], "Xtr": cap["Xtr"], "ytr": cap["ytr"], "Xte": cap["Xte"], "n_tr": cap["n_tr"], "n_va": cap["n_va"],
-           "scaler_mean": cap["scaler"].mean_.copy(), "scaler_scale": cap["scaler"].scale_.copy(), "pred": cap["pred"]}
+           "scaler_mean": cap["scaler"].mean_.copy(), "scaler_scale": cap["scaler"].scale_.copy(), "pred": cap["pred"],
+           "fold_seed": (getattr(m, "diag", None) or {}).get("lgb_seed")}  # LightGBM 이 실제로 쓴 random_state — 2026-11-10 부터 엔진이 폴드 시드로 맞춘 numpy 난수에서 뽑음(그 전 기록에는 없음 = 0 고정)
     if cfg.mode == "trading":
         out["daily"] = dv.read_prices(cfg.ticker).loc[cfg.start or None:]
     if model == "ridge":

@@ -42,11 +42,36 @@ def f(v, d: int = 4) -> str:
     return f"{v:.{d}f}".rstrip("0").rstrip(".") if d else f"{v:.0f}"
 
 
+def _realign(events):
+    """기록의 줄 번호를 지금 소스에 맞춘다(2026-11-12). 기록에는 실행된 줄의 글자(code)도 들어 있으므로,
+    지금 파일의 그 줄 번호 자리 글자가 다르면(위쪽 코드가 늘거나 줄어 번호가 밀림) 같은 글자의 줄 중 가장 가까운 줄로 옮긴다.
+    같은 글자가 없으면(그 코드가 지워짐) 그대로 두고 meta['stale']=True. 값(produced)은 바꾸지 않는다."""
+    import dataclasses
+    cache: dict[str, list[str] | None] = {}
+    out = []
+    for e in events:
+        f = str(e.file).replace("\\", "/")
+        rel = next((f[f.rfind("/" + top + "/") + 1:] for top in ("models", "engine", "tools", "api", "adapters") if "/" + top + "/" in f), None)
+        if rel not in cache:
+            fp = ROOT / rel if rel else None
+            cache[rel] = fp.read_text(encoding="utf-8").split("\n") if fp and fp.exists() else None
+        lines = cache[rel]
+        if not lines or (0 < e.line <= len(lines) and lines[e.line - 1] == e.code):
+            out.append(e)
+            continue
+        hits = [i + 1 for i, s in enumerate(lines) if s == e.code]
+        if hits:
+            out.append(dataclasses.replace(e, line=min(hits, key=lambda n: abs(n - e.line))))
+        else:
+            out.append(dataclasses.replace(e, meta={**e.meta, "stale": True}))
+    return out
+
+
 class Trace:
     """실행 기록 찾기. 기록은 tools/codewalk/trace.py 의 Event 목록."""
 
     def __init__(self, events):
-        self.ev = events
+        self.ev = _realign(events)
 
     def find(self, file: str | None = None, contains: str | None = None, func: str | None = None, call: bool | None = None, **meta):
         out = []

@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 import engine.calendar as cal
-from engine.experiment import ExperimentConfig, _code_version, _embargo, pinned_model_params, prepare, sealed_folds
+from engine.experiment import ExperimentConfig, _code_version, _embargo, pinned_model_params, prepare, seal_cut, sealed_folds
 
 CRITERIA = ("사전 등록 성공 기준(docs/DECISIONS.md 2026-11-03): 워크포워드에서 DM(vs 0예측) p<0.05 그리고 봉인 구간에서 방향 일치 "
             "그리고 Deflated Sharpe p<0.05 — 셋 다 통과해야 '신호 있음'. '방향 일치'를 어떤 지표의 부호로 볼지는 기준 문장에 정해져 있지 않으므로, "
@@ -38,9 +38,9 @@ def plan(cfg_dict: dict, dv, reg) -> dict:
     cfg, plugin, params, _, ds = prepare(cfg, dv, reg)
     k = cfg.target.k
     v = cfg.validation
-    sf = pd.Timestamp(v.sealed_from)
     calendar_all = cal.trading_calendar(ds.prices)
-    out = {"sealed_from": v.sealed_from, "data_end": str(calendar_all[-1].date()), "data_start": str(calendar_all[0].date()),
+    sf = seal_cut(cfg, calendar_all, k)  # 첫 봉인 결정일(실행과 같은 경계)
+    out = {"sealed_from": v.sealed_from, "first_sealed_decision": str(sf.date()) if sf is not None else None, "data_end": str(calendar_all[-1].date()), "data_start": str(calendar_all[0].date()),
            "mode": v.mode, "train_len": v.train_len, "test_len": v.test_len, "embargo": _embargo(cfg, k), "k": k,
            "params_now": params, "input_shape": plugin.INPUT_SHAPE}
     if plugin.INPUT_SHAPE == "rule":
@@ -66,7 +66,38 @@ def history(log: list[dict], cfg_hash: str, sealed_from: str | None) -> dict:
     return {"same_config": same, "same_seal_date": seal, "total": len(live), "failed": len(log) - len(live)}
 
 
-def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: str | None) -> dict:
+def seal_exposures(res_dir: str | Path | None, cfg_dict: dict) -> list[dict]:
+    """같은 대상의 '개발' 결과 가운데 봉인 구간(봉인 시작일 이후의 결정일)을 이미 채점한 것들. 지금 폴더와 history/ 를 모두 본다.
+    봉인 평가 기록(sealed_log)에는 봉인 모드로 연 것만 남는다 — 봉인 시작일을 비우고 돌린 보통 실험, 봉인 정책을 일부러 넘긴 실험은 여기서 찾는다(독립 검토 F8)."""
+    sf = (cfg_dict.get("validation") or {}).get("sealed_from")
+    if not res_dir or not sf:
+        return []
+    d = Path(res_dir)
+    mode = cfg_dict.get("mode", "trading")
+    from engine.sealpolicy import base_ticker
+    tgt = cfg_dict.get("target_variable") if mode == "forecast" else base_ticker(cfg_dict.get("ticker"))
+    out = []
+    files = list(d.glob("*.json")) + (list((d / "history").glob("*.json")) if (d / "history").exists() else [])
+    for p in sorted(files):
+        if p.name in ("experiment_counter.json", "sealed_log.json") or p.name.startswith("ablation_"):
+            continue
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+            c = r["config"]
+        except Exception:  # noqa: BLE001
+            continue
+        if r.get("sealed_evaluation") or c.get("mode", "trading") != mode or (c.get("target_variable") if mode == "forecast" else base_ticker(c.get("ticker"))) != tgt:
+            continue
+        # 평가 구간 기록이 없는 옛 매매 결과는 성과를 자료 전체(period)로 계산했다(봉인 구간은 현금으로 두고 보유 전략과 비교) → 자료 끝까지 채점한 것으로 본다
+        ev = r.get("evaluation_period") or (r.get("period") if mode == "trading" else None) or r.get("prediction_period")
+        if ev and str(ev[1])[:10] >= str(sf)[:10]:
+            out.append({"result": p.stem, "where": "history" if p.parent.name == "history" else "results", "evaluated_to": str(ev[1])[:10],
+                        "sealed_from_in_config": (c.get("validation") or {}).get("sealed_from"),
+                        "override_reason": (r.get("seal_policy") or {}).get("reason")})
+    return out
+
+
+def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: str | None, res_dir: str | Path | None = None) -> dict:
     """봉인 평가 미리보기. blockers 가 있으면 실행하지 않는다."""
     blockers, warnings = [], []
     if "error" in r:
@@ -83,6 +114,17 @@ def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: s
     except Exception as e:  # noqa: BLE001
         blockers.append(f"설정을 지금 코드로 읽을 수 없습니다: {e}")
         h = r.get("config_hash")
+    if not blockers:
+        try:  # 봉인 정책(대상별 봉인 시작일)과 맞는지 — 실행과 같은 함수
+            from engine import sealpolicy
+            sealpolicy.apply(ExperimentConfig(**cfg_dict), sealed=True)
+        except ValueError as e:
+            blockers.append(str(e))
+    exposures = seal_exposures(res_dir, cfg_dict)
+    if exposures:
+        ex = ", ".join(f"{x['result']}(~{x['evaluated_to']})" for x in exposures[:3])
+        warnings.append(f"이 대상의 봉인 구간({sf} 이후)을 이미 채점한 개발 결과가 {len(exposures)}건 있습니다(예: {ex}). 그 결과를 본 뒤라면 봉인 구간은 "
+                        "'한 번도 보지 않은 기간'이 아닙니다 — 봉인 결과를 보고할 때 이 사실을 함께 적어야 합니다")
     pl = None
     if not blockers:
         try:
@@ -129,7 +171,7 @@ def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: s
     if pl is not None and r.get("seconds") and r.get("n_folds"):
         est = round(float(r["seconds"]) * max(pl["n_folds"], 1) / max(int(r["n_folds"]), 1), 1)
     return {"stem": stem, "config": cfg_dict, "config_hash": h, "plan": pl, "history": hist, "warnings": warnings, "blockers": blockers,
-            "criteria": CRITERIA, "estimate_seconds": est, "code_version_now": cv_now, "code_version_result": cv_r,
+            "criteria": CRITERIA, "estimate_seconds": est, "code_version_now": cv_now, "code_version_result": cv_r, "exposures": exposures,
             "dev": {"evaluation_period": r.get("evaluation_period") or r.get("prediction_period"), "n_folds": r.get("n_folds"),
                     "prediction_metrics": r.get("prediction_metrics") or {}, "performance": r.get("performance") or {},
                     "periods": (r.get("periods") or {}).get("test"), "data_version": dvv, "model": r["model"], "mode": r["config"].get("mode", "trading")}}

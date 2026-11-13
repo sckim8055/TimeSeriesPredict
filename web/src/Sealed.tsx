@@ -142,9 +142,12 @@ export function SealedLog({ mode }: { mode: Mode }) {
   const [log, setLog] = useState<any[] | null>(null)
   useEffect(() => { api.sealedLog(mode).then(setLog).catch(() => setLog([])) }, [mode])
   if (!log) return null
-  return <details className="panel sealed-log"><summary><b>봉인 기록</b> — 지금까지 {log.length}회 열었습니다 (지울 수 없음 · {mode === 'forecast' ? '예측 연구' : '매매'})</summary>
+  // 실패한 시도(봉인 수치를 보기 전에 오류로 멈춘 것)는 개봉으로 세지 않는다. 시작만 하고 끝나지 않은 것(실행 중·강제 종료)은 센다 — 엔진의 규칙(engine/sealed.history)과 같다
+  const opened = log.filter(e => (e.status ?? 'done') !== 'failed')
+  const stTxt = (e: any) => ({ done: '끝남', started: '끝나지 않음(실행 중이거나 강제 종료 — 개봉으로 셈)', failed: '실패(수치를 보기 전에 멈춤 — 세지 않음)' } as any)[e.status ?? 'done'] ?? e.status
+  return <details className="panel sealed-log"><summary><b>봉인 기록</b> — 지금까지 {opened.length}회 열었습니다{log.length > opened.length ? ` (실패한 시도 ${log.length - opened.length}건은 세지 않음)` : ''} (지울 수 없음 · {mode === 'forecast' ? '예측 연구' : '매매'})</summary>
     {log.length === 0 ? <p className="hint">아직 연 적이 없습니다. 결과 하나를 골라 상세 화면 아래 '봉인 평가'에서 엽니다.</p> :
-      <table><thead><tr><th>#</th><th>연 시각(UTC)</th><th>설정</th><th>모델</th><th>봉인 시작</th><th>봉인 결과</th><th>후보</th><th>사전 기록</th></tr></thead>
-        <tbody>{log.map((e, i) => <tr key={i}><td>{i + 1}</td><td>{T(e.when)}</td><td>{e.config} <span className="hint">{e.hash}</span></td><td>{e.model ?? ''}</td><td>{e.sealed_from ?? ''}</td><td>{e.result ?? ''}</td><td>{e.source_result ?? ''}</td><td style={{ maxWidth: 320, whiteSpace: 'pre-wrap' }}>{e.note ?? ''}</td></tr>)}</tbody></table>}
+      <table><thead><tr><th>#</th><th>연 시각(UTC)</th><th>상태</th><th>설정</th><th>모델</th><th>봉인 시작</th><th>봉인 결과</th><th>후보</th><th>사전 기록</th></tr></thead>
+        <tbody>{log.map((e, i) => <tr key={i}><td>{i + 1}</td><td>{T(e.when)}</td><td>{stTxt(e)}</td><td>{e.config} <span className="hint">{e.hash}</span></td><td>{e.model ?? ''}</td><td>{e.sealed_from ?? ''}</td><td>{e.result ?? ''}</td><td>{e.source_result ?? ''}</td><td style={{ maxWidth: 320, whiteSpace: 'pre-wrap' }}>{e.note ?? ''}</td></tr>)}</tbody></table>}
   </details>
 }

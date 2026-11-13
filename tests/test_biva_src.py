@@ -1,7 +1,7 @@
 """BIVA 원본 충실도 시험 (2026-11-06).
 
 1. 사본(models/biva_src)의 모든 변경에 [TSP 수정] 표시가 있는가(표시 없는 수정 금지).
-2. 속도용으로 바꾼 delta_calc 가 원본 delta_calc 와 값이 완전히 같은가.
+2. delta_calc 가 원본 글자 그대로인가(속도용 수정은 2026-11-12 되돌림).
 3. 원본 모듈(수정 없는 파일)과 사본이 같은 가중치·같은 난수에서 같은 출력을 내는가 — 빈 칸 포함 입력.
    원본은 불러올 때 os.chdir('D:...') 와 .cuda() 를 하므로, 시험 안에서만 그 두 호출을 무력화해 불러온다(파일은 그대로).
 4. 감싸개(models/biva.py)의 학습 규칙: 학습률 일정(lradj=3)·조기종료·use_brits 끄기·NaN 처리.
@@ -58,14 +58,14 @@ def test_every_change_to_original_is_marked():
     assert check(OD) == []
 
 
-def test_fast_delta_equals_original_delta():
+@needs_orig
+def test_delta_calc_is_the_original_code():
+    """2026-11-12 사용자 결정으로 속도용 수정(#6)을 되돌렸다 — 사본의 delta_calc 는 원본 함수 글자 그대로."""
+    import inspect
     from models.biva_src import BIVA_RITS
-    r = BIVA_RITS.Model(SimpleNamespace(seq_len=6, channels=34, rnn_hid_size=8, imputed_weight=0.05))
-    g = torch.Generator().manual_seed(1)
-    for trial in range(200):
-        B, T, D = (3, 6, 34) if trial % 2 else tuple(int(x) for x in torch.randint(1, 8, (3,), generator=g))
-        m = (torch.rand(B, T, D, generator=g) > float(torch.rand(1, generator=g))).float()
-        assert torch.equal(r.delta_calc(m), r.delta_calc_orig(m))
+    src = (OD / "BIVA_RITS.py").read_text(encoding="utf-8")
+    want = src[src.index("    def delta_calc(self, masks):"):src.index("    def forward(self, data, direct):")].rstrip()
+    assert inspect.getsource(BIVA_RITS.Model.delta_calc).rstrip() == want and not hasattr(BIVA_RITS.Model, "delta_calc_orig")
 
 
 @needs_orig

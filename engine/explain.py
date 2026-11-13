@@ -22,6 +22,7 @@ TARGET_TEXT = {
     "logreturn": "ln(P[t+1+k] ÷ P[t+1]) (P = 시가)",
     "direction": "1 이면 r > 0(올랐음), 0 이면 아님. r = P[t+1+k] ÷ P[t+1] − 1",
     "event": "1 이면 r > 문턱, 0 이면 아님. r = P[t+1+k] ÷ P[t+1] − 1",
+    "volatility": "그 뒤 k 기간의 실현 변동성 = √( (1/k)·Σ (ln(C[t+j] ÷ C[t+j−1]))² ), j = 1…k (C = 종가)",
 }
 FC_TARGET_TEXT = {
     "return": "v[t+k] ÷ v[t] − 1 (v = 예측 대상의 값)",
@@ -73,6 +74,16 @@ def _explain(cfg_dict: dict, dv, reg, *, date: str | None = None, epochs: int | 
         set_epochs = (dict(cfg_dict.get("model_params") or {}).get(ep_key), int(epochs))
         cfg_dict["model_params"] = {**(cfg_dict.get("model_params") or {}), ep_key: int(epochs)}
     cfg = ExperimentConfig(**cfg_dict)
+    # 봉인 정책: 계산 따라가기도 개발 구간의 폴드만 보여 준다(봉인 시작일이 비어 있는 설정이면 정책 날짜를 채운다) — 실험 실행과 같은 규칙
+    from engine import sealpolicy
+    cfg, _seal_note = sealpolicy.apply(cfg, sealed=False)
+    if cfg.pool_tickers:
+        raise ValueError("종목 묶어 학습(pool_tickers)을 쓴 실험은 계산 따라가기를 아직 지원하지 않습니다")
+    if cfg.select_top:
+        raise ValueError("입력 선별(select_top)을 쓴 실험은 계산 따라가기를 아직 지원하지 않습니다 — 폴드마다 쓰는 입력이 달라 화면이 그것을 보여 주지 못합니다")
+    n_seeds_cfg = int(cfg.n_seeds)
+    if n_seeds_cfg > 1:
+        cfg = cfg.model_copy(update={"n_seeds": 1})  # 계산 따라가기는 모델 하나의 계산을 보여 준다 → 첫 번째 시드(반복 0)만
     cfg, plugin, params, target_type, ds = prepare(cfg, dv, reg, device="cpu")
     k = cfg.target.k
     out: dict = {"model": cfg.model, "name": plugin.NAME, "input_shape": plugin.INPUT_SHAPE, "params": params, "target_type": target_type,
@@ -81,6 +92,9 @@ def _explain(cfg_dict: dict, dv, reg, *, date: str | None = None, epochs: int | 
     out["target"] = {"kind": tk, "k": k, "text": (FC_TARGET_TEXT if cfg.mode == "forecast" else TARGET_TEXT).get(tk, tk),
                      "variable": cfg.target_variable if cfg.mode == "forecast" else cfg.ticker}
     out["_y"] = ds.y
+    if n_seeds_cfg > 1 and bool(getattr(plugin.Model, "STOCHASTIC", False)):
+        out["notes"].append(f"이 실험은 시드 {n_seeds_cfg}개로 학습해 예측을 평균합니다. 여기서는 그중 첫 번째 시드의 모델 하나만 따라갑니다 — "
+                            "계산 방법은 같고, 숫자는 실험 결과(평균)와 조금 다릅니다.")
     if set_epochs:
         out["explain_epochs"] = set_epochs[1]
         out["notes"].append(f"계산 따라가기용으로 학습 반복을 {set_epochs[1]}회로 바꿔 돌렸습니다(실험 설정 {set_epochs[0] if set_epochs[0] is not None else '기본값 ' + str(plugin.PARAMS[ep_key].get('default'))}회). "
@@ -843,7 +857,7 @@ def _rits_np(rits, x, imputed_weight):
     L = x.shape[0]
     m = (~np.isnan(x)).astype(np.float64)
     x0 = np.nan_to_num(x)
-    # δ: 원본 delta_calc_orig 규칙 그대로(이웃 변수 열 d−1 을 참조 — 원본 코드의 특성, d=0 이면 파이썬 음수 색인으로 마지막 열)
+    # δ: 원본 delta_calc 규칙 그대로(이웃 변수 열 d−1 을 참조 — 원본 코드의 특성, d=0 이면 파이썬 음수 색인으로 마지막 열)
     delta = np.zeros((L, K))
     for t in range(L):
         for d in range(K):

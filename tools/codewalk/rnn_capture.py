@@ -28,10 +28,10 @@ from engine.store import DataVersion  # noqa: E402
 from tools.codewalk.trace import LineTracer  # noqa: E402
 
 
-def capture(model: str = "lstm", config: str = "configs/f11_lstm_macro_k1.json", data_root: Path | None = None, epochs: int | None = None, replay: bool = True) -> dict:
-    """replay=True: 마지막 폴드 앞의 폴드들을 먼저 그대로 돌려(기록 없이) 난수 상태를 실제 실험과 같게 만든 뒤 마지막 폴드를 기록한다.
-    엔진은 시드를 실험 시작에 한 번만 고정하므로, 마지막 폴드의 가중치 초기값·섞는 순서는 앞 폴드들이 쓴 난수 뒤의 값이다 —
-    replay 없이 마지막 폴드만 새 시드로 돌리면 결과 파일과 다른 값이 나온다(2026-11-07 확인)."""
+def capture(model: str = "lstm", config: str = "configs/f11_lstm_macro_k1.json", data_root: Path | None = None, epochs: int | None = None, replay: bool = False) -> dict:
+    """마지막 폴드 하나를 기록한다. 2026-11-10 부터 엔진이 폴드마다 시드를 그 폴드의 날짜로 정하므로(engine.experiment.fold_seed) 마지막 폴드만 돌려도
+    실제 실험과 같은 값이 나온다 → replay 는 기본 꺼짐. (그 전에는 시드를 실험 시작에 한 번만 고정해, 앞 폴드들을 먼저 그대로 돌려 난수 상태를 맞춰야 했다.
+    replay=True 는 그 옛 방식 — 지금 엔진에서는 결과가 같고 시간만 더 든다.)"""
     import importlib
     data_root = data_root or ROOT / "data"
     raw_cfg = json.loads((ROOT / config).read_text(encoding="utf-8"))
@@ -98,8 +98,7 @@ def capture(model: str = "lstm", config: str = "configs/f11_lstm_macro_k1.json",
         return orig_init(self, X, y, X_val, y_val)
 
     torch.randperm, torch.nn.utils.clip_grad_norm_, torch.optim.Adam, MM.Model.fit = randperm, clip, RecAdam, fit
-    if not n_replayed:
-        torch.manual_seed(cfg.seed)
+    # (2026-11-10) 엔진이 폴드 학습 직전에 폴드 시드로 난수를 다시 맞추므로 여기서 따로 고정하지 않는다
     cap: dict = {}
     try:
         _walkforward_predict(cfg, plugin, params, ds, "cpu", [fold], k, target_type, capture=cap)
@@ -163,7 +162,7 @@ def capture(model: str = "lstm", config: str = "configs/f11_lstm_macro_k1.json",
                     "window_dates": [str(d.date()) for d in cap["te_full"].index[i_dec:i_dec + L]]},
         "net_state": {k_: v.detach().clone() for k_, v in net.state_dict().items()},
         "n_params": int(sum(p_.numel() for p_ in net.parameters())),
-        "n_replayed": n_replayed, "torch_threads": int(torch.get_num_threads()),
+        "n_replayed": n_replayed, "fold_seed": __import__("engine.experiment", fromlist=["fold_seed"]).fold_seed(cfg.seed, fold.test[0], 0), "torch_threads": int(torch.get_num_threads()),
     }
 
 

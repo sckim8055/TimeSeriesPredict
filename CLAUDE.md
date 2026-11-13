@@ -23,6 +23,15 @@
 - 변수 사전 설명: `registry.csv` 는 파생물 — 고치지 말 것. 열 의미는 엑셀 "설명" 시트와 `docs/DECISIONS.md`(2026-11-03). `duplicate_of` 와 `active` 는 분리된 2열, 합치지 않는다. 실험 규칙(2026-11-09 사용자 확정): duplicate_of 있음 → 대표로 치환(자기 active 무관), 없음+Y → 포함, 없음+N(또는 대표가 N) → 빼고 run_record 에 기록, 모두 빠지면 오류.
 - 실행 기록(2026-11-09 사용자 요구 "모든 작업은 이력"): 결과 json `run_record`, `results/<mode>/run_log.jsonl`(추가만), 같은 이름 결과는 `history/` 로 보관(덮어쓰지 않음), 변수 사전 사본 `data/master_history/`. 이 기록을 빼거나 덮어쓰는 수정 금지. `transform` 열 = 기본 변환(설정이 우선), `lag_days` 는 2026-11-04 현재 전부 AI 추정값(근거는 `note`)이며 확인 전까지 `lag_confirmed=N` 을 지운다거나 Y 로 바꾸지 말 것.
 
+## 봉인 정책·검정(2026-11-10)
+- 대상별 봉인 시작일은 `seal_policy.json`(프로젝트 폴더 바로 아래) 한 곳. 모든 실행이 지킨다(`engine/sealpolicy.py`) — 날짜를 바꾸거나 `--past-seal` 로 넘길 때는 DECISIONS 에 이유.
+- '예측 정보가 있는가'는 **학습 창 평균 기준 Clark–West**(`cw_vs_mean`). 0 기준 CW 는 평균만 맞혀도 유의해지므로 그 근거로 쓰지 않는다. Holm 가족·한쪽 p 는 `engine/multitest.py` 한 곳.
+- 엔진 계산이 바뀌면 `ENGINE_REV` 를 올리고 그 줄 위 주석에 무엇이 바뀌었는지 적는다(옛 결과는 자동으로 '옛 방식').
+
+## 접속 키·새 기능(2026-11-12)
+- 접속 키는 `.env` 에만. 화면에서 받지 않는다. **오류 문구를 화면·로그·manifest 에 쓸 때는 `adapters.base.scrub_secrets` 를 거친다**(통신 오류 문구의 요청 주소에 키가 들어 있다).
+- 새 기능은 시험을 먼저 쓴다(실패 확인 → 구현 → 통과). 변수 선택·순위는 폴드의 학습 행만으로(`fold_relevance`). 변동성 타겟은 통과 기준이 정해질 때까지 봉인 평가를 막아 둔다.
+
 ## 문서
 - 사용자 가이드 원본은 `docs/guide/*.md`(8편). 파라미터·변수 표는 자리표시자로 두고 `tools/build_guide.py` 가 코드에서 채운다 — 표를 손으로 쓰지 말 것. 코드(PARAMS·PRESETS·마스터)를 바꾸면 가이드가 자동으로 따라오지만, 수치·사례·설명 문장은 사람이 고친다.
 
@@ -31,6 +40,7 @@
    날짜·시프트·리샘플·fill 연산은 `engine/calendar.py` 한 곳에서만 한다.
 2. **스케일링·변수선택은 학습 구간 데이터만으로 fit**. 검증·테스트 구간은 transform만.
 3. **모델 파일은 텐서만 받고 텐서만 돌려준다.** 날짜·변수명·가격·경로·장치·시드를 모델 파일이 알지 못하게 한다.
+   시드(2026-11-10): 엔진이 폴드마다·반복마다 전역 난수(random·numpy·torch)를 `fold_seed`(실험 시드 | 폴드 첫 테스트 결정일 | 반복 번호)로 맞춘 뒤 모델을 만든다. 모델은 시드 값을 정하지 않는다 — 자체 난수기를 쓰는 라이브러리(LightGBM)는 그 numpy 전역 난수에서 하나 뽑아 쓴다. 난수를 쓰는 모델은 `STOCHASTIC = True` 를 선언한다(`n_seeds` 대상).
 4. **모델 1개 = `models/` 파일 1개.** 파라미터는 파일 안 `PARAMS` 선언으로 모델별로 받는다. 하드코딩 금지. 기본값이 주기에 따라 달라야 하면 `default_by_freq: {D,W,M}` 로 선언한다(`resolve_params` 가 처리).
 5. **의존 방향**: `api → engine → models / adapters`. 모델·어댑터는 엔진을 import하지 않는다.
 6. 새 모델은 `tests/`의 합성 데이터 테스트 2개(누출 검사, 사인파 기준선)를 통과해야 등록된다.
@@ -39,9 +49,10 @@
 9. 실전(당일·미래) 매매 신호는 운영자 전용 화면에만. 공개 화면은 과거 백테스트 비교까지만.
 10. 원본 연구 코드(`D:\test\SVU_SCT_FIN-main`)는 **수정하지 않는다**. 복사본만 `legacy/`에 둔다.
 
-## 기술 스택 (확정)
-Python 3.13 · FastAPI · RQ+Redis · PostgreSQL · Parquet · PyTorch(CUDA) · LightGBM · statsmodels ·
-React+TypeScript · TradingView Lightweight Charts · ECharts · Docker Compose · (공개 시) Cloudflare Tunnel
+## 기술 스택 (지금 실제로 쓰는 것)
+Python 3.13 · FastAPI · 파일 기반 작업 큐(`api/jobs.py`, 하나씩) · Parquet(데이터 버전) · JSON(결과·원장) · PyTorch(CUDA) · LightGBM · statsmodels ·
+React+TypeScript · TradingView Lightweight Charts · ECharts.
+**데이터베이스(PostgreSQL)·Redis·Docker 는 쓰지 않는다**(DECISIONS 98행 '본인용 1단계' — 설치·운영 부담 대비 이득 없음, 사용자 확인). 공개 서비스로 갈 때 다시 정한다. 새로 넣지 말 것.
 
 ## 폴더 구조
 ```

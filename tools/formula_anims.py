@@ -658,7 +658,7 @@ BRITS = {"x": [[0.2, float("nan")], [0.3, 0.5], [float("nan"), 0.4], [float("nan
 
 
 def compute_brits():
-    """원본 BIVA_BRITS(두 방향 RITS) 를 학습 전 가중치(시드 0)로 그대로 돌린 값. δ 는 원본 규칙(delta_calc = delta_calc_orig)."""
+    """원본 BIVA_BRITS(두 방향 RITS) 를 학습 전 가중치(시드 0)로 그대로 돌린 값. δ 는 원본 delta_calc 그대로."""
     import torch
 
     from models.biva_src import BIVA_BRITS

@@ -10,7 +10,8 @@
   2. 평가 구간의 (예측, 실제)로 DM(0예측 대비)을 다시 계산해 저장된 값과 맞는지 본다 — 맞지 않으면 그 줄에 '불일치'를 적는다(이 도구가 엔진과 같은 표본을 쓰는지의 자기 점검).
   3. Clark–West(0예측 대비)를 계산한다.
   4. 매매 모드: 원장의 개발 시도 수 N 하나, 지금 엔진 결과들의 샤프 분산 V 하나(주기별)로 Deflated Sharpe 를 다시 계산한다.
-  5. 예측 모드: naive 대비 DM p 를 '같은 문제(대상·k·맞히는 방식·정보 시점·평가 구간)'의 지금 엔진 결과끼리 Holm 보정한다.
+  5. Holm 보정(engine/multitest.py): 예측 모드는 'naive 보다 낫다'의 한쪽 p, 두 모드 모두 CW(평균 기준·0 기준)의 한쪽 p.
+     가족 = 같은 대상·주기·k·타겟 종류(·정보 시점)의 지금 엔진 결과. 모드 전체를 한 가족으로 본 값도 같이 낸다(가족 정의에 대한 민감도).
   6. results/restat/restat_<UTC>.json · .md 로 저장한다(원 결과는 그대로).
 
 쓰기:  python tools/restat.py            (두 모드 모두)
@@ -34,7 +35,8 @@ sys.path.insert(0, str(ROOT))
 
 from engine import ledger  # noqa: E402
 from engine.backtest import clark_west, deflated_sharpe_pvalue, diebold_mariano, diebold_mariano_brier  # noqa: E402
-from engine.experiment import ENGINE_REV  # noqa: E402
+from engine.experiment import ENGINE_REV, mean_benchmark_metrics  # noqa: E402
+from engine.multitest import better_one_sided, holm  # noqa: E402
 
 PPY = {"D": 252, "W": 52, "M": 12}
 SKIP = ("experiment_counter.json", "sealed_log.json")
@@ -67,14 +69,18 @@ def _eval_rows(p: Path, r: dict) -> pd.DataFrame | None:
     return d.dropna(subset=["prediction", "target"])
 
 
+def _is_stale(r: dict) -> bool:
+    return r.get("engine_rev") != ENGINE_REV
+
+
 def _row(p: Path, r: dict) -> dict:
     c, pm, pf = r["config"], r.get("prediction_metrics") or {}, r.get("performance") or {}
     k = int((c.get("target") or {}).get("k", 1))
     cls = (c.get("target") or {}).get("kind") in ("direction", "event")
-    row = {"file": p.stem, "name": c.get("name") or r["model"]["file"], "model": r["model"]["file"], "mode": c.get("mode", "trading"),
+    row = {"file": p.stem, "name": c.get("name") or r["model"]["file"], "model": r["model"]["file"], "mode": c.get("mode", "trading"), "ticker": c.get("ticker"),
            "frequency": c.get("frequency"), "k": k, "target_kind": (c.get("target") or {}).get("kind"), "target_variable": c.get("target_variable"),
            "info_time": c.get("forecast_info_time", "stamp"),
-           "engine_rev": r.get("engine_rev"), "stale": r.get("engine_rev") != ENGINE_REV, "code_version": r.get("code_version"),
+           "engine_rev": r.get("engine_rev"), "stale": _is_stale(r), "code_version": r.get("code_version"),
            "evaluation_period": r.get("evaluation_period") or r.get("prediction_period"),
            "sealed_inclusive": c.get("mode", "trading") != "forecast" and not r.get("evaluation_period"),
            "dir_acc": pm.get("dir_acc"), "dm_vs_zero_stored": pm.get("dm_vs_zero"), "dm_vs_zero_p_stored": pm.get("dm_vs_zero_p"),
@@ -95,25 +101,15 @@ def _row(p: Path, r: dict) -> dict:
         cw, cw_p = clark_west(y, f, 0.0, h=k)
     row.update(n_eval=int(len(ev)), dm_vs_zero=dm, dm_vs_zero_p=dm_p, cw_vs_zero=cw, cw_vs_zero_p=cw_p,
                dm_matches_stored=bool(np.isclose(dm, pm["dm_vs_zero"], rtol=1e-6, atol=1e-9)))
+    # 학습 창 평균 기준(변수의 정보를 말할 때 쓰는 검정). 일별 자료에 기준 열(bench_mean)이 있는 결과만 — 2026-11-10 전 결과에는 없어 다시 돌려야 한다.
+    if "bench_mean" in ev:
+        row.update(mean_benchmark_metrics(y, f, ev["bench_mean"].to_numpy(float), k))
+    else:
+        row["note_mean"] = "학습 창 평균 기준 없음(2026-11-10 전 결과) — CW(평균 기준)는 다시 돌려야 나옴"
+    row["dm_vs_naive_p_better"] = better_one_sided(row.get("dm_vs_naive"), row.get("dm_vs_naive_p"))  # 'naive 보다 낫다'의 한쪽 p
     if not row["dm_matches_stored"]:
         row["note"] = "DM 재계산이 저장값과 다름 — 이 줄의 CW 는 엔진과 다른 표본일 수 있음(확인 필요)"
     return row
-
-
-def _holm(rows: list[dict], pkey: str, out: str) -> None:
-    fam: dict[tuple, list[dict]] = {}
-    for r in rows:
-        if r.get("stale") or r.get(pkey) is None or not np.isfinite(r[pkey]):
-            continue
-        key = (r.get("target_variable"), r.get("k"), r.get("target_kind"), r.get("info_time"), tuple(r.get("evaluation_period") or []))
-        fam.setdefault(key, []).append(r)
-    for members in fam.values():
-        m = len(members)
-        members.sort(key=lambda r: r[pkey])
-        run = 0.0
-        for i, r in enumerate(members):
-            run = max(run, min(1.0, (m - i) * r[pkey]))
-            r[out], r[out + "_m"] = run, m
 
 
 def restat(mode: str, results_root: Path) -> dict:
@@ -136,12 +132,30 @@ def restat(mode: str, results_root: Path) -> dict:
             r["deflated_p_unified"] = deflated_sharpe_pvalue(r["sharpe"], int(r["n_periods"]), max(1, n_trials),
                                                              skew=r.get("return_skew") or 0.0, kurt=r.get("return_kurt") or 3.0,
                                                              periods_per_year=ppy, trial_sr_var=v_by.get(r["frequency"]))
-            r["deflated_basis"] = {"n_trials": n_trials, "trial_sr_var": v_by.get(r["frequency"])}
+            # 표시(F14): V 가 없어 근사(1/(n−1))로 떨어졌는지, 왜도·첨도가 저장돼 있지 않아 정규 가정(0·3)을 썼는지
+            r["deflated_basis"] = {"n_trials": n_trials, "trial_sr_var": v_by.get(r["frequency"]), "v_fallback": v_by.get(r["frequency"]) is None,
+                                   "moments_assumed": r.get("return_skew") is None or r.get("return_kurt") is None}
     else:
-        _holm(rows, "dm_vs_naive_p", "holm_dm_naive_p")
-    _holm(rows, "cw_vs_zero_p", "holm_cw_zero_p")
+        holm(rows, "dm_vs_naive_p_better", "holm_dm_naive_p", skip=lambda r: r.get("stale"))
+    holm(rows, "cw_vs_zero_p", "holm_cw_zero_p", skip=lambda r: r.get("stale"))
+    holm(rows, "cw_vs_mean_p", "holm_cw_mean_p", skip=lambda r: r.get("stale"))
     info["dm_recalc_mismatch"] = [r["file"] for r in rows if r.get("dm_matches_stored") is False]
     return {"info": info, "rows": rows}
+
+
+def _h(r: dict, key: str) -> str:
+    if r.get(key) is None:
+        return "—"
+    return f"{_fmt(r[key])} ({r.get(key + '_m')}) · {_fmt(r.get(key + '_all'))} ({r.get(key + '_all_m')})"
+
+
+def _dir(dm) -> str:
+    return "—" if dm is None or not np.isfinite(dm) else ("나음" if dm < 0 else "나쁨")
+
+
+def _dsr_mark(r: dict) -> str:
+    b = r.get("deflated_basis") or {}
+    return ("†" if b.get("v_fallback") else "") + ("‡" if b.get("moments_assumed") else "")
 
 
 def _fmt(x, nd=3):
@@ -156,21 +170,24 @@ def to_markdown(res: dict) -> str:
          f"- DM 재계산이 저장값과 다른 결과: {i['dm_recalc_mismatch'] or '없음'}", ""]
     if i["mode"] == "trading":
         L += [f"- 샤프 분산 V(주기별, 지금 엔진 결과만): {i['trial_sr_var_by_frequency']}", "",
-              "| 결과 | 주기 | 옛 방식 | 방향 적중 | DM vs 0 (p) | CW vs 0 (한쪽 p) | CW Holm p (m) | 샤프 | 초과수익 p | DSR p(저장, 당시 N) | DSR p(통일 N·V) |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+              "| 결과 | 주기 | 옛 방식 | 방향 적중 | DM vs 0 (p) | CW vs 평균 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | CW vs 0 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | 샤프 | 초과수익 p | DSR p(저장, 당시 N) | DSR p(통일 N·V) |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in rows:
             L.append(f"| {r['name']} | {r['frequency']} | {'봉인 섞임' if r['sealed_inclusive'] else ('예' if r['stale'] else '')} | {_fmt(r.get('dir_acc'))} | "
-                     f"{_fmt(r.get('dm_vs_zero'), 2)} ({_fmt(r.get('dm_vs_zero_p'))}) | {_fmt(r.get('cw_vs_zero'), 2)} ({_fmt(r.get('cw_vs_zero_p'))}) | "
-                     f"{_fmt(r.get('holm_cw_zero_p'))} ({r.get('holm_cw_zero_p_m', '—')}) | {_fmt(r.get('sharpe'), 2)} | {_fmt(r.get('bootstrap_p_excess'))} | "
-                     f"{_fmt(r.get('deflated_p_stored'))} (N={r.get('n_trials_stored')}) | {_fmt(r.get('deflated_p_unified'))} |")
+                     f"{_fmt(r.get('dm_vs_zero'), 2)} ({_fmt(r.get('dm_vs_zero_p'))}) | {_fmt(r.get('cw_vs_mean'), 2)} ({_fmt(r.get('cw_vs_mean_p'))}) | {_h(r, 'holm_cw_mean_p')} | "
+                     f"{_fmt(r.get('cw_vs_zero'), 2)} ({_fmt(r.get('cw_vs_zero_p'))}) | {_h(r, 'holm_cw_zero_p')} | {_fmt(r.get('sharpe'), 2)} | {_fmt(r.get('bootstrap_p_excess'))} | "
+                     f"{_fmt(r.get('deflated_p_stored'))} (N={r.get('n_trials_stored')}) | {_fmt(r.get('deflated_p_unified'))}{_dsr_mark(r)} |")
     else:
-        L += ["| 결과 | 대상 | k | 옛 방식 | 방향 적중 | DM vs naive (p) | Holm p (m) | DM vs 0 (p) | CW vs 0 (한쪽 p) | CW Holm p (m) |", "|---|---|---|---|---|---|---|---|---|---|"]
+        L += ["| 결과 | 대상 | k | 옛 방식 | 방향 적중 | DM vs naive (양측 p) | 방향 | 'naive 보다 낫다' 한쪽 p | Holm p 가족 (m) · 전체 (m) | CW vs 평균 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | CW vs 0 (한쪽 p) |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in rows:
             L.append(f"| {r['name']} | {r.get('target_variable')} | {r['k']} | {'예' if r['stale'] else ''} | {_fmt(r.get('dir_acc'))} | "
-                     f"{_fmt(r.get('dm_vs_naive'), 2)} ({_fmt(r.get('dm_vs_naive_p'))}) | {_fmt(r.get('holm_dm_naive_p'))} ({r.get('holm_dm_naive_p_m', '—')}) | "
-                     f"{_fmt(r.get('dm_vs_zero'), 2)} ({_fmt(r.get('dm_vs_zero_p'))}) | {_fmt(r.get('cw_vs_zero'), 2)} ({_fmt(r.get('cw_vs_zero_p'))}) | "
-                     f"{_fmt(r.get('holm_cw_zero_p'))} ({r.get('holm_cw_zero_p_m', '—')}) |")
-    L += ["", "읽는 법: DM vs 0 = 이 방법·이 학습 창이 0예측보다 정확한가(음수면 정확, 추정 잡음 포함). CW vs 0 = 변수에 예측 정보가 있는가(추정 잡음을 뺀 비교, 한쪽 검정).",
-          "Holm 은 '같은 문제'를 푼 지금 엔진 결과끼리의 다중비교 보정. 옛 방식 결과는 보정·V 에 넣지 않았다.", ""]
+                     f"{_fmt(r.get('dm_vs_naive'), 2)} ({_fmt(r.get('dm_vs_naive_p'))}) | {_dir(r.get('dm_vs_naive'))} | {_fmt(r.get('dm_vs_naive_p_better'))} | {_h(r, 'holm_dm_naive_p')} | "
+                     f"{_fmt(r.get('cw_vs_mean'), 2)} ({_fmt(r.get('cw_vs_mean_p'))}) | {_h(r, 'holm_cw_mean_p')} | {_fmt(r.get('cw_vs_zero'), 2)} ({_fmt(r.get('cw_vs_zero_p'))}) |")
+    L += ["", "읽는 법",
+          "- DM vs 0 / vs naive = 이 방법·이 학습 창이 그 기준보다 정확한가(음수면 정확, 추정 잡음 포함, 양측 p). 방향 칸이 '나쁨'이면 p 가 작아도 '유의하게 나쁘다'는 뜻이다.",
+          "- CW vs 평균 = 학습 창 평균(분류면 양(+) 비율)만 아는 예측보다 예측 정보가 더 있는가(추정 잡음을 뺀 비교, 한쪽 p). 변수의 정보를 말할 때는 이 칸을 쓴다. 2026-11-10 전 결과에는 기준 열이 없어 비어 있다(다시 돌려야 나옴).",
+          "- CW vs 0 = 예측이 실제와 같은 쪽으로 움직이는가(평균 포함). 타겟 평균이 0 이 아니면 '평균만 맞히는' 예측도 유의하게 나온다 — 변수의 정보의 증거로 쓰지 않는다.",
+          "- Holm = 다중비교 보정. '가족' = 같은 대상·주기·k·타겟 종류(·정보 시점)의 지금 엔진 결과, '전체' = 이 모드의 지금 엔진 결과 전부. 둘이 다르면 결론이 가족 정의에 달려 있다는 뜻이다. 옛 방식 결과는 보정·V 에 넣지 않았다.",
+          "- DSR p(통일) 뒤의 표시: † = 같은 주기의 지금 엔진 결과가 2개 미만이라 V 를 근사(1/(n−1))로 씀 · ‡ = 왜도·첨도가 저장돼 있지 않아 정규 가정(0·3)을 씀.", ""]
     return "\n".join(L)
 
 

@@ -21,7 +21,7 @@ import warnings
 
 import numpy as np
 
-from models.base import SeriesModel
+from models.base import SeriesModel, fit_multi_start
 
 NAME = "ARIMA"
 INPUT_SHAPE = "series"
@@ -39,8 +39,10 @@ PARAMS = {
 PARAMS["scale"] = {"type": "float", "default": 100.0, "min": 1.0, "max": 1e6, "group": "추정 제약",
                    "desc": "추정용 배율 — 변화율에 이 수를 곱해 추정하고 예측을 다시 나눈다. 모형·예측식은 같고(φ·θ 는 배율과 무관) 최우추정의 수치 조건만 좋아진다(변화율 분산이 1e−5 수준이면 잘 수렴하지 않음). 1 = 배율 없음(2026-11-07 전)"}
 PARAM_GROUPS = ["차수·상수", "추정 제약"]
+PARAMS["starts"] = {"type": "str", "choices": ["multi", "default"], "default": "multi", "group": "추정 제약",
+                    "desc": "최우추정의 출발점 — multi(기본): 정해진 출발점 7개에서 추정해 로그우도가 가장 높은 해를 쓴다(가능도에 극대점이 여러 개일 수 있어서. 폴드마다 어느 출발점이 뽑혔는지·기본 출발점보다 얼마나 높은지 결과의 학습 진단에 남는다). default: 기본 출발점 하나(2026-11-10 전)"}
 # 결과 파일의 model.params 에 이 키가 없으면(2026-11-06 전 결과) 그 실험은 이 값으로 돌았다 — 같은 실험을 다시 돌릴 때 엔진이 채운다
-LEGACY_DEFAULTS = {"enforce_stationarity": False, "enforce_invertibility": False, "scale": 1.0}
+LEGACY_DEFAULTS = {"enforce_stationarity": False, "enforce_invertibility": False, "scale": 1.0, "starts": "default"}
 
 
 class Model(SeriesModel):
@@ -51,7 +53,8 @@ class Model(SeriesModel):
         self.scale = float(p.get("scale", 1.0) or 1.0)  # 수치 배율(위 설명) — 추정·예측 모두 r × scale 단위, 예측은 다시 나눔
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.res = SARIMAX(r * self.scale, order=(p["p"], p["d"], p["q"]), trend=p["trend"], enforce_stationarity=p["enforce_stationarity"], enforce_invertibility=p["enforce_invertibility"]).fit(disp=False, maxiter=200)
+            mod = SARIMAX(r * self.scale, order=(p["p"], p["d"], p["q"]), trend=p["trend"], enforce_stationarity=p["enforce_stationarity"], enforce_invertibility=p["enforce_invertibility"])
+            self.res, self.diag = fit_multi_start(mod, starts=str(p.get("starts", "default")))  # 여러 출발점 중 로그우도 최대(models/base.py)
 
     def forecast(self, history: np.ndarray, steps: int) -> np.ndarray:
         with warnings.catch_warnings():

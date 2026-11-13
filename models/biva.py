@@ -109,6 +109,7 @@ def _parse_ma(s: str):
 
 class Model(BaseModel):
     ACCEPTS_NAN = True
+    STOCHASTIC = True  # 가중치 초기값·미니배치 순서·VAE 표본추출(예측 때도)이 시드에 따라 달라진다
 
     @classmethod
     def wants_nan(cls, params) -> bool:
@@ -213,6 +214,8 @@ class Model(BaseModel):
         if early.best_state is not None:
             self.net.load_state_dict(early.best_state)
         best = min(self.history, key=lambda h: h["vali_loss"]) if self.history else None
+        self.diag = {"early_stopping": True, "epochs_run": len(self.history), "epoch_used": int(best["epoch"]) if best else len(self.history),
+                     "epochs_max": int(p["train_epochs"]), "best_val_loss": float(best["vali_loss"]) if best else None}
         log.info("BIVA fit 끝: %d epoch · 최저 검증 손실 %.7f (epoch %s) · 총 %.1fs", len(self.history),
                  early.val_loss_min, best and best["epoch"], sum(h["sec"] for h in self.history))
 

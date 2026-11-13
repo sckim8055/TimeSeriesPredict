@@ -21,11 +21,37 @@ LONG_COLS = ["variable_id", "date", "value"]
 PRICE_COLS = ["open", "high", "low", "close", "volume"]
 
 
+def list_versions(data_root: str | Path) -> list[dict]:
+    """완성된(manifest.json 이 있는) 데이터 버전 목록, 오래된 순. incomplete = 수집 때 요청한 항목 일부를 받지 못한 버전(받지 못한 항목은 직전 버전 값 그대로)."""
+    out = []
+    vd = Path(data_root) / "versions"
+    for p in sorted(vd.glob("*")) if vd.exists() else []:
+        m = p / "manifest.json"
+        if not m.exists():
+            continue
+        try:
+            j = json.loads(m.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            j = {}
+        out.append({"id": p.name, "incomplete": bool(j.get("incomplete")), "manifest": j})
+    return out
+
+
+def latest_version_id(data_root: str | Path) -> str | None:
+    """설정에 데이터 버전을 적지 않았을 때 쓰는 '최신' 버전: 가장 새 '온전한' 버전. 일부를 받지 못한 버전(incomplete)은 자동으로 고르지 않는다 —
+    그런 버전을 쓰려면 설정에 그 id 를 직접 적는다. 온전한 버전이 하나도 없으면 가장 새 버전(2026-11-10 독립 검토 F1)."""
+    vs = list_versions(data_root)
+    ok = [v["id"] for v in vs if not v["incomplete"]]
+    return ok[-1] if ok else (vs[-1]["id"] if vs else None)
+
+
 class DataVersion:
     """`data/versions/<id>/` 디렉터리 하나."""
 
     def __init__(self, root: str | Path, version_id: str | None = None):
         self.root = Path(root)
+        if version_id is not None and not str(version_id).strip():
+            raise ValueError("데이터 버전 id 가 비어 있습니다 — 새 버전을 만들려면 id 를 주지 말고(None), 있는 버전을 읽으려면 그 id 를 주세요")  # 빈 글자가 조용히 새 버전이 되던 것(F22)
         self.id = version_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         if any(c in self.id for c in "/\\:") or ".." in self.id or not self.id.strip():
             raise ValueError(f"데이터 버전 id 가 올바르지 않습니다: {self.id!r}")  # 경로 문자가 든 id 로 저장소 밖에 폴더가 생기던 것 방지(2026-11-10 점검 S12)
@@ -135,6 +161,7 @@ _DATE_PATTERNS = [
     (re.compile(r"^(\d{4})(\d{2})$"), lambda m: (int(m[1]), int(m[2]), 1)),
     (re.compile(r"^(\d{4})(\d{2})(\d{2})$"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
     (re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\.?$"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+    (re.compile(r"^(\d{4})-(\d{2})-(\d{2})[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),  # 글자로 저장된 '2020-01-31 00:00:00'
     (re.compile(r"^(\d{4})\s*년\s*(\d{1,2})\s*월$"), lambda m: (int(m[1]), int(m[2]), 1)),
     (re.compile(r"^(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일$"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
     (re.compile(r"^(\d{4})\s*년$"), lambda m: (int(m[1]), 1, 1)),
@@ -154,6 +181,8 @@ def parse_date_cell(x) -> pd.Timestamp | None:
 
     if x is None:
         return None
+    if isinstance(x, _dt.time):
+        return None  # 시각만 있는 칸은 날짜가 아니다
     if isinstance(x, (pd.Timestamp, _dt.datetime, _dt.date)):
         t = pd.Timestamp(x)
         return t.normalize() if 1900 <= t.year <= 2200 else None
@@ -174,10 +203,9 @@ def parse_date_cell(x) -> pd.Timestamp | None:
                 return pd.Timestamp(year=y, month=mo, day=d)
             except ValueError:
                 return None
-    if re.fullmatch(r"\d+", s):
-        return None  # 자릿수가 맞지 않는 숫자(엑셀 일련번호 등)
-    t = pd.to_datetime(s, errors="coerce")
-    return t.normalize() if not pd.isna(t) and 1900 <= t.year <= 2200 else None
+    # 위의 꼴에 맞지 않으면 읽지 않는다. 2026-11-10 전에는 여기서 pandas 가 짐작해 읽었는데, 뜻이 둘인 글자를 조용히 받아들였다(독립 검토 F6):
+    # '20-01-31' → 2031-01-20, '12:00'·'now'·'today' → 오늘 날짜, '1Q20' → 2020-01-01(분기 약속과 다름), '1/2/2020' 은 1월 2일인데 '31/01/2020' 은 1월 31일.
+    return None
 
 
 def parse_value_cell(x) -> tuple[float | None, bool]:
@@ -188,15 +216,24 @@ def parse_value_cell(x) -> tuple[float | None, bool]:
     if isinstance(x, bool):
         return None, True
     if isinstance(x, (int, float)):
-        return (None, False) if x != x else (float(x), False)
+        if x != x:
+            return None, False
+        return (None, True) if x in (float("inf"), float("-inf")) else (float(x), False)
     s = str(x).strip()
     if s.lower() in _MISSING_TEXT:
         return None, False
-    t = s.replace(",", "").replace(" ", "")
+    t = s.replace(" ", "")
+    # 쉼표는 '천 단위 구분'일 때만 받는다(1,234 · 12,345.67 · -1,234,567). '1,5'·'1.234,5'(소수점 쉼표)는 뜻이 둘이라 문제로 돌려준다 —
+    # 2026-11-10 전에는 쉼표를 그냥 지워 '1,5' 가 15 로, '1.234,5' 가 1.2345 로 읽혔다(독립 검토 F19).
+    if "," in t:
+        if not re.fullmatch(r"[+-]?\d{1,3}(,\d{3})+(\.\d+)?", t):
+            return None, True
+        t = t.replace(",", "")
     try:
-        return float(t), False
+        v = float(t)
     except ValueError:
         return None, True
+    return (None, True) if v != v or v in (float("inf"), float("-inf")) else (v, False)  # 'inf'·'nan' 글자는 값이 아니다
 
 
 def read_data_sheets(xlsx: str | Path) -> tuple[pd.DataFrame, list[dict]]:
@@ -221,11 +258,16 @@ def read_data_sheets(xlsx: str | Path) -> tuple[pd.DataFrame, list[dict]]:
         for sh, _ in DATA_SHEETS:
             if sh not in wb.sheetnames:
                 continue
+            # 시트에 적힌 크기 표시(dimension)를 믿지 않고 실제 줄을 끝까지 읽는다 — 다른 프로그램이 내보낸 파일은 이 표시가 낡아 있을 수 있고,
+            # 그러면 표시 밖의 줄을 조용히 버렸다(독립 검토 F5: 120줄 시트에 표시가 A1:B50 이면 49줄만 읽음).
+            wb[sh].reset_dimensions()
             it = wb[sh].iter_rows(values_only=True)
             hdr = [None if h is None or str(h).strip() == "" else str(h).strip() for h in next(it, ())]
             di = next((i for i, h in enumerate(hdr) if h is not None and h.lower() == "date"), None)
             if di is None:
                 continue
+            if wf is not None and sh in wf.sheetnames:
+                wf[sh].reset_dimensions()
             fit = wf[sh].iter_rows(min_row=2, values_only=True) if wf is not None and sh in wf.sheetnames else None
             seen: dict[tuple, int] = {}
             for rno, row in enumerate(it, start=2):

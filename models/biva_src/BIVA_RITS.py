@@ -113,26 +113,7 @@ class Model(nn.Module):
         # self.delta_calc()
 
     def delta_calc(self, masks):
-        """[TSP 수정 #6] 원본 delta_calc_orig 와 **값이 완전히 같은** 계산을 빠르게 한다(속도만 바꿈).
-        원본은 (배치 × 시점 × 변수) 원소마다 파이썬 반복 → 배치·epoch 마다 수천 번의 작은 텐서 연산(GPU 면 매번 동기화)이라
-        학습 시간 대부분을 차지했다. 원본 규칙(변수 축 d−1 을 참조하는 원본 그대로의 규칙 포함)을 변수 축 반복 하나로 옮겼다.
-        시점·배치 축은 서로 의존하지 않아 한 번에 계산한다. 같음은 tests/test_biva_src.py 가 무작위 결측 패턴으로 확인."""
-        B, T, D = masks.shape
-        delta = torch.zeros_like(masks)
-        if T < 2:
-            return delta
-        prev_missing = masks[:, :-1, :] == 0      # masks[b, t-1, d] == 0  (t ≥ 1)
-        cur = masks[:, 1:, :]                     # masks[b, t, ·]          (t ≥ 1)
-        for d in range(D):
-            # 원본 d=0 일 때 delta[b,t,d-1] = delta[b,t,D-1] 은 아직 계산 전이라 0, masks[b,t,d-1] = masks[b,t,D-1]
-            prev_delta = delta[:, 1:, d - 1] if d > 0 else torch.zeros_like(cur[:, :, 0])
-            one = torch.ones_like(prev_delta)
-            delta[:, 1:, d] = torch.where(prev_missing[:, :, d], prev_delta + one,
-                                          torch.where(cur[:, :, d - 1] == 1, one, torch.zeros_like(one)))
-        return delta
-
-    def delta_calc_orig(self, masks):
-        # 원본 그대로(비교 시험용). [TSP 수정 #6]
+        # just 1step is time-strimp 1 month step
         delta = torch.zeros_like(masks)
         # print(f"delta.shape : {delta.shape}")
         for b in range(masks.shape[0]):

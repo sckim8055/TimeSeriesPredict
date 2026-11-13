@@ -35,6 +35,12 @@ DATA = ROOT / "data"
 RESULTS = ROOT / "results" / "trading"  # ablation 은 매매 모드 기준 (예측 모드는 추후)
 
 
+def _variant(cfg: ExperimentConfig, **upd) -> ExperimentConfig:
+    """설정의 변형을 '검증을 다시 거쳐' 만든다. model_copy(update=…) 는 검증·정규화를 건너뛰어, 기술지표를 끈 변형에 기술지표 선택 목록이 남아
+    저장된 해시와 다시 계산한 해시가 달랐다(2026-11-10 독립 검토 F18)."""
+    return ExperimentConfig(**{**cfg.model_dump(mode="json"), **upd})
+
+
 def _counter() -> int:
     from engine import ledger
     return ledger.count(RESULTS)  # 시도 원장 기준(2026-11-10 — 전에는 카운터 파일을 직접 고쳐 썼다)
@@ -49,13 +55,16 @@ def run_one(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> dict:
     os.environ["TSP_RUN_ID"] = run_id
     runlog.append_log(RESULTS, {"event": "start", "run_id": run_id, "via": "ablate", "config_hash_given": cfg.config_hash(),
                                 "config": cfg.model_dump(mode="json"), "data_version": dv.id})
+    from engine import ledger
+    ledger.ensure(RESULTS)
+    led_before = ledger.head(RESULTS)  # 시작할 때의 원장 머리 — 결과에 적어 두어 원장의 끝 줄이 지워지면 드러나게 한다
     try:
         res = run_experiment(cfg, dv, reg, n_trials_so_far=n, trial_sr_var=trial_sharpe_variance(RESULTS, ppy))
+        res.setdefault("run_record", {})["ledger_before"] = led_before
+        out = save_result(res, RESULTS)
     except BaseException as e:
         runlog.append_log(RESULTS, {"event": "failed", "run_id": run_id, "error": f"{type(e).__name__}: {e}"[:2000]})
         raise
-    out = save_result(res, RESULTS)
-    from engine import ledger
     ledger.record(RESULTS, "ablation", config_hash=res["config_hash"], name=cfg.name, model=cfg.model, run_id=run_id, result=Path(out).stem)
     return res
 
@@ -106,8 +115,8 @@ def main() -> int:
     base_ids, _ = reg.resolve_many(base_cfg.variable_ids)
     # 변형은 대표 id 로 만든다. 그래서 중복 id 에 적은 변환·lag 재정의도 대표 id 로 옮겨 둔다 — 안 그러면 기준 실험은 재정의를 쓰고
     # 변형은 사전 기본값으로 돌아가 '변수 제거 효과'에 재정의 차이가 섞인다(2026-11-10 점검 N10)
-    vbase = base_cfg.model_copy(update={"variable_transforms": reg.remap_overrides(base_cfg.variable_ids, base_cfg.variable_transforms)[0],
-                                        "lag_override": reg.remap_overrides(base_cfg.variable_ids, base_cfg.lag_override)[0]})
+    vbase = _variant(base_cfg, variable_transforms=reg.remap_overrides(base_cfg.variable_ids, base_cfg.variable_transforms)[0],
+                     lag_override=reg.remap_overrides(base_cfg.variable_ids, base_cfg.lag_override)[0])
     group_of = {vid: reg.get(vid).group for vid in reg.ids()}
     base_groups = sorted({group_of[v] for v in base_ids})
     all_groups = sorted({g for g in reg.groups() if g})
@@ -118,9 +127,9 @@ def main() -> int:
             if only and g not in only:
                 continue
             ids = [v for v in base_ids if group_of[v] != g]
-            variants.append((f"-{g}", vbase.model_copy(update={"variable_ids": ids, "name": f"{base_cfg.name}_minus_{g}"})))
+            variants.append((f"-{g}", _variant(vbase, variable_ids=ids, name=f"{base_cfg.name}_minus_{g}")))
         if a.technical and base_cfg.use_technical:
-            variants.append(("-기술지표(A)", vbase.model_copy(update={"use_technical": False, "name": f"{base_cfg.name}_minus_A"})))
+            variants.append(("-기술지표(A)", _variant(vbase, use_technical=False, name=f"{base_cfg.name}_minus_A")))
     if a.mode in ("add", "both"):
         for g in all_groups:
             if g in base_groups or (only and g not in only):
@@ -131,7 +140,7 @@ def main() -> int:
                 print(f"  [+{g}] 데이터 없는 변수 제외: {[v for v in cand if v not in available]}")
             if not extra:
                 continue
-            variants.append((f"+{g}", vbase.model_copy(update={"variable_ids": base_ids + extra, "name": f"{base_cfg.name}_plus_{g}"})))
+            variants.append((f"+{g}", _variant(vbase, variable_ids=base_ids + extra, name=f"{base_cfg.name}_plus_{g}")))
     if not variants:
         print("변형이 없습니다 (기준 그룹:", base_groups, ")")
         return 1

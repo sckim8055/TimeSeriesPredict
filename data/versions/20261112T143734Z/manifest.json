@@ -1,0 +1,607 @@
+{
+ "version_id": "20261112T143734Z",
+ "created_utc": "2026-11-12T14:38:57.020492+00:00",
+ "updated_utc": "2026-11-12T14:38:57.020492+00:00",
+ "files": {
+  "prices_091160.parquet": "12e5fd33fbef43728a0b4ad6ddaf2bbb3358ca271a6eaff2fc4d64a679ff03b7",
+  "prices_091160_datago.parquet": "985ca98977d5044cf3a53d98bf3d2b6fc99658fa046d287995b502634fe324cf",
+  "prices_091160_naver.parquet": "0881ca761d231fd1d4c83a56028f0daff7d0aaead34d55266bb6648440f46244",
+  "prices_091160_yf.parquet": "028643b461bc2c3bb5d3543bbdac45f380bd6ec30d146a5b1ffd825efcd0f7eb",
+  "prices_091230.parquet": "2198e73e476c60049334192b76d549a5e99421ca69e45475ab2871282267e9d3",
+  "prices_091230_datago.parquet": "867c0e86b6dba9f8bc7972f29deb7a8df8de5aba0eaad024b37785578b9743d9",
+  "prices_091230_naver.parquet": "e9d06c6a9f437f8f71f745b2d9311176ce9fa4ee5d44d7282c3e324cc07773ef",
+  "prices_091230_yf.parquet": "19e379553583fb90db299db21a09dfeff8ba2e44458786a3294d89634c65015b",
+  "variables_derived.parquet": "9f54b520fc78bb98461e9d0c03d54b594436f7ee5d028d1796b36a934c75809a",
+  "variables_ecos.parquet": "256aa0b3fe5ddb7614850a4920d791313d9c525f1f0dcf954539023e552b525f",
+  "variables_fred.parquet": "2c3c9dca751720aa152888380f8418906f2daec5c100c22b213a75bc313307e7",
+  "variables_krx.parquet": "9a05f69493e9dbc687b4117589a1fee313004f2175d892c9503440e1cbb1ab08",
+  "variables_xlsx_master.parquet": "fde1c90f1bc75d0c734900fb5037da654985d2d93aa6f2986262cbe2b683aaf5",
+  "variables_yf.parquet": "115ee9b5d38e1165912b9cff98864a39b67dc2eeba77e6c7b44dd89d8b5796aa"
+ },
+ "collect_log": {
+  "datago prices 091160 (공식, 2020~)": "ok",
+  "datago prices 091230 (공식, 2020~)": "ok",
+  "yf prices 091160 (원주가, 2009~; 공식과 종가 100% 일치 확인 2026-11-03)": "ok",
+  "yf prices 091230 (원주가, 2009~; 공식과 종가 100% 일치 확인 2026-11-03)": "ok",
+  "yf USDKRW (KRW=X)": "ok",
+  "yf KOSPI (^KS11)": "ok",
+  "yf SOX (^SOX)": "ok",
+  "yf NVDA (NVDA)": "ok",
+  "yf MU (MU)": "ok",
+  "yf TSM (TSM)": "ok",
+  "yf SAMSUNG (005930.KS)": "ok",
+  "yf HYNIX (000660.KS)": "ok",
+  "yf US10Y_YF (^TNX)": "ok",
+  "yf VIX_YF (^VIX)": "ok",
+  "pykrx prices 091160 (네이버 수정주가, 교차검증용)": "ok",
+  "pykrx prices 091230 (네이버 수정주가, 교차검증용)": "ok",
+  "assemble prices 091160": "ok",
+  "assemble prices 091230": "ok",
+  "fred US10Y (DGS10)": "ok",
+  "fred US2Y (DGS2)": "ok",
+  "fred VIX (VIXCLS)": "ok",
+  "fred FEDFUNDS (FEDFUNDS)": "ok",
+  "ecos BOK_RATE (722Y001/0101000/M)": "ok",
+  "ecos KR10Y (817Y002/010210000/D)": "ok",
+  "ecos KR3Y (817Y002/010200000/D)": "ok",
+  "krx FLOW_FOREIGN_091160 (flow:091160:외국인합계)": "ok",
+  "krx FLOW_INST_091160 (flow:091160:기관합계)": "ok",
+  "krx FLOW_INDIV_091160 (flow:091160:개인)": "ok",
+  "krx FLOW_FOREIGN_005930 (flow:005930:외국인합계)": "ok",
+  "krx FLOW_INST_005930 (flow:005930:기관합계)": "ok",
+  "krx FLOW_INDIV_005930 (flow:005930:개인)": "ok",
+  "krx FLOW_FOREIGN_000660 (flow:000660:외국인합계)": "ok",
+  "krx FLOW_INST_000660 (flow:000660:기관합계)": "ok",
+  "krx FLOW_INDIV_000660 (flow:000660:개인)": "ok",
+  "xlsx variable_master.xlsx (데이터 시트)": "ok",
+  "derived": "ok"
+ },
+ "collect_runs": [
+  {
+   "started_utc": "2026-11-12T14:37:34.927233+00:00",
+   "finished_utc": "2026-11-12T14:38:56.976065+00:00",
+   "sources": [
+    "datago",
+    "derived",
+    "ecos",
+    "fred",
+    "krx",
+    "pykrx",
+    "xlsx",
+    "yf"
+   ],
+   "start": "2006-01-01",
+   "end": null,
+   "refresh": false,
+   "master_sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed",
+   "master_snapshot": "master_history/8655f2ccbbfb.xlsx",
+   "carried_from": {
+    "version": "20261112T135215Z",
+    "files": {
+     "prices_091160_datago.parquet": "985ca98977d5044cf3a53d98bf3d2b6fc99658fa046d287995b502634fe324cf",
+     "prices_091160_naver.parquet": "725787c6dda1250d5e0caf86aafe17b78c5a721e9ec8b3fd9b595a4f9af0f30c",
+     "prices_091160_yf.parquet": "028643b461bc2c3bb5d3543bbdac45f380bd6ec30d146a5b1ffd825efcd0f7eb",
+     "prices_091230_datago.parquet": "867c0e86b6dba9f8bc7972f29deb7a8df8de5aba0eaad024b37785578b9743d9",
+     "prices_091230_naver.parquet": "89b6b883c013515aa26a4510f43f231dff85c77e6a438d68f93f2f3f4de88cf0",
+     "prices_091230_yf.parquet": "19e379553583fb90db299db21a09dfeff8ba2e44458786a3294d89634c65015b",
+     "variables_derived.parquet": "9f54b520fc78bb98461e9d0c03d54b594436f7ee5d028d1796b36a934c75809a",
+     "variables_ecos.parquet": "256aa0b3fe5ddb7614850a4920d791313d9c525f1f0dcf954539023e552b525f",
+     "variables_fred.parquet": "deed8ed792a8b07c193c783d09798dbea376accd2cbce815d54ed46942eeed95",
+     "variables_krx.parquet": "9a05f69493e9dbc687b4117589a1fee313004f2175d892c9503440e1cbb1ab08",
+     "variables_yf.parquet": "34f734e681790d93f34cb474ce554ed2e95bf3548bc7da7e348e2083451fa4ec"
+    }
+   },
+   "superseded": [],
+   "multi_source_ids": {},
+   "library_versions": {
+    "pandas": "2.3.3",
+    "yfinance": "1.7.0",
+    "pykrx": "1.2.9",
+    "fredapi": "0.5.2",
+    "requests": "2.34.2",
+    "openpyxl": "3.1.5"
+   },
+   "log": {
+    "datago prices 091160 (공식, 2020~)": "ok",
+    "datago prices 091230 (공식, 2020~)": "ok",
+    "yf prices 091160 (원주가, 2009~; 공식과 종가 100% 일치 확인 2026-11-03)": "ok",
+    "yf prices 091230 (원주가, 2009~; 공식과 종가 100% 일치 확인 2026-11-03)": "ok",
+    "yf USDKRW (KRW=X)": "ok",
+    "yf KOSPI (^KS11)": "ok",
+    "yf SOX (^SOX)": "ok",
+    "yf NVDA (NVDA)": "ok",
+    "yf MU (MU)": "ok",
+    "yf TSM (TSM)": "ok",
+    "yf SAMSUNG (005930.KS)": "ok",
+    "yf HYNIX (000660.KS)": "ok",
+    "yf US10Y_YF (^TNX)": "ok",
+    "yf VIX_YF (^VIX)": "ok",
+    "pykrx prices 091160 (네이버 수정주가, 교차검증용)": "ok",
+    "pykrx prices 091230 (네이버 수정주가, 교차검증용)": "ok",
+    "assemble prices 091160": "ok",
+    "assemble prices 091230": "ok",
+    "fred US10Y (DGS10)": "ok",
+    "fred US2Y (DGS2)": "ok",
+    "fred VIX (VIXCLS)": "ok",
+    "fred FEDFUNDS (FEDFUNDS)": "ok",
+    "ecos BOK_RATE (722Y001/0101000/M)": "ok",
+    "ecos KR10Y (817Y002/010210000/D)": "ok",
+    "ecos KR3Y (817Y002/010200000/D)": "ok",
+    "krx FLOW_FOREIGN_091160 (flow:091160:외국인합계)": "ok",
+    "krx FLOW_INST_091160 (flow:091160:기관합계)": "ok",
+    "krx FLOW_INDIV_091160 (flow:091160:개인)": "ok",
+    "krx FLOW_FOREIGN_005930 (flow:005930:외국인합계)": "ok",
+    "krx FLOW_INST_005930 (flow:005930:기관합계)": "ok",
+    "krx FLOW_INDIV_005930 (flow:005930:개인)": "ok",
+    "krx FLOW_FOREIGN_000660 (flow:000660:외국인합계)": "ok",
+    "krx FLOW_INST_000660 (flow:000660:기관합계)": "ok",
+    "krx FLOW_INDIV_000660 (flow:000660:개인)": "ok",
+    "xlsx variable_master.xlsx (데이터 시트)": "ok",
+    "derived": "ok"
+   },
+   "items": {
+    "USDKRW": {
+     "source": "YF",
+     "source_code": "KRW=X",
+     "n": 5410,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "KOSPI": {
+     "source": "YF",
+     "source_code": "^KS11",
+     "n": 5138,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "SOX": {
+     "source": "YF",
+     "source_code": "^SOX",
+     "n": 5249,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "NVDA": {
+     "source": "YF",
+     "source_code": "NVDA",
+     "n": 5249,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "MU": {
+     "source": "YF",
+     "source_code": "MU",
+     "n": 5249,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "TSM": {
+     "source": "YF",
+     "source_code": "TSM",
+     "n": 5249,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "SAMSUNG": {
+     "source": "YF",
+     "source_code": "005930.KS",
+     "n": 5150,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "HYNIX": {
+     "source": "YF",
+     "source_code": "000660.KS",
+     "n": 5150,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "US10Y_YF": {
+     "source": "YF",
+     "source_code": "^TNX",
+     "n": 5246,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "VIX_YF": {
+     "source": "YF",
+     "source_code": "^VIX",
+     "n": 5251,
+     "first": "2006-01-03",
+     "last": "2026-11-12"
+    },
+    "US10Y": {
+     "source": "FRED",
+     "source_code": "DGS10",
+     "n": 5218,
+     "first": "2006-01-03",
+     "last": "2026-11-09"
+    },
+    "US2Y": {
+     "source": "FRED",
+     "source_code": "DGS2",
+     "n": 5218,
+     "first": "2006-01-03",
+     "last": "2026-11-09"
+    },
+    "VIX": {
+     "source": "FRED",
+     "source_code": "VIXCLS",
+     "n": 5281,
+     "first": "2006-01-03",
+     "last": "2026-11-11"
+    },
+    "FEDFUNDS": {
+     "source": "FRED",
+     "source_code": "FEDFUNDS",
+     "n": 250,
+     "first": "2006-01-01",
+     "last": "2026-10-01"
+    },
+    "BOK_RATE": {
+     "source": "ECOS",
+     "source_code": "722Y001/0101000/M",
+     "n": 250,
+     "first": "2006-01-01",
+     "last": "2026-10-01"
+    },
+    "KR10Y": {
+     "source": "ECOS",
+     "source_code": "817Y002/010210000/D",
+     "n": 5164,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "KR3Y": {
+     "source": "ECOS",
+     "source_code": "817Y002/010200000/D",
+     "n": 5164,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_FOREIGN_091160": {
+     "source": "KRX",
+     "source_code": "flow:091160:외국인합계",
+     "n": 5024,
+     "first": "2006-06-27",
+     "last": "2026-11-12"
+    },
+    "FLOW_INST_091160": {
+     "source": "KRX",
+     "source_code": "flow:091160:기관합계",
+     "n": 5024,
+     "first": "2006-06-27",
+     "last": "2026-11-12"
+    },
+    "FLOW_INDIV_091160": {
+     "source": "KRX",
+     "source_code": "flow:091160:개인",
+     "n": 5024,
+     "first": "2006-06-27",
+     "last": "2026-11-12"
+    },
+    "FLOW_FOREIGN_005930": {
+     "source": "KRX",
+     "source_code": "flow:005930:외국인합계",
+     "n": 5141,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_INST_005930": {
+     "source": "KRX",
+     "source_code": "flow:005930:기관합계",
+     "n": 5141,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_INDIV_005930": {
+     "source": "KRX",
+     "source_code": "flow:005930:개인",
+     "n": 5141,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_FOREIGN_000660": {
+     "source": "KRX",
+     "source_code": "flow:000660:외국인합계",
+     "n": 5144,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_INST_000660": {
+     "source": "KRX",
+     "source_code": "flow:000660:기관합계",
+     "n": 5144,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "FLOW_INDIV_000660": {
+     "source": "KRX",
+     "source_code": "flow:000660:개인",
+     "n": 5144,
+     "first": "2006-01-02",
+     "last": "2026-11-12"
+    },
+    "A1": {
+     "source": "XLSX",
+     "source_code": "df_Q!A1",
+     "n": 260,
+     "first": "1960-06-01",
+     "last": "2025-03-01"
+    },
+    "B1": {
+     "source": "XLSX",
+     "source_code": "df_M!B1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "B2": {
+     "source": "XLSX",
+     "source_code": "df_M!B2",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "F1": {
+     "source": "XLSX",
+     "source_code": "df_M!F1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "F10": {
+     "source": "XLSX",
+     "source_code": "df_M!F10",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "F11": {
+     "source": "XLSX",
+     "source_code": "df_M!F11",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "F12": {
+     "source": "XLSX",
+     "source_code": "df_M!F12",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "F7": {
+     "source": "XLSX",
+     "source_code": "df_M!F7",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "H1": {
+     "source": "XLSX",
+     "source_code": "df_M!H1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "H2": {
+     "source": "XLSX",
+     "source_code": "df_M!H2",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "H3": {
+     "source": "XLSX",
+     "source_code": "df_M!H3",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "K1": {
+     "source": "XLSX",
+     "source_code": "df_M!K1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "K2": {
+     "source": "XLSX",
+     "source_code": "df_M!K2",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "K3": {
+     "source": "XLSX",
+     "source_code": "df_M!K3",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "K4": {
+     "source": "XLSX",
+     "source_code": "df_M!K4",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "L1": {
+     "source": "XLSX",
+     "source_code": "df_M!L1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "L2": {
+     "source": "XLSX",
+     "source_code": "df_M!L2",
+     "n": 123,
+     "first": "2015-01-01",
+     "last": "2025-03-01"
+    },
+    "L3": {
+     "source": "XLSX",
+     "source_code": "df_M!L3",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "L9": {
+     "source": "XLSX",
+     "source_code": "df_M!L9",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "M3": {
+     "source": "XLSX",
+     "source_code": "df_M!M3",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N1": {
+     "source": "XLSX",
+     "source_code": "df_M!N1",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N10": {
+     "source": "XLSX",
+     "source_code": "df_M!N10",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N11": {
+     "source": "XLSX",
+     "source_code": "df_M!N11",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N12": {
+     "source": "XLSX",
+     "source_code": "df_M!N12",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N19": {
+     "source": "XLSX",
+     "source_code": "df_M!N19",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N2": {
+     "source": "XLSX",
+     "source_code": "df_M!N2",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N20": {
+     "source": "XLSX",
+     "source_code": "df_M!N20",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N21": {
+     "source": "XLSX",
+     "source_code": "df_M!N21",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N24": {
+     "source": "XLSX",
+     "source_code": "df_M!N24",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N4": {
+     "source": "XLSX",
+     "source_code": "df_M!N4",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    },
+    "N5": {
+     "source": "XLSX",
+     "source_code": "df_M!N5",
+     "n": 187,
+     "first": "2009-09-01",
+     "last": "2025-03-01"
+    },
+    "N6": {
+     "source": "XLSX",
+     "source_code": "df_M!N6",
+     "n": 123,
+     "first": "2015-01-01",
+     "last": "2025-03-01"
+    },
+    "N7": {
+     "source": "XLSX",
+     "source_code": "df_M!N7",
+     "n": 187,
+     "first": "2009-09-01",
+     "last": "2025-03-01"
+    },
+    "N8": {
+     "source": "XLSX",
+     "source_code": "df_M!N8",
+     "n": 195,
+     "first": "2009-01-01",
+     "last": "2025-03-01"
+    }
+   },
+   "checks": {
+    "errors": [],
+    "notices": [],
+    "admin": [
+     "O1: 엑셀 변수인데 데이터 시트에 열이 없음(값 없음)",
+     "O2: 엑셀 변수인데 데이터 시트에 열이 없음(값 없음)",
+     "O3: 엑셀 변수인데 데이터 시트에 열이 없음(값 없음)",
+     "O4: 엑셀 변수인데 데이터 시트에 열이 없음(값 없음)"
+    ],
+    "new_vars": [],
+    "ignored": [],
+    "near_duplicates": []
+   },
+   "kept_previous": {},
+   "notes": {
+    "prices 091160_naver": "이동 창(받은 자료의 시작 2014-08-20 이 직전 2014-08-08 보다 늦음) — 겹치는 2993일 값이 같아 직전 앞부분에 새 자료를 이었다",
+    "prices 091230_naver": "이동 창(받은 자료의 시작 2014-08-20 이 직전 2014-08-08 보다 늦음) — 겹치는 2993일 값이 같아 직전 앞부분에 새 자료를 이었다"
+   },
+   "failed_items": []
+  }
+ ],
+ "start": "2006-01-01",
+ "end": null,
+ "tickers": [
+  "091160",
+  "091230"
+ ],
+ "master": "variable_master.xlsx",
+ "master_sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed",
+ "variables_collected": 61,
+ "variables_missing": [
+  "O1",
+  "O2",
+  "O3",
+  "O4"
+ ],
+ "incomplete": false,
+ "failed_items": [],
+ "kept_previous": {},
+ "notes": {
+  "prices 091160_naver": "이동 창(받은 자료의 시작 2014-08-20 이 직전 2014-08-08 보다 늦음) — 겹치는 2993일 값이 같아 직전 앞부분에 새 자료를 이었다",
+  "prices 091230_naver": "이동 창(받은 자료의 시작 2014-08-20 이 직전 2014-08-08 보다 늦음) — 겹치는 2993일 값이 같아 직전 앞부분에 새 자료를 이었다"
+ }
+}

@@ -623,7 +623,9 @@ def build(cap: dict) -> dict:
            f"{K}개는 모든 수준값이 정상이라는 뜻이라, 단위근 전제와 맞지 않습니다. "
            f"검정을 바꾸면 결과가 달라집니다. 최대고유값 검정은 이 폴드에서 {sel_me}개를 고르고, {len(af)}개 폴드 중 {c_me.get(r, 0)}개에서 {r}개를 고릅니다. "
            f"표본 크기를 보정한 대각합 검정은 이 폴드에서 {sel_cor}개, {c_cor.get(r, 0)}개 폴드에서 {r}개입니다.")
-      if sel != r and sel_me == r and sel_cor == r and K in autos else None,
+      # 이 대본이 전제하는 것: 대각합 검정이 고른 개수가 설정값과 다르고("그러나"), 다른 검정은 대각합 검정과 다른 개수를 고르며("검정을 바꾸면 달라집니다"), r = K 인 폴드가 있다.
+      # (2026-11-10: 봉인 경계가 바뀌어 마지막 폴드가 한 달 앞당겨졌고 보정 검정이 0개를 골랐다 — 문장은 개수를 변수로 읽으므로 그대로 맞다. 전제를 문장이 실제로 요구하는 것으로 좁힘)
+      if sel != r and (sel_me != sel or sel_cor != sel) and K in autos else None,
       notes={src.line(MODEL, 'r = int(p["coint_rank"])'): f"설정값 coint_rank = {p_['coint_rank']}",
              src.line(MODEL, "r = int(select_coint_rank("): f"coint_rank = 0 일 때만 실행 — 이 설정에서는 건너뜀. 자동일 때의 조건: det_order {-1 if M['det'] == 'n' else 0}(상수 없음) · k_ar_diff {p} · {p_['rank_test']} · {p_['rank_signif']}",
              src.line(MODEL, "r = min(r, K - 1)"): f"r 상한 = 변수 수 − 1 = {K - 1} (검정이 {K}개 = 모두 정상을 고르면 {K - 1}개로 줄임)"},
