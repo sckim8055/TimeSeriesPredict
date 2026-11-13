@@ -185,3 +185,12 @@ def test_unsupported_original_options_are_refused():
     p = resolve_params(B.PARAMS, {"conv1d": False, "train_epochs": 1}, "M")
     with pytest.raises(ValueError, match="conv1d"):
         B.Model(p, n_features=5, target_type="regression").fit(X, y)
+
+
+@needs_orig
+def test_change_blocks_match_lock_and_taken_tools_are_original():
+    """검토 11(낮음): '덩어리마다 표시 하나'만 보면, 표시가 붙은 덩어리 안에 표시 없는 수정이 숨을 수 있다 → 덩어리 전체의 내용 지문이 잠금 목록과 같아야 한다.
+    tools_orig.py 의 두 개(adjust_learning_rate·EarlyStopping)는 원본 utils/tools.py 글자 그대로."""
+    from biva_src_diff import hunk_fingerprints, read_lock, tools_problems
+    assert hunk_fingerprints(OD) == read_lock() and len(read_lock()) == 13
+    assert tools_problems(OD) == []

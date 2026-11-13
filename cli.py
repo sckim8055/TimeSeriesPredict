@@ -59,7 +59,7 @@ def cmd_run(path: str, version: str | None, sealed: bool = False, master: str | 
         reg = Registry.load_csv(DATA / "registry.csv")
     from engine.experiment import results_dir
     from engine import ledger, runlog
-    from engine.sealed import read_log, write_log
+    from engine.sealed import read_log, seal_exposures, write_log
     RES = results_dir(RESULTS, cfg.mode)
     RES.mkdir(parents=True, exist_ok=True)
     ledger.ensure(RES)  # 시도 원장(없으면 옛 카운터 값으로 시작)
@@ -116,6 +116,8 @@ def cmd_run(path: str, version: str | None, sealed: bool = False, master: str | 
                 "source_result": os.environ.get("TSP_SEALED_SOURCE") or None, "note": os.environ.get("TSP_SEALED_NOTE") or "",
                 "opening_no_same_config": prev_same + 1, "opening_no_same_seal_date": prev_seal + 1, "opening_no_mode": len(done) + 1,
                 "dev_trials": n,
+                # 열기 전에 이 봉인 구간을 이미 채점한 개발 결과(같은 종목 + 거의 같은 종목, 2026-11-13 독립 검토 2) — 미리보기 경고와 같은 함수
+                "exposures": seal_exposures(RES, res["config"], dv),
             }
             out = save_result(res, RES)
             pm, pf = res.get("prediction_metrics") or {}, res.get("performance") or {}

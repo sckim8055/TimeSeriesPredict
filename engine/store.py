@@ -77,7 +77,10 @@ class DataVersion:
         return df.sort_values(["variable_id", "date"]).reset_index(drop=True)
 
     def wide(self, ids: list[str] | None = None) -> pd.DataFrame:
-        """롱 → 와이드(date × variable_id). 주기가 섞여 있으면 빈 칸은 NaN (정렬은 calendar.align_to_calendar가 담당)."""
+        """롱 → 와이드(date × variable_id). 주기가 섞여 있으면 빈 칸은 NaN (정렬은 calendar.align_to_calendar가 담당).
+        같은 변수·같은 날짜가 두 줄이면 '나중 줄'의 값을 쓴다: read_variables 가 파일 이름 순으로 이어 붙이고 (variable_id, date) 로
+        안정 정렬(여러 열 정렬은 lexsort — 같은 키의 원래 순서 유지)한 뒤 aggfunc="last". 한 파일 안에서는 쓸 때(_validate_long) 이미 나중 줄만 남는다.
+        [값 보기](api/main.py)도 같은 규칙(나중 값)으로 보여 주고, 겹친 날 수를 따로 알린다 — 시험: test_review6_..._duplicate_keeps_last."""
         df = self.read_variables(ids)
         if df.empty:
             return pd.DataFrame()

@@ -132,3 +132,21 @@ def test_trace_realigns_shifted_lines_by_code_text(tmp_path):
     gone = Event(seq=1, file="/x/tsp/models/biva_src/BIVA_RITS.py", line=n, func="delta_calc", code="        prev_missing = masks[:, :-1, :] == 0", depth=2)
     a, b = _realign([moved, gone])
     assert a.line == n and b.meta.get("stale") is True and b.line == n
+
+
+def test_realign_only_moves_within_the_recorded_function(tmp_path, monkeypatch):
+    """검토 10(낮음): 같은 글자의 줄이 다른 함수에도 있으면, 기록된 함수(func) 안의 줄로만 옮긴다.
+    (BIVA 의 빠른 delta_calc 를 지운 뒤, 그 함수의 줄 4개가 원본 함수의 같은 글자 줄로 옮겨 붙었다.) 기록된 함수가 지금 없으면 stale."""
+    import tools.codewalk.common as common
+    from tools.codewalk.trace import Event
+    src = ["def a():", "    x = 1", "    return x", "", "", "", "", "", "", "", "def b():", "    y = 0", "    x = 1", "    return x", ""]
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "m.py").write_text("\n".join(src), encoding="utf-8")
+    monkeypatch.setattr(common, "ROOT", tmp_path)
+    ev_b = Event(seq=0, file="/x/tsp/tools/m.py", line=3, func="b", code="    x = 1", depth=1)          # b 의 줄이었는데 번호가 밀림
+    ev_gone = Event(seq=1, file="/x/tsp/tools/m.py", line=2, func="fast", code="    x = 1", depth=1)  # 지워진 함수의 줄
+    ev_ok = Event(seq=2, file="/x/tsp/tools/m.py", line=2, func="a", code="    x = 1", depth=1)
+    b, g, a = common._realign([ev_b, ev_gone, ev_ok])
+    assert b.line == 13 and not b.meta.get("stale")             # 더 가까운 a 의 2행이 아니라 b 안의 13행
+    assert g.meta.get("stale") is True and g.line == 2
+    assert a.line == 2 and not a.meta.get("stale")

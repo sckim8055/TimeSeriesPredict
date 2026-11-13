@@ -89,6 +89,17 @@ def _row(p: Path, r: dict) -> dict:
            "deflated_p_stored": pf.get("deflated_sharpe_p"), "n_trials_stored": pf.get("n_trials_so_far"), "trial_sr_var_stored": pf.get("trial_sr_var"),
            "return_skew": pf.get("return_skew"), "return_kurt": pf.get("return_kurt")}
     ev = _eval_rows(p, r)
+    if row["target_kind"] == "volatility":
+        # 변동성 타겟(2026-11-13 독립 검토 4): 변동성은 늘 양수라 '0 예측' 대비 DM·CW 는 뜻이 없다(전에는 그것이 없다고 '예측값 없음'으로 적었다).
+        # 기준은 엔진과 같은 둘 — naive(최근 k 기간 변동성이 이어진다; 엔진이 저장한 DM, 다시 구하려면 가격이 필요해 저장값을 쓴다)와 학습 창 평균(CW, 일별 기준 열로 다시 구함).
+        row["note"] = "변동성 타겟 — 0 예측 대비 DM·CW 는 해당 없음(변동성은 늘 양수). naive 대비 DM 은 엔진 저장값, 학습 창 평균 대비 CW 는 다시 구한 값"
+        row.update(dm_vs_naive=pm.get("dm_vs_naive"), dm_vs_naive_p=pm.get("dm_vs_naive_p"))
+        row["dm_vs_naive_p_better"] = better_one_sided(row.get("dm_vs_naive"), row.get("dm_vs_naive_p"))
+        if ev is not None and len(ev) >= 10:
+            row["n_eval"] = int(len(ev))
+            if "bench_mean" in ev:
+                row.update(mean_benchmark_metrics(ev["target"].to_numpy(float), ev["prediction"].to_numpy(float), ev["bench_mean"].to_numpy(float), k))
+        return row
     if ev is None or len(ev) < 10 or pm.get("dm_vs_zero") is None:
         row["note"] = "예측값 없음(규칙 모델·보유 등) — DM·CW 해당 없음" if pm.get("dm_vs_zero") is None else "일별 자료 없음"
         return row
@@ -135,8 +146,8 @@ def restat(mode: str, results_root: Path) -> dict:
             # 표시(F14): V 가 없어 근사(1/(n−1))로 떨어졌는지, 왜도·첨도가 저장돼 있지 않아 정규 가정(0·3)을 썼는지
             r["deflated_basis"] = {"n_trials": n_trials, "trial_sr_var": v_by.get(r["frequency"]), "v_fallback": v_by.get(r["frequency"]) is None,
                                    "moments_assumed": r.get("return_skew") is None or r.get("return_kurt") is None}
-    else:
-        holm(rows, "dm_vs_naive_p_better", "holm_dm_naive_p", skip=lambda r: r.get("stale"))
+    # naive 대비 DM: 예측 모드 결과와 매매 모드의 변동성 결과에만 값이 있다(수익률 매매 결과는 None → 건너뜀). 가족은 타겟 종류로 나뉜다.
+    holm(rows, "dm_vs_naive_p_better", "holm_dm_naive_p", skip=lambda r: r.get("stale"))
     holm(rows, "cw_vs_zero_p", "holm_cw_zero_p", skip=lambda r: r.get("stale"))
     holm(rows, "cw_vs_mean_p", "holm_cw_mean_p", skip=lambda r: r.get("stale"))
     info["dm_recalc_mismatch"] = [r["file"] for r in rows if r.get("dm_matches_stored") is False]
@@ -170,12 +181,14 @@ def to_markdown(res: dict) -> str:
          f"- DM 재계산이 저장값과 다른 결과: {i['dm_recalc_mismatch'] or '없음'}", ""]
     if i["mode"] == "trading":
         L += [f"- 샤프 분산 V(주기별, 지금 엔진 결과만): {i['trial_sr_var_by_frequency']}", "",
-              "| 결과 | 주기 | 옛 방식 | 방향 적중 | DM vs 0 (p) | CW vs 평균 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | CW vs 0 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | 샤프 | 초과수익 p | DSR p(저장, 당시 N) | DSR p(통일 N·V) |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+              "| 결과 | 주기 | 타겟 | 옛 방식 | 방향 적중 | DM vs 0 (p) | CW vs 평균 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | CW vs 0 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | 샤프 | 초과수익 p | DSR p(저장, 당시 N) | DSR p(통일 N·V) | DM vs naive 'naive 보다 낫다' 한쪽 p | Holm p 가족 (m) · 전체 (m) |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in rows:
-            L.append(f"| {r['name']} | {r['frequency']} | {'봉인 섞임' if r['sealed_inclusive'] else ('예' if r['stale'] else '')} | {_fmt(r.get('dir_acc'))} | "
+            L.append(f"| {r['name']} | {r['frequency']} | {r.get('target_kind') or 'return'} | {'봉인 섞임' if r['sealed_inclusive'] else ('예' if r['stale'] else '')} | {_fmt(r.get('dir_acc'))} | "
                      f"{_fmt(r.get('dm_vs_zero'), 2)} ({_fmt(r.get('dm_vs_zero_p'))}) | {_fmt(r.get('cw_vs_mean'), 2)} ({_fmt(r.get('cw_vs_mean_p'))}) | {_h(r, 'holm_cw_mean_p')} | "
                      f"{_fmt(r.get('cw_vs_zero'), 2)} ({_fmt(r.get('cw_vs_zero_p'))}) | {_h(r, 'holm_cw_zero_p')} | {_fmt(r.get('sharpe'), 2)} | {_fmt(r.get('bootstrap_p_excess'))} | "
-                     f"{_fmt(r.get('deflated_p_stored'))} (N={r.get('n_trials_stored')}) | {_fmt(r.get('deflated_p_unified'))}{_dsr_mark(r)} |")
+                     f"{_fmt(r.get('deflated_p_stored'))} (N={r.get('n_trials_stored')}) | {_fmt(r.get('deflated_p_unified'))}{_dsr_mark(r)} | "
+                     f"{_fmt(r.get('dm_vs_naive_p_better'))} | {_h(r, 'holm_dm_naive_p')} |")
     else:
         L += ["| 결과 | 대상 | k | 옛 방식 | 방향 적중 | DM vs naive (양측 p) | 방향 | 'naive 보다 낫다' 한쪽 p | Holm p 가족 (m) · 전체 (m) | CW vs 평균 (한쪽 p) | Holm p 가족 (m) · 전체 (m) | CW vs 0 (한쪽 p) |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in rows:
@@ -185,6 +198,7 @@ def to_markdown(res: dict) -> str:
     L += ["", "읽는 법",
           "- DM vs 0 / vs naive = 이 방법·이 학습 창이 그 기준보다 정확한가(음수면 정확, 추정 잡음 포함, 양측 p). 방향 칸이 '나쁨'이면 p 가 작아도 '유의하게 나쁘다'는 뜻이다.",
           "- CW vs 평균 = 학습 창 평균(분류면 양(+) 비율)만 아는 예측보다 예측 정보가 더 있는가(추정 잡음을 뺀 비교, 한쪽 p). 변수의 정보를 말할 때는 이 칸을 쓴다. 2026-11-10 전 결과에는 기준 열이 없어 비어 있다(다시 돌려야 나옴).",
+          "- 매매 모드의 변동성 타겟 줄: 방향 적중·DM/CW vs 0 은 해당 없음(—). 기준은 naive(최근 k 기간 변동성이 그대로 이어진다 — 이기기 어려운 기준)와 학습 창 평균(CW vs 평균). 샤프 등은 '예측 변동성이 높으면 비중을 줄이는' 규칙의 성과다.",
           "- CW vs 0 = 예측이 실제와 같은 쪽으로 움직이는가(평균 포함). 타겟 평균이 0 이 아니면 '평균만 맞히는' 예측도 유의하게 나온다 — 변수의 정보의 증거로 쓰지 않는다.",
           "- Holm = 다중비교 보정. '가족' = 같은 대상·주기·k·타겟 종류(·정보 시점)의 지금 엔진 결과, '전체' = 이 모드의 지금 엔진 결과 전부. 둘이 다르면 결론이 가족 정의에 달려 있다는 뜻이다. 옛 방식 결과는 보정·V 에 넣지 않았다.",
           "- DSR p(통일) 뒤의 표시: † = 같은 주기의 지금 엔진 결과가 2개 미만이라 V 를 근사(1/(n−1))로 씀 · ‡ = 왜도·첨도가 저장돼 있지 않아 정규 가정(0·3)을 씀.", ""]

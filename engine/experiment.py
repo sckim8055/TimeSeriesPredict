@@ -101,6 +101,11 @@ class ExperimentConfig(BaseModel):
         있어야 알 수 있어, 여기서는 설정의 frequency 로 한 번 하고 실행 때 fill_defaults 가 실제 주기로 다시 한다."""
         if self.technical_features is not None:
             object.__setattr__(self, "technical_features", _norm_technical(self.technical_features, self.use_technical, self.frequency, self.mode != "forecast"))
+        # pool_tickers 에 같은 종목을 두 번: 결과는 같은데(실행 때 한 번만 씀) 설정 해시만 달라져 같은 후보가 둘로 세어진다 → 거절(2026-11-13 독립 검토 12).
+        # 순서는 바꾸지 않는다(보탠 행의 순서가 LightGBM 학습에 영향을 줄 수 있어, 적은 순서가 곧 설정이다).
+        dup = [t for i, t in enumerate(self.pool_tickers) if t in self.pool_tickers[:i]]
+        if dup:
+            raise ValueError(f"종목 묶어 학습(pool_tickers)에 같은 종목을 두 번 넣었습니다: {sorted(set(dup))} — 한 번씩만 넣어 주세요")
         return self
 
     name: str = ""
@@ -207,7 +212,7 @@ class Dataset:
     pool: list | None = None  # 묶어 학습: [(종목, 그 종목의 Dataset)] — 학습 행만 보탠다(pool_training_rows)
 
 
-_TR_RE = re.compile(r"^(pct|diff)(\d*)$")
+_TR_RE = re.compile(r"^(pct|diff)([1-9]\d*)?$")   # 숫자는 1 이상, 앞에 0 없이(pct0·pct05 거절 — 2026-11-13 검토 8). 숫자를 비우면 1
 _FREQ_RANK = {"D": 0, "W": 1, "M": 2, "Q": 3, "H": 4, "Y": 5}  # 작을수록 촘촘한 주기
 
 
@@ -639,7 +644,23 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
         # 원본처럼 0~1 로 맞춘 입력이어야 보간이 제 범위에 들어간다. 그 밖은 표준화.
         # 연관성 순위·입력 선별(2026-11-12): 이 폴드의 학습 행(tr)만으로 입력–정답의 |순위상관|을 잰다. select_top 이 있으면 상위 N 개 열만 쓴다.
         # 전체 자료로 변수를 고른 뒤 같은 자료로 평가하면 미래를 보고 고른 셈이 된다 — 그래서 폴드 안에서 한다.
-        rel = fold_relevance(tr[ds.feature_names].values, tr["y"].values)
+        # 2026-11-13(독립 검토 13): 검증을 쓰는 폴드면 '검증 구간 + 그 앞 비움(emb_v)' 앞의 행으로만 잰다 — _split_fit 이 학습에 쓰는 행과 같다.
+        # 검증 행은 조기 종료 판단에 쓰므로, 선별이 그 행을 보면 검증이 '처음 보는 자료'가 아니게 된다.
+        # 창 입력 모델의 검증은 '창의 결정일' 단위인데, 창 목록은 정답이 있는 날로만 정해져(입력 열과 무관) 선별 전에 정확히 구할 수 있다.
+        sel_tr = tr
+        if uses_val:
+            if plugin.INPUT_SHAPE == "window":
+                _full0 = ds.X.loc[f.train].join(ds.y.loc[f.train].rename("y"))
+                _yv = _full0["y"].to_numpy(float)[cfg.seq_len - 1:]
+                _widx = _full0.index[cfg.seq_len - 1:][np.isfinite(_yv)]
+                _nv = _nval(_widx, f)
+                if _nv >= 10 and len(_widx) - _nv - emb_v >= 10:
+                    sel_tr = tr[tr.index < _widx[len(_widx) - _nv - emb_v]]
+            else:
+                _nv = _nval(tr.index, f)
+                if _nv >= 10 and len(tr) - _nv - emb_v >= 10:
+                    sel_tr = tr.iloc[: len(tr) - _nv - emb_v]
+        rel = fold_relevance(sel_tr[ds.feature_names].values, sel_tr["y"].values)
         keep = list(range(len(ds.feature_names)))
         if cfg.select_top:
             if cfg.select_top > len(ds.feature_names):
@@ -1057,6 +1078,9 @@ def prepare(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, device: st
     log_e.info("모델 %s(%s) · 장치 %s · 파라미터(받은 값 %s → 기본값 채운 실제 값) %s · 창 길이 %s", plugin.NAME, plugin.INPUT_SHAPE, device,
                describe(cfg.model_params), describe(params), cfg.seq_len if plugin.INPUT_SHAPE == "window" else "-")
     with step(log_d, "데이터셋 만들기(읽기→변환→발표시차 정렬→타겟)"):
+        if cfg.select_top and plugin.INPUT_SHAPE not in ("table", "window"):   # 2026-11-13 독립 검토 12 — 무시되면서 해시만 바꾸던 것
+            raise ValueError("입력 선별(select_top)은 입력 변수로 학습하는 모델(릿지·LightGBM·LSTM·GRU·BIVA)에서만 쓸 수 있습니다 — "
+                             f"{plugin.NAME} 은(는) 입력 변수를 고르지 않으므로 선별이 아무 일도 하지 않습니다. 선별 칸을 비우세요")
         ds = build_dataset(cfg, dv, reg)
         if cfg.pool_tickers:
             ds.pool = _build_pool(cfg, plugin, dv, reg, ds)

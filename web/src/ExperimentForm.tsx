@@ -141,7 +141,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
   })()
   const config = {
     name: name || undefined, mode, target_variable: isForecast ? targetVar : null, ...(isForecast ? { forecast_info_time: infoTime } : {}), ticker, frequency: isForecast ? targetFreq : freq, target: { kind, k, threshold }, variable_ids: selected,
-    ...(selectTop !== '' && Number(selectTop) >= 1 ? { select_top: Number(selectTop) } : {}),
+    ...((model.input_shape === 'table' || model.input_shape === 'window') && selectTop !== '' && Number(selectTop) >= 1 ? { select_top: Number(selectTop) } : {}),   // 입력으로 학습하는 모델만(검토 12)
     ...(!isForecast && model.input_shape === 'table' && poolTickers.filter(t => t !== ticker).length ? { pool_tickers: poolTickers.filter(t => t !== ticker) } : {}),
     variable_transforms: Object.fromEntries(selected.filter(v => transforms[v] != null && transforms[v] !== (meta.variables.find(x => x.id === v)?.transform ?? 'none')).map(v => [v, transforms[v]])),  // 기본값과 같으면 보내지 않음
     lag_override: Object.fromEntries(selected.filter(v => lagOverride[v] != null && lagOverride[v] !== meta.variables.find(x => x.id === v)?.lag_days).map(v => [v, lagOverride[v]])),
@@ -292,6 +292,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           <p className="hint">기술지표는 아래 변수 목록에 없습니다 — 변수 사전에서 가져오는 것이 아니라 {isForecast ? '예측 대상' : `ETF(${ticker})`} 의 가격{isForecast ? '' : '·거래량'}으로 그때그때 계산하기 때문입니다. 처음에는 전부 켜져 있고, 하나씩 또는 묶음으로 뺄 수 있습니다. 모두 빼면 블록이 꺼집니다. 고른 목록은 결과 json 의 config.technical_features(전부면 비어 있음)와 feature_names 에 남습니다. 이름(창 길이)은 주기(일·주·월)마다 달라 주기를 바꾸면 전부 선택으로 돌아갑니다.</p>
           <div className="toolbar">
             <button type="button" className="chip" onClick={() => setTechSel(null)} disabled={techSel === null}>전부 선택</button>
+            <button type="button" className="chip" onClick={() => setTech([])} title="기술지표를 모두 빼고 블록을 끕니다(다시 넣으려면 위 '기술지표 블록' 체크)">전부 빼기</button>
             {Array.from(new Set(techAll.map(t => t.group))).map(g => {
               const ns = techAll.filter(t => t.group === g).map(t => t.name)
               const allOn = ns.every(techOn)
@@ -360,8 +361,8 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           {isForecast && <div className="field"><label>외생변수 정보 시점</label><select value={infoTime} onChange={e => setInfoTime(e.target.value as any)}><option value="stamp">대상 기준일 t (보수적)</option><option value="release">대상 값 공개 시점 t+lag (현실적)</option></select></div>}
           <div className="field"><label>검증 방식</label><select value={valMode} onChange={e => setValMode(e.target.value as any)}><option value="walkforward">워크포워드(창을 밀며 반복 재학습)</option><option value="split">1회 분할(학습·검증·테스트 날짜 지정)</option></select></div>
           <div className="field"><label>시드</label><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} /></div>
-          <div className="field"><label>연관성 높은 입력만 쓰기 <span className="hint">개수 · 비우면 전부</span></label><input value={selectTop} onChange={e => setSelectTop(e.target.value.replace(/[^0-9]/g, ''))} placeholder="비움 = 전부 사용" />
-            <span className="hint">폴드마다 학습 구간 안에서만 연관성을 재서 고릅니다(미래를 보고 고르지 않음). 비워도 연관성 순위는 결과에 나옵니다.</span></div>
+          {(model.input_shape === 'table' || model.input_shape === 'window') && <div className="field"><label>연관성 높은 입력만 쓰기 <span className="hint">개수 · 비우면 전부</span></label><input value={selectTop} onChange={e => setSelectTop(e.target.value.replace(/[^0-9]/g, ''))} placeholder="비움 = 전부 사용" />
+            <span className="hint">폴드마다 학습 구간 안에서만 연관성을 재서 고릅니다(미래를 보고 고르지 않음). 비워도 연관성 순위는 결과에 나옵니다.</span></div>}
           {!isForecast && model.input_shape === 'table' && meta.tickers.length > 1 && <div className="field"><label>종목 묶어 학습 <span className="hint">다른 종목의 행을 학습에만 보탬</span></label>
             <div>{meta.tickers.filter(t => t.id !== ticker).map(t => { const have = meta.data_versions.find(v => v.id === dataVersion)?.tickers?.includes(t.id) ?? true
               return <label key={t.id} style={{ display: 'block', fontWeight: 'normal' }}><input type="checkbox" disabled={!have} checked={poolTickers.includes(t.id)} onChange={e => setPoolTickers(e.target.checked ? [...poolTickers, t.id] : poolTickers.filter(x => x !== t.id))} /> {t.name} ({t.id}){have ? '' : ' — 이 데이터 버전에 가격이 없습니다(데이터 가져오기 필요)'}</label> })}</div>

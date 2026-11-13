@@ -20,6 +20,7 @@ export default function VariableValues({ id, onChanged }: { id: string; onChange
       <Checks c={c} freq={d.freq} />
       <div className="toolbar">
         <label><input type="checkbox" checked={showTr} onChange={e => setShowTr(e.target.checked)} /> 모델에 넣는 꼴({d.transform})로 바꾼 값 보기</label>
+        {d.transform_note && <span className="hint"> — {d.transform_note}</span>}
       </div>
       <Line values={d.values} useTr={showTr} marks={(c?.reversals ?? []).map((x: any) => x.date)} />
       <details><summary className="hint">최근 값 30개 (전체는 CSV)</summary>

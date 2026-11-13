@@ -7,7 +7,7 @@ rem    2) Edit the two lines below: GH_USER and GH_REPO.
 rem  Login: a browser window (Git Credential Manager) opens on first push.
 rem         Never paste a token into chat.
 rem ======================================================================
-set GH_USER=YOUR_GITHUB_ID
+set GH_USER=sckim8055
 set GH_REPO=TimeSeriesPredict
 
 cd /d %~dp0

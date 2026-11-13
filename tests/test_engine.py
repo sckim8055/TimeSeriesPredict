@@ -1544,7 +1544,7 @@ def test_collect_failed_source_keeps_previous_and_is_not_latest(tmp_path, monkey
     assert latest_version_id(data) == old.name and [x["incomplete"] for x in list_versions(data)] == [False, True]
     # 없는 버전 id 로 이어 받기는 거절(폴더를 만들지 않는다)
     monkeypatch.setattr(sys, "argv", ["collect.py", "--sources", "yf", "--data-dir", str(data), "--version", "20200101T00000"])
-    assert collect.main() == 2 and not (data / "versions" / "20200101T00000").exists()
+    assert collect.main() == 3 and not (data / "versions" / "20200101T00000").exists()   # 검토 5: 시작 전에 멈춤 = 3(받지 못한 항목 2 와 구분)
     with pytest.raises(ValueError):
         DataVersion(data, "")
     # 같은 버전에 이어 받아 성공하면 온전한 버전이 된다
@@ -2347,7 +2347,7 @@ def test_without_password_external_changes_are_blocked(monkeypatch):
 def test_collect_naver_sliding_window_is_merged_not_failure(tmp_path, monkeypatch):
     """네이버 수정주가(교차검증용, pykrx)는 '최근 N일'만 주는 이동 창이라 받을 때마다 시작일이 뒤로 밀린다(2026-11-12 실제: 2014-08-08 → 2014-08-20).
     짧아졌다고 버전 전체를 '일부 받지 못함'으로 만들면 매번 실패한다 → 교차검증 출처만: 겹치는 날 값이 같으면 직전 앞부분 + 새 자료로 잇고,
-    값이 다르면(수정주가가 소급해 바뀜) 직전 파일을 그대로 둔다. 어느 쪽이든 실패가 아니라 기록으로 남긴다. 주 출처(datago·yf)의 짧아짐은 여전히 실패."""
+    값이 같은 배수로 바뀌었으면 앞부분도 그 배수로 맞춰 잇고(→ test_review13_naver_…), 설명할 수 없게 바뀌었으면 직전 파일을 그대로 둔다. 어느 쪽이든 실패가 아니라 기록으로 남긴다. 주 출처(datago·yf)의 짧아짐은 여전히 실패."""
     import collect
     from adapters import pykrx_adapter, yf_adapter
     from engine.store import DataVersion
@@ -2382,7 +2382,7 @@ def test_collect_naver_sliding_window_is_merged_not_failure(tmp_path, monkeypatc
     new2 = sorted(p.name for p in (data / "versions").iterdir())[-1]
     dv2 = DataVersion(data, new2)
     assert len(dv2.read_prices(f"{collect.TICKERS[0]}_naver")) == 80 and not dv2.manifest().get("incomplete")
-    assert any("소급" in str(v) for v in (dv2.manifest().get("notes") or {}).values())
+    assert any("설명할 수 없" in str(v) for v in (dv2.manifest().get("notes") or {}).values())   # 종가만 1.5배 = 열마다 다른 비율(2026-11-13 규칙)
     # 주 출처(yf)가 짧아지면 여전히 실패
     monkeypatch.setattr(yf_adapter, "fetch_prices", lambda t, *a, **k: full.iloc[5:])
     _time.sleep(1.1)
@@ -2552,3 +2552,444 @@ def test_api_ticker_values_and_checks(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as e:
         m.ticker_values("999999")
     assert e.value.status_code == 404
+
+
+def test_sealed_history_counts_reopenings_and_skips_failed():
+    """봉인 기록에서 '같은 후보(설정 지문)'·'같은 봉인 시작일'로 연 횟수를 센다. 수치를 보기 전에 실패한 시도는 세지 않고,
+    실행 중이거나 강제 종료된 시도(started)는 연 것으로 센다(2026-11-13: 다시 열기는 막지 않고 경고·기록 — 사용자 결정)."""
+    from engine.sealed import history
+    log = [{"hash": "aaa", "sealed_from": "2025-01-01", "status": "done"},
+           {"hash": "aaa", "sealed_from": "2025-01-01", "status": "failed"},
+           {"hash": "bbb", "sealed_from": "2025-01-01", "status": "started"},
+           {"hash": "ccc", "sealed_from": "2024-01-01"}]                        # 옛 기록: status 없음 = done
+    h = history(log, "aaa", "2025-01-01")
+    assert len(h["same_config"]) == 1 and len(h["same_seal_date"]) == 2 and h["total"] == 3 and h["failed"] == 1
+    assert len(history(log, "zzz", "2026-01-01")["same_config"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# 독립 검토 반영 (2026-11-13) — 시험을 먼저 쓰고 고친다
+# ---------------------------------------------------------------------------
+def test_review1_add_variable_freq_comes_from_data_not_from_form(tmp_path, monkeypatch):
+    """검토 1(높음): 화면 기본값 '일(D)' 그대로 월 자료를 등록하면 발표시차가 1일로 잡혀 미래 정보가 샌다.
+    주기는 받아 본 자료의 날짜 간격(한국은행은 코드 끝의 주기)으로 정하고, 사람이 다른 주기를 넣으면 거절한다."""
+    import api.main as m
+    from fastapi import HTTPException
+    monkeypatch.setattr(m, "DATA", tmp_path)
+    monkeypatch.setenv("FRED_API_KEY", "x"); monkeypatch.setenv("ECOS_API_KEY", "x")
+    master = tmp_path / "variable_master.xlsx"
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "variables"
+    ws.append(["id", "name", "description", "group", "domain", "role", "freq", "lag_days", "lag_confirmed", "source", "source_code", "alt_sources", "duplicate_of", "default_fill", "transform", "unit", "active", "note"])
+    ws.append(["KOSPI", "코스피", "", "B", "", "", "D", 0, "Y", "YF", "^KS11", "", "", "ffill", "pct", "", "Y", ""])
+    wb.save(master)
+    series = {"MON": pd.date_range("2022-01-01", periods=36, freq="MS"), "WK": pd.date_range("2023-01-06", periods=100, freq="W-FRI"),
+              "DAY": pd.date_range("2025-01-01", periods=300, freq="B"), "QTR": pd.date_range("2020-01-01", periods=12, freq="QS"),
+              "YR": pd.date_range("2020-01-01", periods=5, freq="YS"), "TWO": pd.date_range("2025-01-01", periods=2, freq="MS")}
+    monkeypatch.setattr(m, "_probe_series", lambda s, code, f: pd.Series(np.arange(len(series[code.split("/")[0]])) + 100.0, index=series[code.split("/")[0]]))
+    for code, want in (("MON", "M"), ("WK", "W"), ("DAY", "D"), ("QTR", "Q"), ("YR", "Y")):
+        c = m.check_variable(m.VariableCheckBody(source="FRED", source_code=code))
+        assert c["ok"] and c["freq"] == want and c["freq_basis"], (code, c)
+    # 주기를 비우면 자료에서 정한 주기로 등록되고, 발표시차 기본값도 그 주기 것이 된다
+    r = m.add_variable(m.VariableBody(id="CPI2", source="FRED", source_code="MON"))
+    assert r["freq"] == "M" and "월" in r["note"]
+    reg, _ = Registry.load_master(master)
+    assert reg.get("CPI2").freq == "M" and reg.get("CPI2").lag_days == 45
+    # 사람이 넣은 주기가 자료와 다르면 거절(조용히 바꾸지 않는다)
+    with pytest.raises(HTTPException) as e:
+        m.add_variable(m.VariableBody(id="CPI3", source="FRED", source_code="QTR", freq="D"))
+    assert "주기" in e.value.detail and "분기" in e.value.detail
+    # 같으면 그대로 받는다
+    assert m.add_variable(m.VariableBody(id="DAY2", source="FRED", source_code="DAY", freq="D"))["freq"] == "D"
+    # 값이 너무 적어 주기를 판별 못 하면 등록하지 않는다
+    with pytest.raises(HTTPException) as e:
+        m.add_variable(m.VariableBody(id="TWO2", source="FRED", source_code="TWO"))
+    assert "주기" in e.value.detail
+    # 한국은행은 코드 끝 주기를 따른다(A = 연 → Y)
+    c = m.check_variable(m.VariableCheckBody(source="ECOS", source_code="YR/0101000/A"))
+    assert c["ok"] and c["freq"] == "Y" and "코드" in c["freq_basis"]
+
+
+def test_review2_seal_exposure_includes_near_identical_other_tickers(tmp_path):
+    """검토 2(높음): 091230 은 봉인 구간에서 091160 과 하루 수익률 상관 0.99 — 091230 개발 결과로 그 구간을 채점해 보면 091160 의 봉인 구간을 본 것과 같다.
+    같은 종목만 찾던 seal_exposures 가 봉인 구간 하루 로그수익률 상관 |ρ| ≥ 0.9 인 다른 종목의 결과도 찾아, 상관값과 함께 돌려준다.
+    상관이 낮은 종목·봉인 전까지만 채점한 결과·데이터가 없을 때(dv 없음)는 넣지 않는다. 막지는 않는다(경고·기록)."""
+    from engine.sealed import seal_exposures
+    rng = np.random.default_rng(3)
+    idx = pd.bdate_range("2023-01-02", periods=600)
+    common = rng.normal(0, 0.02, len(idx))
+    def px(r):
+        c = 100 * np.exp(np.cumsum(r))
+        return pd.DataFrame({"open": c, "high": c, "low": c, "close": c, "volume": 1.0}, index=idx)
+    dv = DataVersion(tmp_path, "t")
+    dv.write_prices("AAA", px(common))
+    dv.write_prices("BBB", px(common + rng.normal(0, 0.002, len(idx))))    # 거의 같은 종목
+    dv.write_prices("CCC", px(rng.normal(0, 0.02, len(idx))))             # 상관 없는 종목
+    sf = str(idx[400].date())
+    res = tmp_path / "res"; res.mkdir()
+    def put(stem, ticker, to):
+        (res / f"{stem}.json").write_text(json.dumps({"config": {"mode": "trading", "ticker": ticker, "validation": {}},
+                                                       "evaluation_period": [str(idx[100].date()), to]}), encoding="utf-8")
+    put("a_same", "AAA", str(idx[-1].date())); put("b_near", "BBB", str(idx[-1].date())); put("b_before", "BBB", str(idx[399].date()))
+    put("c_far", "CCC", str(idx[-1].date()))
+    cfg = {"mode": "trading", "ticker": "AAA", "validation": {"sealed_from": sf}}
+    ex = seal_exposures(res, cfg, dv)
+    got = {x["result"]: x for x in ex}
+    assert set(got) == {"a_same", "b_near"}, got
+    assert got["a_same"].get("related_ticker") is None
+    assert got["b_near"]["related_ticker"] == "BBB" and got["b_near"]["corr"] > 0.95 and got["b_near"]["corr_period"][0] == sf
+    assert {x["result"] for x in seal_exposures(res, cfg)} == {"a_same"}          # 데이터 없이 부르면 전과 같다(같은 종목만)
+
+
+def test_review2_sealed_opening_records_exposures(tmp_path, monkeypatch):
+    """봉인을 열면 결과의 sealed_info.exposures 에 '열기 전에 이 봉인 구간을 이미 채점한 개발 결과'(같은 종목 + 거의 같은 종목)가 남는다.
+    (전에는 미리보기 경고로만 보여 주고 결과 파일에는 남지 않았다 — 나중에 결과만 보는 사람은 알 수 없었다.)"""
+    import cli
+    rng = np.random.default_rng(4)
+    idx = pd.bdate_range("2022-01-03", periods=700)
+    common = rng.normal(0, 0.02, len(idx))
+    def px(r):
+        c = 100 * np.exp(np.cumsum(r))
+        return pd.DataFrame({"open": c, "high": c * 1.01, "low": c * 0.99, "close": c, "volume": 1000.0}, index=idx)
+    data = tmp_path / "data"
+    dv = DataVersion(data, "v1")
+    dv.write_prices("AAA", px(common)); dv.write_prices("BBB", px(common + rng.normal(0, 0.002, len(idx))))
+    mf = data / "versions" / "v1" / "manifest.json"
+    if not mf.exists():
+        mf.write_text(json.dumps({"id": "v1", "complete": True}), encoding="utf-8")
+    (data / "registry.csv").write_text("id,freq,source,lag_days\n", encoding="utf-8")
+    sf = str(idx[550].date())
+    pol = tmp_path / "pol.json"; pol.write_text(json.dumps({"trading": {"AAA": sf}}), encoding="utf-8")
+    monkeypatch.setenv("TSP_SEAL_POLICY", str(pol))
+    monkeypatch.setattr(cli, "DATA", data); monkeypatch.setattr(cli, "RESULTS", tmp_path / "results")
+    from engine.experiment import results_dir
+    res = results_dir(tmp_path / "results", "trading")
+    (res / "dev_bbb.json").write_text(json.dumps({"config": {"mode": "trading", "ticker": "BBB", "validation": {}},
+                                                  "evaluation_period": [str(idx[300].date()), str(idx[-1].date())]}), encoding="utf-8")
+    cfgp = tmp_path / "c.json"
+    cfgp.write_text(json.dumps({"name": "s", "ticker": "AAA", "model": "ridge", "validation": {"train_len": 250, "test_len": 40}}), encoding="utf-8")
+    cli.cmd_run(str(cfgp), "v1", sealed=True)
+    out = [p for p in res.glob("*.json") if p.name not in ("dev_bbb.json", "sealed_log.json", "experiment_counter.json")]
+    rs = [json.loads(p.read_text(encoding="utf-8")) for p in out]
+    rs = [r for r in rs if r.get("sealed_evaluation")]
+    assert len(rs) == 1
+    ex = rs[0]["sealed_info"]["exposures"]
+    assert [x["result"] for x in ex] == ["dev_bbb"] and ex[0]["related_ticker"] == "BBB" and ex[0]["corr"] > 0.95
+
+
+def test_review3_explain_refuses_volatility_target(tmp_path):
+    """검토 3(중간): 계산 따라가기의 '결정' 단계는 '예측 > 문턱 → 보유'로 설명하는데, 변동성 타겟의 실제 규칙은 '비중 = 학습 창 평균 변동성 ÷ 예측 변동성'.
+    틀린 설명을 보여 주지 않도록, 지원할 때까지 거절한다(묶음 학습·입력 선별과 같은 방식)."""
+    from engine.explain import explain
+    prices, s = predictable_ohlcv(600, seed=5)
+    dv, reg = _dv_with(prices, s, tmp_path)
+    cfg = dict(ticker="TEST", model="ridge", variable_ids=["S_signal"], use_technical=False, target={"kind": "volatility", "k": 5},
+               validation={"train_len": 250, "test_len": 40})
+    with pytest.raises(ValueError, match="변동성"):
+        explain(cfg, dv, reg)
+
+
+def test_review4_restat_handles_volatility_results(tmp_path):
+    """검토 4(중간): 재계산 도구가 변동성 결과를 '예측값 없음(규칙 모델)'으로 적었다('0 예측 대비 DM' 이 없다는 이유로).
+    변동성 결과는 '변동성 타겟' 줄이 되어, naive 대비 DM(저장값, 나음 한쪽 p)과 학습 창 평균 기준 CW 를 내고, 0 예측 대비 값은 비워 둔다.
+    Holm 가족은 타겟 종류로 나뉘므로 수익률 결과와 섞이지 않는다."""
+    import importlib.util
+    from engine.experiment import save_result
+    spec = importlib.util.spec_from_file_location("restat", Path(__file__).resolve().parents[1] / "tools" / "restat.py")
+    rs = importlib.util.module_from_spec(spec); spec.loader.exec_module(rs)
+    prices, s = predictable_ohlcv(700, seed=8)
+    dv, reg = _dv_with(prices, s, tmp_path)
+    out = tmp_path / "results" / "trading"
+    cv = ExperimentConfig(name="vol", ticker="TEST", model="ridge", variable_ids=["S_signal"], use_technical=True, target={"kind": "volatility", "k": 5},
+                          validation=Validation(train_len=300, test_len=40))
+    cr = ExperimentConfig(name="ret", ticker="TEST", model="ridge", variable_ids=["S_signal"], use_technical=False, validation=Validation(train_len=300, test_len=40))
+    rv = run_experiment(cv, dv, reg); save_result(rv, out); save_result(run_experiment(cr, dv, reg), out)
+    rows = {x["name"]: x for x in rs.restat("trading", tmp_path / "results")["rows"]}
+    v = rows["vol"]
+    assert "예측값 없음" not in (v.get("note") or "") and "변동성" in v["note"]
+    assert v["dm_vs_naive"] == rv["prediction_metrics"]["dm_vs_naive"] and v["dm_vs_naive_p_better"] is not None
+    assert v.get("cw_vs_mean_p") is not None and v.get("n_eval", 0) > 10
+    assert v.get("dm_vs_zero") is None and v.get("cw_vs_zero") is None
+    assert v["holm_cw_mean_p_m"] == 1 and rows["ret"]["holm_cw_mean_p_m"] == 1     # 가족이 나뉜다
+    assert v["holm_dm_naive_p_m"] == 1
+    md = rs.to_markdown(rs.restat("trading", tmp_path / "results"))
+    assert "naive" in md
+
+
+def test_review5_collect_exit_code_3_means_stopped_before_collecting(tmp_path, monkeypatch):
+    """검토 5(중간): 시작하기 전에 멈춘 경우(변수 사전 없음·엑셀 고칠 곳·없는 버전 id)도 종료 코드 2 를 써서, 화면이
+    '받지 못한 항목이 있어 직전 값을 두었다'고 잘못 알렸다. 조기 멈춤은 3, 화면 문구도 따로."""
+    import collect
+    import api.main as m
+    monkeypatch.setattr(sys, "argv", ["collect.py", "--data-dir", str(tmp_path / "없음")])
+    assert collect.main() == 3                                            # 변수 사전 없음
+    class P:
+        def __init__(self, rc): self.rc = rc
+        def poll(self): return self.rc
+    for rc, word in ((3, "시작하기 전에"), (2, "받지 못한 항목"), (1, "종목 가격을 새로 받지 못했"), (0, "모두 받았")):
+        monkeypatch.setattr(m, "_COLLECT", {"proc": P(rc), "log": str(tmp_path / "x.log"), "started": "t"})
+        st = m.collect_status()
+        assert st["returncode"] == rc and word in st["message"], (rc, st["message"])
+
+
+def _write_dv(path, prices_by_ticker: dict, variables: dict) -> tuple[DataVersion, Registry]:
+    dv = DataVersion(path, "t")
+    for t, p in prices_by_ticker.items():
+        dv.write_prices(t, p)
+    reg = Registry()
+    for name, sr in variables.items():
+        reg.add(Variable(id=name, freq="D", source="DERIVED"))
+        dv.write_variables(sr.rename("value").rename_axis("date").reset_index().assign(variable_id=name), source=f"syn_{name}")
+    return dv, reg
+
+
+def _shake_after(p: pd.DataFrame, T, seed: int) -> pd.DataFrame:
+    """T 이후 가격만 흔든다(하루하루 다른 배수 — 수익률·변동성이 모두 바뀐다). T 앞은 그대로."""
+    q = p.copy()
+    m = q.index >= T
+    f = np.exp(np.cumsum(np.random.default_rng(seed).normal(0, 0.05, int(m.sum()))))
+    for c in ("open", "high", "low", "close"):
+        q.loc[m, c] = q.loc[m, c].to_numpy() * f
+    q.loc[m, "volume"] = q.loc[m, "volume"].to_numpy() * np.random.default_rng(seed + 1).lognormal(0, 1, int(m.sum()))
+    return q
+
+
+@pytest.mark.parametrize("case", ["select_top", "pool_ridge", "pool_lgbm", "volatility"])
+def test_review6_future_perturbation_leaves_past_predictions_unchanged(case, tmp_path):
+    """검토 6(중간): '폴드 안에서만 고른다·경계 앞 행만 보탠다·변동성도 미래를 안 쓴다'는 주장을 직접 시험한다.
+    날짜 T 이후의 자료만 바꾼다 — 가격은 흔들고, 신호 변수 S 와 잡음 변수 N1 의 값은 맞바꾼다(그러면 '전체 자료로' 순위를 매기는 잘못된 코드는
+    T 앞 폴드에서도 N1 을 고르게 되어 예측이 바뀐다). 결정일이 T 앞인 예측은 모두 그대로여야 한다(소수 10자리)."""
+    pa, pb, s = _shared_signal_pair(700)
+    rng = np.random.default_rng(11)
+    noise = {f"N{i}": pd.Series(np.convolve(rng.normal(size=700), np.ones(5) / 5, "same"), index=pa.index) for i in (1, 2, 3)}
+    T = pa.index[260]
+    s2, n2 = s.copy(), noise["N1"].copy()
+    s2[s.index >= T], n2[s.index >= T] = noise["N1"][s.index >= T] * 3, s[s.index >= T]
+    dv1, reg1 = _write_dv(tmp_path / "a", {"AAA": pa, "BBB": pb}, {"S_signal": s, **noise})
+    dv2, reg2 = _write_dv(tmp_path / "b", {"AAA": _shake_after(pa, T, 1), "BBB": _shake_after(pb, T, 2)}, {"S_signal": s2, **noise, "N1": n2})
+    base = dict(ticker="AAA", use_technical=False, validation=Validation(train_len=150, test_len=30))
+    cfg = {"select_top": dict(model="ridge", variable_ids=["S_signal", "N1", "N2", "N3"], select_top=1),
+           "pool_ridge": dict(model="ridge", variable_ids=["S_signal"], pool_tickers=["BBB"]),
+           "pool_lgbm": dict(model="lightgbm_model", variable_ids=["S_signal"], pool_tickers=["BBB"]),
+           "volatility": dict(model="ridge", variable_ids=["S_signal", "N1"], target={"kind": "volatility", "k": 5}, use_technical=True)}[case]
+    c = ExperimentConfig(**{**base, **cfg})
+    r1, r2 = run_experiment(c, dv1, reg1), run_experiment(c, dv2, reg2)
+    p1, p2 = r1["_daily"]["prediction"].dropna(), r2["_daily"]["prediction"].dropna()
+    early = p1.index[p1.index < T]
+    assert len(early) >= 60, len(early)
+    assert np.allclose(p1.loc[early].values, p2.reindex(early).values, atol=1e-10, rtol=0), np.abs(p1.loc[early] - p2.reindex(early)).max()
+    if case == "volatility":                                       # 비중(포지션)도 T 앞은 같다
+        w1, w2 = r1["_daily"]["position"], r2["_daily"]["position"]
+        assert np.allclose(w1.loc[early].values, w2.reindex(early).values, atol=1e-10, equal_nan=True)
+    assert not np.allclose(p1.loc[p1.index >= T].values[:50], p2.reindex(p1.index[p1.index >= T][:50]).values, atol=1e-6)   # 바꾼 뒤는 실제로 달라졌다(시험이 헛돌지 않는다)
+
+
+@pytest.mark.parametrize("model", ["ridge", "lightgbm_model"])
+def test_review6_pool_rows_respect_validation_and_test_boundary_end_to_end(model, tmp_path):
+    """묶어 학습의 경계를 실험 전체로 시험한다: 첫 폴드의 경계(검증을 쓰는 LightGBM 은 검증 시작일, 릿지는 테스트 시작일)부터 뒤의
+    '보탠 종목(BBB)' 가격만 바꾼다. 첫 폴드의 예측은 그대로여야 한다 — 보탠 행이 경계 뒤 가격으로 정답을 만들면(또는 경계를 테스트 시작일로 잘못 잡으면) 달라진다."""
+    pa, pb, s = _shared_signal_pair(700)
+    base = dict(ticker="AAA", model=model, variable_ids=["S_signal"], use_technical=False, pool_tickers=["BBB"], validation=Validation(train_len=200, test_len=50))
+    dv1, reg1 = _pair_dv(tmp_path / "a", pa, pb, s)
+    r1 = run_experiment(ExperimentConfig(**base), dv1, reg1)
+    ff = r1["periods"]["first_fold"]
+    cut = pd.Timestamp((ff.get("val") or ff["test"])[0])
+    if model == "lightgbm_model":
+        assert ff.get("val"), ff                                     # 이 설정에서 검증이 실제로 쓰였다
+    dv2, reg2 = _pair_dv(tmp_path / "b", pa, _shake_after(pb, cut, 5), s)
+    r2 = run_experiment(ExperimentConfig(**base), dv2, reg2)
+    te = pd.date_range(ff["test"][0], ff["test"][1])
+    p1, p2 = r1["_daily"]["prediction"].dropna(), r2["_daily"]["prediction"].dropna()
+    d = p1.index[p1.index.isin(te)]
+    assert len(d) >= 40 and np.allclose(p1.loc[d].values, p2.reindex(d).values, atol=1e-10, rtol=0)
+
+
+def test_review6_volatility_sealed_refused_incomplete_version_skipped_duplicate_keeps_last(tmp_path, monkeypatch):
+    """검토 6 나머지: ① 변동성 타겟은 봉인 평가를 거절한다(통과 기준이 계획서에 없다). ② [값 보기]의 기본 버전은 '가장 새 온전한 버전' —
+    더 새 버전이 '일부 받지 못함'이면 건너뛴다. ③ 같은 날짜가 두 번이면 화면과 엔진이 모두 '나중 값'을 쓴다(값이 다를 때)."""
+    from tests.synthetic import volatility_ohlcv
+    prices, s = volatility_ohlcv(700, seed=2)
+    dv, reg = _dv_with(prices, s, tmp_path / "v")
+    with pytest.raises(ValueError, match="봉인"):
+        run_experiment(ExperimentConfig(ticker="TEST", model="ridge", variable_ids=[s.name], use_technical=False, target=TargetSpec(kind="volatility", k=5),
+                                        validation=Validation(train_len=300, test_len=60, sealed_from=str(prices.index[600].date()))), dv, reg, sealed=True)
+    import api.main as m
+    from engine.registry import Variable
+    data = tmp_path / "data"
+    for vid_, (val2, incomplete) in {"20260101T000000Z": (7.0, False), "20260201T000000Z": (9.0, True)}.items():
+        d = data / "versions" / vid_; d.mkdir(parents=True)
+        dates = list(pd.bdate_range("2025-01-01", periods=20)); vals = [100.0 + i for i in range(20)]
+        dates.append(dates[5]); vals.append(val2)                                   # 같은 날짜(1월 8일)에 다른 값이 뒤에 한 번 더
+        pd.DataFrame({"variable_id": "X", "date": dates, "value": vals}).to_parquet(d / "variables_fred.parquet", index=False)
+        (d / "manifest.json").write_text(json.dumps({"start": "2006-01-01", **({"incomplete": True} if incomplete else {})}))
+    reg2 = Registry([Variable(id="X", freq="D", lag_days=1, source="FRED", source_code="XX", transform="pct")])
+    monkeypatch.setattr(m, "DATA", data); monkeypatch.setattr(m, "_registry", lambda: (reg2, []))
+    r = m.variable_values("X")
+    assert r["version"] == "20260101T000000Z"                                     # 더 새 버전은 '일부 받지 못함'이라 건너뜀
+    day = str(pd.bdate_range("2025-01-01", periods=20)[5].date())
+    shown = {x["date"]: x["value"] for x in r["values"]}
+    assert shown[day] == 7.0 and r["checks"]["duplicate_dates"] == 1              # 화면: 나중 값
+    w = DataVersion(data, "20260101T000000Z").wide(["X"])                       # 엔진이 실험에 쓰는 길(build_dataset → wide)
+    assert float(w.loc[pd.Timestamp(day), "X"]) == 7.0 and len(w) == 20          # 엔진: 나중 값 하나
+
+
+def test_review7_reversal_rule_is_robust_z_from_median_and_reports_flat_series():
+    """검토 7(낮음): '튀었다 되돌아온 날'의 기준을 문서와 같게 — 강건 z = |변화 − 중앙값| ÷ (1.4826·MAD) > 8 이 이틀 연속, 방향 반대,
+    둘째 날이 첫째 날 움직임의 2/3 이상을 되돌림. 변화의 대부분이 0 이라 MAD 가 0 이면 점검할 수 없음을 말없이 건너뛰지 않고 알린다."""
+    import api.main as m
+    idx = pd.bdate_range("2024-01-01", periods=300)
+    rng = np.random.default_rng(1)
+    # 꾸준히 오르는 값(하루 변화 중앙값 0.02) — 중앙값을 빼지 않으면 작은 잡음도 '큰 움직임'처럼 재진다
+    r = 0.02 + rng.normal(0, 0.001, 300)
+    s = pd.Series(100 * np.exp(np.cumsum(r)), index=idx)
+    c = m._gap_and_reversal_checks(s, "D")
+    assert c["reversals"] == [] and c["reversal_note"] is None
+    s2 = s.copy(); s2.iloc[150] *= 1.5                                             # 하루 50% 튀었다 다음 날 제자리
+    c2 = m._gap_and_reversal_checks(s2, "D")
+    assert [x["date"] for x in c2["reversals"]] == [str(idx[150].date())]
+    s3 = s.copy(); s3.iloc[150:] *= 1.5; s3.iloc[151:] /= 1.2                      # 50% 오른 뒤 일부(1/3 쯤)만 되돌림 — 자료 오류 모양이 아니다
+    assert m._gap_and_reversal_checks(s3, "D")["reversals"] == []
+    flat = pd.Series([5.0] * 250 + [5.0, 50.0, 5.0] + [5.0] * 47, index=idx)      # 변화가 거의 다 0 → MAD 0
+    cf = m._gap_and_reversal_checks(flat, "D")
+    assert cf["reversals"] == [] and "MAD" in (cf["reversal_note"] or "")
+
+
+def test_review8_transform_rejects_zero_and_leading_zero_lags():
+    """검토 8(낮음): pct0·diff0 은 '0 관측 전 대비' = 모든 값이 0 인 입력이 되고, pct00·pct05 는 뜻이 모호하다. 엔진과 화면(같은 정규식) 모두 거절."""
+    from engine.experiment import apply_transform, _TR_RE
+    s = pd.Series(np.arange(1.0, 30.0))
+    for bad in ("pct0", "diff0", "pct00", "pct05", "diff007"):
+        assert not _TR_RE.match(bad), bad
+        with pytest.raises(ValueError):
+            apply_transform(s, bad)
+    for ok, n in (("pct", 1), ("pct5", 5), ("diff12", 12), ("pct10", 10)):
+        assert _TR_RE.match(ok)
+        out = apply_transform(s, ok)
+        assert out.isna().sum() == n
+
+
+def test_review12_select_top_needs_learned_inputs_and_pool_rejects_duplicates(tmp_path):
+    """검토 12(낮음): 입력 선별(select_top)은 입력 변수로 학습하는 모델(표·창 입력)에서만 뜻이 있다 — 규칙·ARIMA 류에서는 무시되면서 설정 해시만 바꿨다 → 거절.
+    pool_tickers 에 같은 종목을 두 번 넣으면 결과는 같은데 해시만 달라졌다(같은 후보가 둘로 셈) → 거절."""
+    prices, s = predictable_ohlcv(600, seed=5)
+    dv, reg = _dv_with(prices, s, tmp_path)
+    for model in ("arima", "ma_cross"):
+        with pytest.raises(ValueError, match="입력 선별"):
+            run_experiment(ExperimentConfig(ticker="TEST", model=model, variable_ids=["S_signal"], select_top=1, validation=Validation(train_len=250, test_len=40)), dv, reg)
+    with pytest.raises(ValueError, match="두 번"):
+        ExperimentConfig(ticker="TEST", model="ridge", pool_tickers=["BBB", "BBB"])
+    assert ExperimentConfig(ticker="TEST", model="ridge", pool_tickers=["BBB", "CCC"]).pool_tickers == ["BBB", "CCC"]
+
+
+def test_review13_other_sites_cannot_drive_local_server_and_wrong_password_delay_is_global(monkeypatch):
+    """검토 13·의심(CSRF): 암호를 정하지 않은 노트북에서, 다른 웹사이트가 사용자 브라우저를 통해 127.0.0.1:8000 에 바꾸는 요청을 보낼 수 있었다
+    (CORS 가 모든 출처 허용). → CORS 허용을 없애고, 바꾸는 요청에 Origin 이 있으면 서버 주소(Host)와 같아야 통과. Origin 이 없는 요청(화면 밖의 도구)은 그대로.
+    외부(Funnel) 요청은 지금처럼 암호가 지킨다. 틀린 암호 지연은 서버 전체에서 한 번에 하나씩(동시에 여러 개를 넣어도 빨라지지 않게)."""
+    import asyncio, time
+    import api.main as m
+    monkeypatch.delenv("TSP_WRITE_PASSWORD", raising=False)
+    host = {"host": "127.0.0.1:8000"}
+    assert _asgi_call(m.app, "POST", "/api/auth/check", {**host, "origin": "http://127.0.0.1:8000"})[0] == 200      # 우리 화면
+    assert _asgi_call(m.app, "POST", "/api/auth/check", {"host": "localhost:5173", "origin": "http://localhost:5173"})[0] == 200   # 개발 화면(vite 프록시)
+    assert _asgi_call(m.app, "POST", "/api/auth/check", host)[0] == 200                                               # Origin 없음(도구)
+    assert _asgi_call(m.app, "POST", "/api/auth/check", {**host, "origin": "https://a.ts.net", "x-forwarded-host": "a.ts.net"})[0] == 200   # 프록시 뒤
+    for bad in ("https://evil.example", "null", "http://127.0.0.1:9999"):
+        st, b = _asgi_call(m.app, "POST", "/api/auth/check", {**host, "origin": bad})
+        assert st == 403 and "다른 사이트" in b["detail"], bad
+    assert _asgi_call(m.app, "GET", "/api/auth", {**host, "origin": "https://evil.example"})[0] == 200                # 보기는 그대로
+    assert not any("CORSMiddleware" in str(mw.cls) for mw in m.app.user_middleware)
+    # 틀린 암호 지연: 동시에 3개 → 지연이 겹치지 않고 한 줄로(≥ 3 × 지연)
+    monkeypatch.setenv("TSP_WRITE_PASSWORD", "long-test-pass-123")
+    monkeypatch.setattr(m, "_WRONG_DELAY", 0.2)
+    async def three():
+        t0 = time.perf_counter()
+        await asyncio.gather(*[asyncio.to_thread(_asgi_call, m.app, "POST", "/api/auth/check", {**host, "x-tsp-password": "wrong"}) for _ in range(3)])
+        return time.perf_counter() - t0
+    assert asyncio.run(three()) >= 0.55
+
+
+def test_review13_naver_retroactive_factor_is_rescaled_and_no_overlap_is_named(tmp_path, monkeypatch):
+    """검토 13(낮음): ① 겹치는 날이 없는데도 '수정주가 소급 변경'이라고 적었다. ② 소급 변경이 생기면 직전 파일을 그대로 둬, 다음 실행에서도 또 달라 보여
+    영영 갱신되지 않았다. → 겹치는 날의 '새 값 ÷ 직전 값'(시가·고가·저가·종가)이 모두 같은 배수면(배당·분할 조정) 직전 앞부분에 그 배수를 곱해 새 기준으로 잇는다.
+    배수가 날마다·열마다 다르면 설명할 수 없는 변경이라 직전 파일을 두고 기록. 겹치는 날이 없으면 그렇게 적는다. 어느 쪽도 실패로 세지 않는다."""
+    import collect
+    from adapters import pykrx_adapter, yf_adapter
+    from engine.store import DataVersion
+    data = tmp_path / "data"; old = data / "versions" / "20200101T000000Z"; old.mkdir(parents=True)
+    _mini_master(data / "variable_master.xlsx", [{"id": "M1", "freq": "M", "source": "XLSX", "source_code": "df_M!M1", "lag_days": 30}],
+                 [("df_M", ["date", "M1"], [["2020-01", 1.0]])])
+    full, _ = predictable_ohlcv(120, seed=5)
+    for t in collect.TICKERS:
+        full.iloc[:70].to_parquet(old / f"prices_{t}_naver.parquet"); full.iloc[:70].to_parquet(old / f"prices_{t}_yf.parquet"); full.iloc[:70].to_parquet(old / f"prices_{t}.parquet")
+    (old / "manifest.json").write_text(json.dumps({"start": "2006-01-01"}))
+    mode = {"m": "factor"}
+    def naver(t, *a, **k):
+        if mode["m"] == "factor":
+            d = full.iloc[10:80].copy(); d[["open", "high", "low", "close"]] *= 0.8      # 전 기간에 같은 배수(소급 조정)
+        else:
+            d = full.iloc[100:120].copy()                                                # 직전 파일과 겹치는 날 없음
+        return d
+    monkeypatch.setattr(pykrx_adapter, "fetch_prices", naver)
+    monkeypatch.setattr(yf_adapter, "fetch_prices", lambda t, *a, **k: full)
+    monkeypatch.setattr(sys, "argv", ["collect.py", "--sources", "yf,pykrx,xlsx", "--data-dir", str(data)])
+    assert collect.main() == 0
+    dv = DataVersion(data, sorted(p.name for p in (data / "versions").iterdir())[-1])
+    nv = dv.read_prices(f"{collect.TICKERS[0]}_naver")
+    assert len(nv) == 80 and np.allclose(nv["close"].to_numpy(), full["close"].iloc[:80].to_numpy() * 0.8, rtol=1e-12)   # 앞부분도 새 기준
+    note = " ".join(str(v) for v in (dv.manifest().get("notes") or {}).values())
+    assert "배수" in note and "0.8" in note and not dv.manifest().get("incomplete")
+    mode["m"] = "gap"
+    import time as _time; _time.sleep(1.1)
+    assert collect.main() == 0
+    dv2 = DataVersion(data, sorted(p.name for p in (data / "versions").iterdir())[-1])
+    note2 = " ".join(str(v) for v in (dv2.manifest().get("notes") or {}).values())
+    assert "겹치는 날이 없" in note2 and "소급" not in note2 and len(dv2.read_prices(f"{collect.TICKERS[0]}_naver")) == 80
+
+
+def test_review13_sealed_preview_blocks_volatility_candidates(tmp_path):
+    """검토 13(낮음): 변동성 결과는 실행 단계에서 봉인 평가를 거절하는데, 미리보기에는 막는 이유가 없어 '열 수 있다'처럼 보였다 → 미리보기에서 미리 막는다."""
+    from engine.sealed import preview
+    from tests.synthetic import volatility_ohlcv
+    prices, s = volatility_ohlcv(700, seed=2)
+    dv, reg = _dv_with(prices, s, tmp_path)
+    r = run_experiment(ExperimentConfig(ticker="TEST", model="ridge", variable_ids=[s.name], use_technical=False, target=TargetSpec(kind="volatility", k=5),
+                                       validation=Validation(train_len=300, test_len=60, sealed_from=str(prices.index[600].date()))), dv, reg)
+    r = json.loads(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}, default=str))
+    pv = preview(r, "x", dv, reg, [], None, None)
+    assert any("변동성" in b for b in pv["blockers"]), pv["blockers"]
+
+
+@pytest.mark.parametrize("model,extra", [("lightgbm_model", {}), ("lstm", {"model_params": {"epochs": 2, "hidden": 4}, "seq_len": 5})])
+def test_review13_selection_ranks_only_rows_before_validation(model, extra, tmp_path):
+    """검토 13(낮음): 검증을 쓰는 모델(LightGBM·LSTM 등)에서 입력 선별의 순위를 학습 창 전체(검증 행 포함)로 쟀다 — 검증 행은 조기 종료 판단에 쓰므로
+    선별도 그 행을 보면 검증이 '처음 보는 자료'가 아니게 된다. → 폴드 기록의 '학습' 구간(검증과 그 앞 비움을 뺀 행)으로만 잰다."""
+    from engine.experiment import _run_experiment, prepare, fold_relevance, make_folds
+    prices, s = predictable_ohlcv(900, seed=5)
+    dv, reg, ids = _dv_with_noise(prices, s, tmp_path)
+    cfg = ExperimentConfig(ticker="TEST", model=model, variable_ids=ids, use_technical=False, select_top=2, validation=Validation(train_len=300, test_len=40), **extra)
+    log, diags = [], []
+    _run_experiment(cfg, dv, reg, fold_log=log, diags=diags)
+    _, _, _, _, ds = prepare(cfg, dv, reg, device="cpu")
+    assert log[0]["val"] is not None
+    a = make_folds(cfg, ds, cfg.target.k)[0][0].train[0]          # 폴드의 학습 행 시작(창 모델은 첫 창보다 앞의 행도 학습 행)
+    b = pd.Timestamp(log[0]["train"][1])                           # 기록된 학습 끝 = 검증과 그 앞 비움을 뺀 마지막 결정일
+    tr = ds.X.join(ds.y.rename("y")).dropna()
+    tr = tr[(tr.index >= a) & (tr.index <= b)]
+    want = fold_relevance(tr[ds.feature_names].values, tr["y"].values)
+    got = np.array([d["relevance"] for d in diags if d.get("relevance") is not None][0])
+    assert np.allclose(got, want, atol=1e-12), (got, want)
+
+
+def test_review13_etf_probe_looks_back_far_enough_and_says_so(tmp_path, monkeypatch):
+    """의심(검토 13): ETF 판별이 '최근 30일 공식 시세'만 물어, 공식 시세가 잠시 늦거나(연휴·지연) 비면 ETF 를 주식으로 판별할 수 있었다.
+    → 최근 120일을 묻고, 판별 근거 문장에 그 기간을 적는다."""
+    import api.main as m
+    from adapters import datago_adapter
+    seen = {}
+    def dg(t, start, end, *a, **k):
+        seen["start"] = start
+        raise RuntimeError(f"DATAGO 응답 없음: {t}")
+    monkeypatch.setenv("DATAGO_API_KEY", "dummy")
+    monkeypatch.setattr(datago_adapter, "fetch_prices", dg)
+    kind, basis = m._probe_kind("005930")
+    assert kind == "stock" and (pd.Timestamp.today() - pd.Timestamp(seen["start"])).days >= 119 and "120일" in basis

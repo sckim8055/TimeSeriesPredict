@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 import engine.calendar as cal
@@ -66,9 +67,32 @@ def history(log: list[dict], cfg_hash: str, sealed_from: str | None) -> dict:
     return {"same_config": same, "same_seal_date": seal, "total": len(live), "failed": len(log) - len(live)}
 
 
-def seal_exposures(res_dir: str | Path | None, cfg_dict: dict) -> list[dict]:
-    """같은 대상의 '개발' 결과 가운데 봉인 구간(봉인 시작일 이후의 결정일)을 이미 채점한 것들. 지금 폴더와 history/ 를 모두 본다.
-    봉인 평가 기록(sealed_log)에는 봉인 모드로 연 것만 남는다 — 봉인 시작일을 비우고 돌린 보통 실험, 봉인 정책을 일부러 넘긴 실험은 여기서 찾는다(독립 검토 F8)."""
+RELATED_CORR = 0.9   # 봉인 구간 하루 로그수익률 상관이 이 이상이면 '사실상 같은 종목'으로 본다(2026-11-13 독립 검토 2)
+
+
+def _related_corr(dv, target: str, other: str, sf: str) -> tuple[float, str] | None:
+    """봉인 시작일부터 자료 끝까지, 두 종목 종가의 하루 로그수익률 상관(같은 날만)과 그 마지막 날. 가격이 없거나 겹치는 날이 20일 미만이면 None."""
+    try:
+        a = np.log(dv.read_prices(target)["close"]).diff()
+        b = np.log(dv.read_prices(other)["close"]).diff()
+    except Exception:  # noqa: BLE001 — 그 종목 가격이 이 데이터 버전에 없음
+        return None
+    j = pd.concat([a, b], axis=1, join="inner").dropna()
+    j = j[j.index >= pd.Timestamp(sf)]
+    if len(j) < 20:
+        return None
+    return float(j.iloc[:, 0].corr(j.iloc[:, 1])), str(j.index[-1].date())
+
+
+def seal_exposures(res_dir: str | Path | None, cfg_dict: dict, dv=None) -> list[dict]:
+    """봉인 구간(봉인 시작일 이후의 결정일)을 이미 채점한 '개발' 결과들. 지금 폴더와 history/ 를 모두 본다.
+    봉인 평가 기록(sealed_log)에는 봉인 모드로 연 것만 남는다 — 봉인 시작일을 비우고 돌린 보통 실험, 봉인 정책을 일부러 넘긴 실험은 여기서 찾는다(독립 검토 F8).
+
+    같은 대상만이 아니다(2026-11-13 독립 검토 2): 매매 모드에서 데이터 버전(dv)을 주면, 다른 종목의 개발 결과라도 그 종목과 대상 종목의
+    봉인 구간 하루 로그수익률 상관 |ρ| 가 RELATED_CORR(0.9) 이상이면 함께 돌려준다(related_ticker·corr·corr_period 를 붙여서).
+    예: 091230 은 2025~ 구간에서 091160 과 ρ≈0.99 — 091230 으로 그 구간을 채점해 본 것은 091160 의 봉인 구간을 본 것과 사실상 같다.
+    한계: ① 예측 모드(대상 변수)는 같은 변수만 본다. ② 가격 화면([값 보기])으로 봉인 구간 가격을 본 것은 찾을 수 없다 — 봉인은 '성과를 채점해 보지 않음'을 뜻한다.
+    막지 않는다 — 미리보기 경고와 봉인 결과(sealed_info.exposures)에 남겨, 논문에 그대로 적게 한다."""
     sf = (cfg_dict.get("validation") or {}).get("sealed_from")
     if not res_dir or not sf:
         return []
@@ -76,7 +100,7 @@ def seal_exposures(res_dir: str | Path | None, cfg_dict: dict) -> list[dict]:
     mode = cfg_dict.get("mode", "trading")
     from engine.sealpolicy import base_ticker
     tgt = cfg_dict.get("target_variable") if mode == "forecast" else base_ticker(cfg_dict.get("ticker"))
-    out = []
+    out, corr_cache = [], {}
     files = list(d.glob("*.json")) + (list((d / "history").glob("*.json")) if (d / "history").exists() else [])
     for p in sorted(files):
         if p.name in ("experiment_counter.json", "sealed_log.json") or p.name.startswith("ablation_"):
@@ -86,14 +110,25 @@ def seal_exposures(res_dir: str | Path | None, cfg_dict: dict) -> list[dict]:
             c = r["config"]
         except Exception:  # noqa: BLE001
             continue
-        if r.get("sealed_evaluation") or c.get("mode", "trading") != mode or (c.get("target_variable") if mode == "forecast" else base_ticker(c.get("ticker"))) != tgt:
+        if r.get("sealed_evaluation") or c.get("mode", "trading") != mode:
             continue
+        other = c.get("target_variable") if mode == "forecast" else base_ticker(c.get("ticker"))
+        related = None
+        if other != tgt:
+            if mode != "trading" or dv is None or not other:
+                continue
+            if other not in corr_cache:
+                corr_cache[other] = _related_corr(dv, str(c.get("ticker")), str(cfg_dict.get("ticker")), sf)
+            got = corr_cache[other]
+            if got is None or abs(got[0]) < RELATED_CORR:
+                continue
+            related = {"related_ticker": other, "corr": round(got[0], 4), "corr_period": [str(sf)[:10], got[1]]}
         # 평가 구간 기록이 없는 옛 매매 결과는 성과를 자료 전체(period)로 계산했다(봉인 구간은 현금으로 두고 보유 전략과 비교) → 자료 끝까지 채점한 것으로 본다
         ev = r.get("evaluation_period") or (r.get("period") if mode == "trading" else None) or r.get("prediction_period")
         if ev and str(ev[1])[:10] >= str(sf)[:10]:
             out.append({"result": p.stem, "where": "history" if p.parent.name == "history" else "results", "evaluated_to": str(ev[1])[:10],
                         "sealed_from_in_config": (c.get("validation") or {}).get("sealed_from"),
-                        "override_reason": (r.get("seal_policy") or {}).get("reason")})
+                        "override_reason": (r.get("seal_policy") or {}).get("reason"), **(related or {})})
     return out
 
 
@@ -106,6 +141,8 @@ def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: s
         blockers.append("이 결과 자체가 봉인 평가 결과입니다 — 봉인은 개발 결과(후보)에서 엽니다")
     cfg_dict, pin_notes = candidate_config(r)
     sf = (cfg_dict.get("validation") or {}).get("sealed_from")
+    if ((cfg_dict.get("target") or {}).get("kind")) == "volatility":   # 실행 단계(_run_experiment)와 같은 규칙을 미리 보여 준다(2026-11-13 검토 13)
+        blockers.append("변동성 타겟은 아직 봉인 평가를 할 수 없습니다 — 통과 기준(무엇을 이기면 통과인지)을 사전 분석 계획서에서 먼저 정해야 합니다")
     if not sf:
         blockers.append("이 후보의 설정에 봉인 시작일이 없습니다 — 개발 때 봉인 구간을 정하지 않았으므로 '처음 보는 기간'이 없습니다. "
                         "새 실험 화면에서 봉인 시작일을 정하고 개발 실험을 다시 돌린 뒤 그 결과에서 봉인을 여세요")
@@ -120,11 +157,18 @@ def preview(r: dict, stem: str, dv, reg, log: list[dict], latest_data_version: s
             sealpolicy.apply(ExperimentConfig(**cfg_dict), sealed=True)
         except ValueError as e:
             blockers.append(str(e))
-    exposures = seal_exposures(res_dir, cfg_dict)
-    if exposures:
-        ex = ", ".join(f"{x['result']}(~{x['evaluated_to']})" for x in exposures[:3])
-        warnings.append(f"이 대상의 봉인 구간({sf} 이후)을 이미 채점한 개발 결과가 {len(exposures)}건 있습니다(예: {ex}). 그 결과를 본 뒤라면 봉인 구간은 "
+    exposures = seal_exposures(res_dir, cfg_dict, dv)
+    same = [x for x in exposures if not x.get("related_ticker")]
+    rel = [x for x in exposures if x.get("related_ticker")]
+    if same:
+        ex = ", ".join(f"{x['result']}(~{x['evaluated_to']})" for x in same[:3])
+        warnings.append(f"이 대상의 봉인 구간({sf} 이후)을 이미 채점한 개발 결과가 {len(same)}건 있습니다(예: {ex}). 그 결과를 본 뒤라면 봉인 구간은 "
                         "'한 번도 보지 않은 기간'이 아닙니다 — 봉인 결과를 보고할 때 이 사실을 함께 적어야 합니다")
+    if rel:
+        tk = sorted({f"{x['related_ticker']}(상관 {x['corr']:.2f})" for x in rel})
+        ex = ", ".join(f"{x['result']}(~{x['evaluated_to']})" for x in rel[:3])
+        warnings.append(f"봉인 구간({sf} 이후)에서 이 종목과 거의 똑같이 움직인 종목 {', '.join(tk)} 의 개발 결과가 그 구간을 {len(rel)}건 채점했습니다(예: {ex}). "
+                        f"하루 수익률 상관이 {RELATED_CORR} 이상이면 그 결과를 본 것은 이 종목의 봉인 구간을 본 것과 사실상 같습니다 — 봉인 결과를 보고할 때 함께 적어야 합니다")
     pl = None
     if not blockers:
         try:

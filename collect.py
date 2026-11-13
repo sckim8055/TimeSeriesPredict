@@ -57,6 +57,9 @@ MASTER = "variable_master.xlsx"
 
 
 def main() -> int:
+    """종료 코드: 0 = 모두 받음 · 1 = 종목 가격을 새로 받지 못함(받은 것이 아예 없으면 새 버전도 만들지 않음) ·
+    2 = 받지 못한 항목이 있음(그 항목은 직전 값, 버전은 '일부 받지 못함') · 3 = 시작하기 전에 멈춤(변수 사전 없음·엑셀 고칠 곳·없는 --version id).
+    (argparse 가 잘못된 인자에 쓰는 2 는 화면이 인자를 정해 주므로 생기지 않는다.)"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2006-01-01")
     ap.add_argument("--end", default=None)
@@ -71,7 +74,7 @@ def main() -> int:
     master_path = data_dir / MASTER
     if not master_path.exists():
         print(f"변수 사전이 없습니다: {master_path}")
-        return 2
+        return 3  # 시작하기 전에 멈춤(아무것도 받지 않음) — '받지 못한 항목 있음'(2)과 구분(2026-11-13 독립 검토 5)
 
     # 0) 변수 사전의 데이터 시트 스캔 → variables 보강 → 마스터 로드. data/uploads/ 는 2026-11-09 부터 읽지 않는다(있으면 경고)
     stale = [f.name for f in sorted((data_dir / "uploads").glob("*.xlsx")) if not f.name.startswith("~$")] if (data_dir / "uploads").exists() else []
@@ -86,7 +89,7 @@ def main() -> int:
         print(f"엑셀 파일 {MASTER} 에서 고칠 곳이 {len(chk.errors)}군데 있습니다. 고친 뒤 다시 실행해 주세요(아무것도 받지 않았습니다).")
         for e in chk.errors:
             print("  ·", e)
-        return 2
+        return 3  # 시작하기 전에 멈춤(아무것도 받지 않음) — '받지 못한 항목 있음'(2)과 구분(2026-11-13 독립 검토 5)
     if chk.new_vars:  # 새 열 자동 등록 → 다시 읽기(발표시차 빈칸 → 주기별 보수적 기본값 · 확인 안 됨)
         append_master_rows(master_path, chk.new_vars)
         reg, warns = Registry.load_master(master_path)
@@ -103,7 +106,7 @@ def main() -> int:
     if a.version and not (data_dir / "versions" / a.version / "manifest.json").exists():
         # --version 은 '있는 버전에 이어 받기'다. 없는 id(오타)를 주면 새 버전 폴더가 조용히 생겼다(독립 검토 F22)
         print(f"데이터 버전 {a.version} 이(가) 없습니다 — --version 은 이미 있는 버전에 이어 받을 때만 씁니다. 새 버전을 만들려면 --version 을 빼세요.")
-        return 2
+        return 3  # 시작하기 전에 멈춤(아무것도 받지 않음) — '받지 못한 항목 있음'(2)과 구분(2026-11-13 독립 검토 5)
     if not a.version:
         # 새 버전은 '직전 버전의 전부'에서 시작하고, 이번에 받는 데 성공한 것만 새 값으로 바꾼다(2026-11-10 독립 검토 F1).
         # 그 전에는 요청한 출처는 이어받지 않아, 그 출처가 실패하면(접속 불가·키 없음) 자료가 빠진 버전이 '최신'이 되고 종료 코드도 0 이었다
@@ -233,18 +236,39 @@ def main() -> int:
             old = pd.read_parquet(pf)
             why = _shrunk(len(df), df.index.min() if len(df) else None, len(old), old.index.min() if len(old) else None)
             if why and name.endswith("_naver") and len(df):
-                # 네이버 수정주가(교차검증용)는 '최근 N일'만 주는 이동 창이라 받을 때마다 시작일이 밀린다 — 실패로 보지 않는다(2026-11-12).
-                # 겹치는 날 값이 같으면 직전 앞부분 + 새 자료로 잇고, 다르면(수정주가가 소급해 바뀜) 직전 파일을 그대로 둔다.
+                # 네이버 수정주가(빠진 날 메우기·교차검증용)는 '최근 N일'만 주는 이동 창이라 받을 때마다 시작일이 밀린다 — 실패로 보지 않는다(2026-11-12).
+                # 겹치는 날을 보고 셋 중 하나(2026-11-13 독립 검토 13):
+                #  ① 값이 같다 → 직전 앞부분 + 새 자료로 잇는다.
+                #  ② 시가·고가·저가·종가가 모두 '같은 배수'로 달라졌다(배당·분할로 과거 전체를 다시 조정 — 수정주가의 정의) →
+                #     직전 앞부분에 그 배수를 곱해 새 기준으로 맞춘 뒤 잇는다(전에는 직전 파일을 그대로 둬, 다음 실행에서도 또 달라 영영 갱신되지 않았다).
+                #     거래량은 고치지 않는다(빠진 날 메우기는 가격 비율만 쓴다).
+                #  ③ 배수가 날마다·열마다 다르거나 겹치는 날이 없다 → 설명할 수 없으니 직전 파일을 그대로 두고 그 이유를 적는다.
                 common = old.index.intersection(df.index)
                 cols = [c for c in ("open", "high", "low", "close") if c in old.columns and c in df.columns]
-                same = len(common) > 0 and bool(np.allclose(old.loc[common, cols].to_numpy(float), df.loc[common, cols].to_numpy(float), rtol=1e-9, atol=1e-9, equal_nan=True))
-                if same:
+                o_, n_ = old.loc[common, cols].to_numpy(float), df.loc[common, cols].to_numpy(float)
+                key = f"prices {name}"
+                if len(common) == 0:
+                    source_notes[key] = f"이동 창({why}) — 직전 파일과 겹치는 날이 없어 이을 수 없었다(직전 파일을 그대로 두었다)"
+                elif np.allclose(o_, n_, rtol=1e-9, atol=1e-9, equal_nan=True):
                     merged = pd.concat([old[old.index < df.index.min()], df]).sort_index()
                     dv.write_prices(name, merged[~merged.index.duplicated(keep="last")])
-                    source_notes[f"prices {name}"] = f"이동 창({why}) — 겹치는 {len(common)}일 값이 같아 직전 앞부분에 새 자료를 이었다"
+                    source_notes[key] = f"이동 창({why}) — 겹치는 {len(common)}일 값이 같아 직전 앞부분에 새 자료를 이었다"
                 else:
-                    source_notes[f"prices {name}"] = f"이동 창({why}) — 겹치는 날 값이 달라(수정주가 소급 변경) 직전 파일을 그대로 두었다"
-                print(f"  [참고] {name}: {source_notes[f'prices {name}']}")
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        ratio = n_ / o_
+                    fin = ratio[np.isfinite(ratio)]
+                    fac = float(np.median(fin)) if len(fin) else float("nan")
+                    if len(fin) == ratio.size and np.isfinite(fac) and fac > 0 and np.all(np.abs(fin / fac - 1) < 1e-6):
+                        pre = old[old.index < df.index.min()].copy()
+                        pre[cols] = pre[cols] * fac
+                        merged = pd.concat([pre, df]).sort_index()
+                        dv.write_prices(name, merged[~merged.index.duplicated(keep="last")])
+                        source_notes[key] = (f"이동 창({why}) — 겹치는 {len(common)}일의 가격이 모두 같은 배수 {fac:.6g} 로 바뀌어(수정주가 소급 조정) "
+                                             f"직전 앞부분({len(pre)}일)에 그 배수를 곱해 새 기준으로 맞춘 뒤 이었다")
+                    else:
+                        source_notes[key] = (f"이동 창({why}) — 겹치는 {len(common)}일 값이 날마다·열마다 다른 비율로 바뀌어(배수 {np.nanmin(fin) if len(fin) else float('nan'):.4g}~"
+                                             f"{np.nanmax(fin) if len(fin) else float('nan'):.4g}) 설명할 수 없다 — 직전 파일을 그대로 두었다")
+                print(f"  [참고] {name}: {source_notes[key]}")
                 return
             if why:
                 kept_previous[f"prices {name}"] = why

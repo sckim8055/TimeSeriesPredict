@@ -42,24 +42,57 @@ def f(v, d: int = 4) -> str:
     return f"{v:.{d}f}".rstrip("0").rstrip(".") if d else f"{v:.0f}"
 
 
+def _func_of_lines(text: str) -> list[str] | None:
+    """줄 번호(1부터)마다 그 줄을 감싸는 가장 안쪽 함수·클래스 이름(밖이면 '<module>'). 실행 기록의 func 와 같은 이름 규칙.
+    파일을 파싱하지 못하면 None(함수로 거르지 않는다)."""
+    import ast
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    n = text.count("\n") + 1
+    names = ["<module>"] * (n + 1)
+    def walk(node):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for i in range(ch.lineno, (ch.end_lineno or ch.lineno) + 1):
+                    names[i] = ch.name               # 바깥 → 안쪽 순서로 덮어써서 가장 안쪽 이름이 남는다
+            walk(ch)
+    walk(tree)
+    return names
+
+
 def _realign(events):
-    """기록의 줄 번호를 지금 소스에 맞춘다(2026-11-12). 기록에는 실행된 줄의 글자(code)도 들어 있으므로,
+    """기록의 줄 번호를 지금 소스에 맞춘다(2026-11-12). 기록에는 실행된 줄의 글자(code)와 함수 이름(func)이 들어 있으므로,
     지금 파일의 그 줄 번호 자리 글자가 다르면(위쪽 코드가 늘거나 줄어 번호가 밀림) 같은 글자의 줄 중 가장 가까운 줄로 옮긴다.
-    같은 글자가 없으면(그 코드가 지워짐) 그대로 두고 meta['stale']=True. 값(produced)은 바꾸지 않는다."""
+    2026-11-13(독립 검토 10): 같은 글자 줄이 다른 함수에도 있을 수 있으므로, 기록된 함수 안의 줄만 후보로 본다(자리가 맞아도 함수가 다르면 옮긴다).
+    기록된 함수 안에 같은 글자가 없으면(그 코드·함수가 지워짐) 그대로 두고 meta['stale']=True. 값(produced)은 바꾸지 않는다.
+    func 가 '<lambda>'·'<listcomp>' 처럼 이름 없는 블록이면 함수로 거르지 않는다(파이썬 판마다 이름 규칙이 달라서)."""
     import dataclasses
-    cache: dict[str, list[str] | None] = {}
+    cache: dict[str, tuple[list[str], list[str] | None] | None] = {}
     out = []
     for e in events:
         f = str(e.file).replace("\\", "/")
         rel = next((f[f.rfind("/" + top + "/") + 1:] for top in ("models", "engine", "tools", "api", "adapters") if "/" + top + "/" in f), None)
         if rel not in cache:
             fp = ROOT / rel if rel else None
-            cache[rel] = fp.read_text(encoding="utf-8").split("\n") if fp and fp.exists() else None
-        lines = cache[rel]
-        if not lines or (0 < e.line <= len(lines) and lines[e.line - 1] == e.code):
+            if fp and fp.exists():
+                txt = fp.read_text(encoding="utf-8")
+                cache[rel] = (txt.split("\n"), _func_of_lines(txt))
+            else:
+                cache[rel] = None
+        got = cache[rel]
+        if not got:
             out.append(e)
             continue
-        hits = [i + 1 for i, s in enumerate(lines) if s == e.code]
+        lines, funcs = got
+        named = bool(e.func) and (e.func == "<module>" or not str(e.func).startswith("<"))
+        def same_func(n: int) -> bool:
+            return funcs is None or not named or funcs[n] == e.func
+        if 0 < e.line <= len(lines) and lines[e.line - 1] == e.code and same_func(e.line):
+            out.append(e)
+            continue
+        hits = [i + 1 for i, s in enumerate(lines) if s == e.code and same_func(i + 1)]
         if hits:
             out.append(dataclasses.replace(e, line=min(hits, key=lambda n: abs(n - e.line))))
         else:

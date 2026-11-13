@@ -79,6 +79,9 @@ def _explain(cfg_dict: dict, dv, reg, *, date: str | None = None, epochs: int | 
     cfg, _seal_note = sealpolicy.apply(cfg, sealed=False)
     if cfg.pool_tickers:
         raise ValueError("종목 묶어 학습(pool_tickers)을 쓴 실험은 계산 따라가기를 아직 지원하지 않습니다")
+    if cfg.target.kind == "volatility":  # 2026-11-13 독립 검토 3 — '결정' 단계가 수익률 타겟의 규칙(예측 > 문턱 → 보유)으로 설명하게 되어 거절
+        raise ValueError("변동성 타겟 실험은 계산 따라가기를 아직 지원하지 않습니다 — 이 실험의 매매 규칙(비중 = 학습 창 평균 변동성 ÷ 예측 변동성)을 "
+                         "화면이 아직 보여 주지 못합니다. 틀린 설명을 보여 주지 않으려고 막았습니다")
     if cfg.select_top:
         raise ValueError("입력 선별(select_top)을 쓴 실험은 계산 따라가기를 아직 지원하지 않습니다 — 폴드마다 쓰는 입력이 달라 화면이 그것을 보여 주지 못합니다")
     n_seeds_cfg = int(cfg.n_seeds)

@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -54,7 +53,8 @@ class SafeJSON(JSONResponse):
 
 
 app = FastAPI(title="TimeSeriesPredict API", version="0.1", default_response_class=SafeJSON)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS 허용은 두지 않는다(2026-11-13 독립 검토 13): 화면은 이 서버가 직접 주고, 개발 화면(vite)도 프록시로 같은 출처에서 부른다.
+# 전에는 모든 출처를 허용해, 암호를 정하지 않은 노트북에서 다른 웹사이트가 브라우저를 통해 실험 실행·삭제 요청을 보낼 수 있었다.
 from engine import logs as _logs  # noqa: E402
 
 alog = _logs.setup("api", "api")
@@ -88,7 +88,31 @@ async def _log_requests(request, call_next):
 #   없으면: 노트북에서 직접 하는 요청은 지금처럼 통과, Funnel 로 들어온 요청(머리글 Tailscale-Funnel-Request — Tailscale 이 붙인다)은 막는다.
 #   Funnel 로 들어온 요청은 모두 127.0.0.1 에서 온 것처럼 보이므로 주소로는 가릴 수 없다 — 그래서 암호가 기본 방어.
 # ---------------------------------------------------------------------------
-_WRONG_DELAY = 1.0   # 틀린 암호마다 기다리는 초(마구 넣어 보기를 늦춘다)
+_WRONG_DELAY = 1.0   # 틀린 암호마다 기다리는 초(마구 넣어 보기를 늦춘다). 서버 전체에서 한 번에 하나씩(아래 _WRONG_LOCK)
+import threading as _threading  # noqa: E402
+_WRONG_LOCK = _threading.Lock()   # 동시에 여러 개를 넣어도 '초당 한 번'보다 빨라지지 않게(2026-11-13 검토 13 — 전에는 요청마다 따로 기다렸다)
+
+
+def _wrong_wait() -> None:
+    import time as _t
+    with _WRONG_LOCK:
+        _t.sleep(_WRONG_DELAY)
+
+
+def _origin_problem(request) -> str:
+    """바꾸는 요청의 Origin 점검(2026-11-13 검토 13, CSRF). 브라우저는 다른 사이트에서 보낸 요청에 그 사이트 주소를 Origin 으로 붙인다.
+    Origin 이 없으면(화면 밖의 도구·같은 출처의 일부 요청) 통과. 있으면 그 '호스트:포트'가 이 요청의 Host 와 같아야 한다.
+    외부(Funnel) 요청은 여기서 보지 않는다 — 암호가 지킨다(Funnel 이 Host 를 어떻게 넘기는지 노트북에서 확인하지 못해, 막아 버리지 않으려고)."""
+    from urllib.parse import urlsplit
+    origin = request.headers.get("origin")
+    if origin is None or _is_external(request):
+        return ""
+    host = (request.headers.get("host") or "").lower()
+    fwd = (request.headers.get("x-forwarded-host") or "").lower()   # 앞단 프록시(Tailscale 등)가 원래 주소를 적는 머리글. 다른 사이트는 이것을 붙여 보낼 수 없다
+    o = urlsplit(origin.lower()) if origin != "null" else None     # (사용자 지정 머리글은 사전 확인(preflight)을 부르고, CORS 허용이 없어 브라우저가 막는다)
+    if o and o.netloc and o.netloc in {host, fwd} - {""}:
+        return ""
+    return f"다른 사이트({origin})에서 보낸 요청이라 막았습니다 — 이 화면은 {host or '이 서버'} 에서 직접 열어 쓰세요"
 _OPEN_METHODS = ("GET", "HEAD", "OPTIONS")
 # POST 이지만 아무것도 저장하지 않는 '보기' — 화면을 열면 저절로 불리는 설명 계산(2026-11-13: 화면을 열자마자 암호 창이 떠서 뺌)
 _OPEN_POST_PATHS = ("/api/flow", "/api/explain")
@@ -106,6 +130,11 @@ def _is_external(request) -> bool:
 async def _guard_writes(request, call_next):
     import asyncio
     import hmac
+    if request.url.path.startswith("/api/") and request.method not in _OPEN_METHODS:
+        why = _origin_problem(request)          # 보기용 POST(_OPEN_POST_PATHS)도 다른 사이트에서는 받지 않는다(계산이 무거워 서버를 붙잡을 수 있다)
+        if why:
+            alog.warning("다른 출처의 요청을 막음: %s %s (Origin %s)", request.method, request.url.path, request.headers.get("origin"))
+            return JSONResponse({"detail": why}, status_code=403)
     if request.url.path.startswith("/api/") and request.method not in _OPEN_METHODS and request.url.path not in _OPEN_POST_PATHS:
         pw = _write_password()
         if pw:
@@ -114,7 +143,7 @@ async def _guard_writes(request, call_next):
                 return JSONResponse({"detail": "바꾸는 동작(실험 실행·데이터 가져오기·추가·삭제)에는 암호가 필요합니다.", "need_password": True}, status_code=401)
             if not hmac.compare_digest(given.encode(), pw.encode()):
                 alog.warning("암호가 틀린 요청: %s %s", request.method, request.url.path)
-                await asyncio.sleep(_WRONG_DELAY)
+                await asyncio.to_thread(_wrong_wait)
                 return JSONResponse({"detail": "암호가 틀렸습니다.", "need_password": True}, status_code=401)
         elif _is_external(request):
             return JSONResponse({"detail": "외부 주소에서는 바꾸는 동작이 막혀 있습니다 — 노트북의 .env 파일에 TSP_WRITE_PASSWORD=암호 를 넣고 서버를 다시 시작하면 "
@@ -240,9 +269,9 @@ class VariableSet(BaseModel):
 # ---------------------------------------------------------------------------
 # 지원하는 출처만: 출처마다 응답 형식·인증이 달라 연결 코드(adapters/)가 있는 것만 받을 수 있다. 접속 키는 화면에서 받지 않고 .env 에만 둔다.
 _SOURCES = {
-    "YF": {"label": "야후 파이낸스 (주가·지수·환율·원자재)", "code_help": "야후 종목 기호", "example": "^SOX · 005930.KS · KRW=X · CL=F", "key_env": None, "freqs": ["D"]},
-    "FRED": {"label": "미국 세인트루이스 연준 FRED (미국 금리·물가·경기)", "code_help": "FRED 시리즈 ID", "example": "DGS10 · CPIAUCSL · VIXCLS", "key_env": "FRED_API_KEY", "freqs": ["D", "W", "M", "Q"]},
-    "ECOS": {"label": "한국은행 ECOS (한국 금리·물가·수출입)", "code_help": "통계표코드/항목코드/주기 (주기는 D·M·Q·A)", "example": "722Y001/0101000/M", "key_env": "ECOS_API_KEY", "freqs": ["D", "M", "Q"]},
+    "YF": {"label": "야후 파이낸스 (주가·지수·환율·원자재)", "code_help": "야후 종목 기호", "example": "^SOX · 005930.KS · KRW=X · CL=F", "key_env": None},
+    "FRED": {"label": "미국 세인트루이스 연준 FRED (미국 금리·물가·경기)", "code_help": "FRED 시리즈 ID", "example": "DGS10 · CPIAUCSL · VIXCLS", "key_env": "FRED_API_KEY"},
+    "ECOS": {"label": "한국은행 ECOS (한국 금리·물가·수출입)", "code_help": "통계표코드/항목코드/주기 (주기는 D·M·Q·A)", "example": "722Y001/0101000/M", "key_env": "ECOS_API_KEY"},
 }
 
 
@@ -261,24 +290,28 @@ class TickerBody(BaseModel):
     kind: Literal["etf", "stock"] | None = None   # 비우면 자동 판별(2026-11-13 — 사람이 고르지 않는다)
 
 
+_KIND_PROBE_DAYS = 120
+
+
 def _probe_kind(code: str) -> tuple[str, str]:
     """공식 ETF 시세(data.go.kr)에 그 코드가 있으면 ETF, '응답 없음'이면 주식. 키가 없거나 연결이 안 되면 판별 못 함 → 주식으로 둔다
     (공식 출처를 묻지 않으니 수집 실패가 생기지 않는다). 돌려주는 값: (종류, 근거 문장)."""
     from adapters import datago_adapter
     if not os.environ.get("DATAGO_API_KEY"):
         return "stock", "공식 ETF 시세 키(DATAGO_API_KEY)가 없어 ETF 인지 판별하지 못했습니다 — 주식으로 두고 야후 가격으로 받습니다"
-    start = (pd.Timestamp.today() - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
+    # 최근 120일을 묻는다(2026-11-13 검토 13 — 30일이면 공식 시세가 잠시 늦거나 비는 때 ETF 를 주식으로 잘못 볼 수 있었다)
+    start = (pd.Timestamp.today() - pd.Timedelta(days=_KIND_PROBE_DAYS)).strftime("%Y-%m-%d")
     try:
         df = datago_adapter.fetch_prices(code, start, None)
     except RuntimeError as e:
         if "응답 없음" in str(e):
-            return "stock", "공식 ETF 시세에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
+            return "stock", f"공식 ETF 시세(최근 {_KIND_PROBE_DAYS}일)에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
         return "stock", f"공식 ETF 시세를 확인하지 못해 ETF 인지 판별하지 못했습니다({scrub_secrets(str(e))[:120]}) — 주식으로 두고 야후 가격으로 받습니다"
     except Exception as e:  # noqa: BLE001 — 연결 오류 등
         return "stock", f"공식 ETF 시세에 연결하지 못해 ETF 인지 판별하지 못했습니다({type(e).__name__}) — 주식으로 두고 야후 가격으로 받습니다"
     if df is not None and len(df):
-        return "etf", "공식 ETF 시세에 있는 코드라 ETF 로 봅니다(가격은 공식 2020~ + 야후 그 이전, 빠진 날은 네이버로 메움)"
-    return "stock", "공식 ETF 시세에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
+        return "etf", f"공식 ETF 시세(최근 {_KIND_PROBE_DAYS}일)에 있는 코드라 ETF 로 봅니다(가격은 공식 2020~ + 야후 그 이전, 빠진 날은 네이버로 메움)"
+    return "stock", f"공식 ETF 시세(최근 {_KIND_PROBE_DAYS}일)에 없는 코드라 주식으로 봅니다(가격은 야후, 빠진 날은 네이버로 메움)"
 
 
 def _probe_prices(code: str) -> pd.DataFrame:
@@ -331,7 +364,7 @@ class VariableBody(BaseModel):
     name: str = ""
     source: Literal["YF", "FRED", "ECOS"]
     source_code: str
-    freq: Literal["D", "W", "M", "Q"] = "D"
+    freq: Literal["D", "W", "M", "Q", "H", "Y"] | None = None   # 비우면 받아 본 자료로 정한다(2026-11-13 검토 1) — 넣으면 자료와 같아야 한다
     group: str = ""
     transform: Literal["pct", "diff", "none"] = "pct"
     lag_days: int | None = Field(None, ge=0, description="기준일→공개일 일수. 비우면 주기별 보수적 기본값(미확인으로 표시)")
@@ -352,6 +385,27 @@ def _probe_series(source: str, code: str, freq: str = "D") -> pd.Series:
     from engine.api_spec import ecos_period
     st, it, fq = code.split("/")
     return ecos_adapter.fetch_series(st, it, fq, ecos_period(pd.Timestamp(start), fq), ecos_period(pd.Timestamp.today(), fq))
+
+
+_FREQ_KO = {"D": "일", "W": "주", "M": "월", "Q": "분기", "H": "반기", "Y": "연"}
+_ECOS_FREQ = {"D": "D", "M": "M", "Q": "Q", "A": "Y"}   # 한국은행 코드 끝 주기 → 우리 주기
+
+
+def _infer_freq(source: str, code: str, idx) -> tuple[str | None, str]:
+    """받아 본 자료의 주기를 정한다(2026-11-13 독립 검토 1).
+    왜: 주기는 발표시차 기본값(일 1일, 월 45일 …)과 빈 기간 점검의 기준이다. 화면 기본값 '일'로 월 자료를 등록하면
+        발표시차가 1일이 되어, 실제로는 한 달 반 뒤에 나오는 값을 미리 쓰는 누출이 생긴다. 그래서 사람이 고르지 않고 자료로 정한다.
+    어떻게: 한국은행은 코드 끝 주기(요청 자체가 그 주기). 나머지는 날짜 간격의 중앙값(일):
+        ≤3 일 · ≤10 주 · ≤45 월 · ≤120 분기 · ≤250 반기 · 그보다 길면 연. 간격이 둘 미만(값 3개 미만)이면 판별하지 않는다(None)."""
+    if source == "ECOS":
+        fq = _ECOS_FREQ.get(code.split("/")[-1])
+        return fq, f"한국은행 코드 끝의 주기 '{code.split('/')[-1]}' 를 따랐습니다({_FREQ_KO.get(fq, '?')})"
+    d = pd.Series(pd.DatetimeIndex(idx)).sort_values().diff().dt.days.dropna()
+    if len(d) < 2:
+        return None, "값이 너무 적어(3개 미만) 날짜 간격으로 주기를 판별하지 못했습니다"
+    med = float(d.median())
+    fq = "D" if med <= 3 else "W" if med <= 10 else "M" if med <= 45 else "Q" if med <= 120 else "H" if med <= 250 else "Y"
+    return fq, f"받아 본 값들의 날짜 간격 중앙값이 {med:g}일이라 {_FREQ_KO[fq]} 자료로 봅니다"
 
 
 def _code_problem(source: str, code: str) -> str:
@@ -384,8 +438,10 @@ def check_variable(body: VariableCheckBody) -> dict:
         return {"ok": False, "error": f"이 코드로 자료를 받지 못했습니다 — 코드가 맞는지, 인터넷이 되는지 확인하세요. (원인: {scrub_secrets(f'{type(e).__name__}: {e}')[:200]})"}
     if not len(sr):
         return {"ok": False, "error": "이 코드로 자료를 받지 못했습니다 — 받은 값이 하나도 없습니다"}
+    fq, basis = _infer_freq(body.source, body.source_code.strip(), sr.index)
     return {"ok": True, "rows": int(len(sr)), "first": str(pd.Timestamp(sr.index[0]).date()), "last": str(pd.Timestamp(sr.index[-1]).date()),
-            "sample": [{"date": str(pd.Timestamp(d).date()), "value": float(v)} for d, v in sr.tail(5).items()]}
+            "sample": [{"date": str(pd.Timestamp(d).date()), "value": float(v)} for d, v in sr.tail(5).items()],
+            "freq": fq, "freq_basis": basis}
 
 
 @app.post("/api/variables")
@@ -412,8 +468,14 @@ def add_variable(body: VariableBody) -> dict:
     chk = check_variable(VariableCheckBody(source=body.source, source_code=body.source_code))
     if not chk["ok"]:
         raise HTTPException(400, chk["error"])
+    fq = chk["freq"]                       # 주기는 자료로 정한다(검토 1) — 사람이 넣은 값은 '맞는지 확인'에만 쓴다
+    if fq is None:
+        raise HTTPException(400, f"주기를 정하지 못해 등록하지 않았습니다 — {chk['freq_basis']}. 이 변수는 엑셀(변수 사전)로 등록해 주세요")
+    if body.freq is not None and body.freq != fq:
+        raise HTTPException(400, f"넣은 주기({_FREQ_KO[body.freq]})가 자료의 주기({_FREQ_KO[fq]})와 다릅니다 — {chk['freq_basis']}. "
+                                 "주기가 틀리면 발표시차가 잘못 잡혀 미래 값이 섞일 수 있어 등록하지 않았습니다. 주기를 비우거나 맞게 넣어 주세요")
     runlog.snapshot_master(master, DATA)  # 고치기 전 사본
-    row = {"id": vid, "name": body.name.strip(), "description": "", "group": body.group.strip(), "freq": body.freq, "lag_days": "" if body.lag_days is None else body.lag_days,
+    row = {"id": vid, "name": body.name.strip(), "description": "", "group": body.group.strip(), "freq": fq, "lag_days": "" if body.lag_days is None else body.lag_days,
            "lag_confirmed": "N" if body.lag_days is None else "Y", "source": body.source, "source_code": body.source_code.strip(), "default_fill": "ffill",
            "transform": body.transform, "unit": body.unit.strip(), "active": "Y",
            "note": (body.note.strip() + " " if body.note.strip() else "") + f"화면에서 등록 {pd.Timestamp.utcnow().strftime('%Y-%m-%d')}"}
@@ -421,9 +483,10 @@ def add_variable(body: VariableBody) -> dict:
         raise HTTPException(500, "변수 사전에 쓰지 못했습니다 — 엑셀에서 파일을 열어 두었다면 닫고 다시 해 보세요")
     import logging
     logging.getLogger("tsp.api").info("변수 등록: %s (%s %s)", vid, body.source, body.source_code)
-    return {"added": vid, "checked": chk,
-            "note": "변수 사전에 추가했습니다. '데이터 가져오기'를 누르면 이 변수의 자료를 받아 새 데이터 버전을 만듭니다."
-                    + ("" if body.lag_days is not None else " 발표시차(lag)는 주기별 기본값을 쓰고 '미확인'으로 표시됩니다.")}
+    from engine.registry import LAG_DEFAULT
+    return {"added": vid, "checked": chk, "freq": fq,
+            "note": f"변수 사전에 추가했습니다(주기: {_FREQ_KO[fq]} — {chk['freq_basis']}). '데이터 가져오기'를 누르면 이 변수의 자료를 받아 새 데이터 버전을 만듭니다."
+                    + ("" if body.lag_days is not None else f" 발표시차(lag)는 {_FREQ_KO[fq]} 자료 기본값 {LAG_DEFAULT[fq]}일을 쓰고 '미확인'으로 표시됩니다 — 실제 발표일을 확인해 [값 보기]에서 고쳐 주세요.")}
 
 
 # ---------------------------------------------------------------------------
@@ -468,9 +531,17 @@ def _gap_and_reversal_checks(s: pd.Series, freq: str, skip_reversal_note: str | 
         ser = s.dropna()
         pos = bool((ser > 0).all())
         r = (np.log(ser).diff() if pos else ser.diff()).dropna()
-        mad = float((r - r.median()).abs().median()) * 1.4826 if len(r) >= 10 else 0.0
+        # 규칙(2026-11-13 검토 7 — 도움말 10장과 같은 말): 하루 변화 r 의 강건 z = |r − 중앙값| ÷ (1.4826·MAD).
+        # 이틀 연속 z > 8 이고, 두 날의 움직임(중앙값을 뺀 값)이 방향이 반대이며, 둘째 날이 첫째 날 움직임의 2/3 이상을 되돌리면 '확인해 볼 날'.
+        # (|a + b| < 0.5·min(|a|,|b|) 은 b = −x·a 일 때 x > 2/3 과 같다.) 값을 바꾸지 않고 알리기만 한다.
+        med = float(r.median()) if len(r) else 0.0
+        mad = float((r - med).abs().median()) * 1.4826 if len(r) >= 10 else 0.0
+        if len(r) < 10:
+            rev_note = "값이 10개 미만이라 튀었다 되돌아온 날을 점검하지 않았습니다"
+        elif mad == 0:
+            rev_note = "하루 변화의 절반 이상이 같은 값(대부분 변화 없음)이라 흩어짐(MAD)이 0 — 튀었다 되돌아온 날을 이 방법으로 점검할 수 없습니다. 그래프를 직접 보세요"
         if mad > 0:
-            a_, ix = r.to_numpy(), r.index
+            a_, ix = (r - med).to_numpy(), r.index
             for i in range(len(a_) - 1):
                 if (abs(a_[i]) > _OUTLIER_Z * mad and abs(a_[i + 1]) > _OUTLIER_Z * mad and np.sign(a_[i]) != np.sign(a_[i + 1])
                         and abs(a_[i] + a_[i + 1]) < 0.5 * min(abs(a_[i]), abs(a_[i + 1]))):
@@ -510,8 +581,13 @@ def variable_values(vid: str, version: str | None = None) -> dict:
     chk = _gap_and_reversal_checks(s, v.freq, "0 근처를 오가는 자료라 되돌림 검사를 하지 않습니다" if flow_like else None)
     t_low = (v.transform or "none").lower()
     nonpos = int((s <= 0).sum()) if (t_low.startswith("pct") or t_low.startswith("log")) else 0
-    vals = [{"date": str(t.date()), "value": float(s[t]), "transformed": (None if pd.isna(tr[t]) or not np.isfinite(tr[t]) else float(tr[t]))} for t in s.index]
-    return {**base, "n": int(len(s)), "first": str(s.index.min().date()), "last": str(s.index.max().date()), "values": vals, "message": msg,
+    vals = [{"date": str(t.date()), "value": (None if not np.isfinite(s[t]) else float(s[t])),
+             "transformed": (None if pd.isna(tr[t]) or not np.isfinite(tr[t]) else float(tr[t]))} for t in s.index]
+    # 바꾼 값의 뜻(2026-11-13 검토 13): 여기 값은 '변수의 원래 주기에서' 변환한 것이다. 엔진은 그 뒤 발표시차·날짜 맞추기를 하고,
+    # 변수가 모델보다 촘촘하면(일간 변수 → 주·월간 모델, 간격을 적지 않은 pct·diff·logdiff) 결정일 사이의 변화를 다시 구한다(experiment.build_dataset).
+    tr_note = ("원래 주기에서 바꾼 값입니다. 실험에서는 여기에 발표시차·날짜 맞추기를 더 하고, 이 변수보다 느린 주기의 모델(예: 일간 변수를 월간 모델에)에서는 "
+               "결정일 사이의 변화를 다시 구하므로 모델에 들어가는 값과 다를 수 있습니다") if t_low not in ("", "none") else None
+    return {**base, "n": int(len(s)), "first": str(s.index.min().date()), "last": str(s.index.max().date()), "values": vals, "message": msg, "transform_note": tr_note,
             "checks": {**chk, "duplicate_dates": dup, "nonpositive": nonpos, "n_nan": int(s.isna().sum())}}
 
 
@@ -522,7 +598,7 @@ def variable_values_csv(vid: str, version: str | None = None):
     r = variable_values(vid, version)
     lines = [f"date,value,변환값({r['transform']})"]
     for row in r["values"]:
-        lines.append(f"{row['date']},{row['value']!r},{'' if row['transformed'] is None else repr(row['transformed'])}")
+        lines.append(f"{row['date']},{'' if row['value'] is None else repr(row['value'])},{'' if row['transformed'] is None else repr(row['transformed'])}")   # 빈 값은 빈칸('nan' 글자 아님)
     body = ("\ufeff" + "\r\n".join(lines) + "\r\n").encode("utf-8")
     return Response(content=body, media_type="text/csv; charset=utf-8",
                     headers={"content-disposition": f'attachment; filename="{vid}_{r["version"]}.csv"'})
@@ -647,6 +723,8 @@ def collect_status() -> dict:
     if rc is not None:
         out["returncode"] = rc
         out["message"] = {0: "모두 받았습니다. 새 데이터 버전이 만들어졌습니다.",
+                          1: "종목 가격을 새로 받지 못했습니다(받은 것이 아예 없으면 새 데이터 버전도 만들지 않았습니다). 아래 기록에서 [fail] 줄을 확인하세요.",
+                          3: "시작하기 전에 멈췄습니다 — 아무것도 받지 않았고 새 데이터 버전도 만들지 않았습니다. 아래 기록의 이유(변수 사전의 고칠 곳 등)를 확인하세요.",
                           2: "받지 못한 항목이 있습니다 — 그 항목은 직전 값 그대로 두었고, 이 버전은 '일부 받지 못함'으로 표시됩니다. 아래 기록에서 [fail] 줄을 확인하세요."
                           }.get(rc, f"가져오기가 오류로 끝났습니다(종료 코드 {rc}). 아래 기록을 확인하세요.")
     return out
