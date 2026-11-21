@@ -270,7 +270,20 @@ def run_lab(code: str, expect: str, *, pure: bool, timeout: int = 120, rtol: flo
         bad = [m for m in _re.findall(r"^\s*(?:import|from)\s+(\w+)", code, flags=_re.M) if m != "math"]
         if bad:
             raise AssertionError(f"순수 파이썬 실험 코드에 외부 모듈: {bad}")
-    r = subprocess.run([_sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=timeout)
+    # 코드를 임시 파일로 써서 실행한다. '-c 코드'로 넘기면 윈도우의 명령줄 길이 한도(32,767자)를 넘는 긴 실험 코드가
+    # "WinError 206 파일 이름이나 확장명이 너무 깁니다"로 실패한다(2026-11-18 노트북에서 확인). 실행 내용은 같다.
+    import os as _os
+    import tempfile as _tf
+    fd, path = _tf.mkstemp(suffix=".py", prefix="tsp_lab_")
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(code)
+        r = subprocess.run([_sys.executable, "-I", path], capture_output=True, text=True, timeout=timeout)
+    finally:
+        try:
+            _os.remove(path)
+        except OSError:
+            pass
     out = r.stdout.strip()
     exact = r.returncode == 0 and out == expect.strip()
     ok = exact or (r.returncode == 0 and rtol is not None and _near(out, expect.strip(), rtol, atol))

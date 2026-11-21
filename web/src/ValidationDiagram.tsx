@@ -17,13 +17,17 @@ export function ValidationDiagram(p: Props) {
   if (p.mode === 'walkforward') {
     const rows = 4, y0 = 30, rh = 26, gap = 8, L = 70
     const trW = 460, gapW = 22, teW = 90, step = 118
-    const nVal = p.usesVal ? Math.round(p.trainLen * p.valFrac) : 0
+    // 한 폴드의 창을 자르는 순서(엔진과 같음, 빈 칸·정답 없는 행이 없을 때): 창 → 끝 비움 → (창 모델) 앞 seq_len−1 → 검증 int(n×비율) → 사이 비움 → 학습
+    const warm = p.seqLen != null ? p.seqLen - 1 : 0
+    const base = p.trainLen - p.emb - warm
+    const nVal = p.usesVal ? Math.floor(base * p.valFrac) : 0
+    const nFit = base - (p.usesVal ? nVal + p.emb : 0)
     const valW = p.usesVal ? Math.max(40, trW * p.valFrac) : 0
     const out = []
     for (let i = 0; i < rows; i++) {
       const x = L + i * step, y = y0 + i * (rh + gap)
       const fit = trW - valW - (p.usesVal ? gapW : 0)
-      out.push(seg('train_len', 'vd-train', x, fit, y, rh, `학습 ${p.trainLen - nVal - (p.usesVal ? p.emb : 0)}`, `학습 창 ${p.trainLen}${p.unit} 중 학습에 쓰는 부분`))
+      out.push(seg('train_len', 'vd-train', x, fit, y, rh, `학습 ${nFit}`, `학습 창 ${p.trainLen}${p.unit} 중 가중치를 맞추는 데 쓰는 ${nFit}개`))
       if (p.usesVal) {
         out.push(seg('embargo', 'vd-gap', x + fit, gapW, y, rh, '', `학습과 검증 사이 비움 ${p.emb}행 — 학습 정답이 검증 입력 기간과 겹치지 않게`))
         out.push(seg('val_frac', 'vd-val', x + fit + gapW, valW, y, rh, `검증 ${nVal}`, `검증(조기종료용) = 학습 창 뒤쪽 ${Math.round(p.valFrac * 100)}%`))
@@ -33,7 +37,7 @@ export function ValidationDiagram(p: Props) {
       out.push(<text key={'f' + i} x={x - 4} y={y + rh / 2 + 4} textAnchor="end" className="vd-lab">{i < rows - 1 ? `폴드 ${i + 1}` : '…'}</text>)
     }
     const sx = L + trW + gapW
-    return <svg className="diagram vdiag" viewBox={`0 0 ${W} ${y0 + rows * (rh + gap) + 46}`} role="img" aria-label="워크포워드 검증 도식">
+    return <svg className="diagram vdiag" viewBox={`0 0 ${W} ${y0 + rows * (rh + gap) + 66}`} role="img" aria-label="워크포워드 검증 도식">
       <text x={20} y={16} className="vd-head">워크포워드: 학습 창 {p.trainLen}{p.unit}를 {p.testLen}{p.unit}씩 밀며 매번 다시 학습 → 테스트 부분만 이어 붙여 채점{p.dates.testStart ? ` (평가 ${p.dates.testStart}~${p.dates.testEnd || ''})` : ''}</text>
       {out}
       {p.seqLen != null && <g className={'vd-win' + hot('seq_len')} onMouseEnter={() => p.onHover('seq_len')} onMouseLeave={() => p.onHover(null)}>
@@ -42,7 +46,10 @@ export function ValidationDiagram(p: Props) {
         <title>딥러닝 입력 창: 결정일 포함 과거 {p.seqLen}행. 테스트 첫 창은 바로 앞 실제 행으로 채운다(빈 칸을 만들지 않음)</title>
       </g>}
       <text x={20} y={y0 + rows * (rh + gap) + 18} className="vd-note">
-        {p.usesVal ? '검증을 쓰는 모델(딥러닝·LightGBM): 학습 창 뒤쪽을 조기종료용으로 떼고, 그 앞을 비웁니다.' : '이 모델은 검증을 쓰지 않아 학습 창 전체로 학습합니다.'} 회색 = 비움({p.emb}행).
+        {p.usesVal ? '검증을 쓰는 모델(딥러닝·LightGBM): 학습 창 뒤쪽을 조기종료용으로 떼고, 그 앞을 비웁니다.' : '이 모델은 검증을 쓰지 않아 학습 창 전체로 학습합니다.'} 회색 = 비움({p.emb}행). 막대 길이는 비율이 아닌 모양입니다.
+      </text>
+      <text x={20} y={y0 + rows * (rh + gap) + 38} className="vd-note">
+        창 {p.trainLen} = {warm ? `앞 ${warm}(창을 채울 과거·입력 전용) + ` : ''}학습 {nFit}{p.usesVal ? ` + 비움 ${p.emb} + 검증 ${nVal}` : ''} + 비움 {p.emb} → 다음 테스트 {p.testLen}. 정답 없는 행·빈 칸이 있으면 더 줄어듭니다(아래 표가 실제 개수).
       </text>
     </svg>
   }

@@ -8,6 +8,7 @@ lightgbm
 # torch: Windows 는 PyPI 기본이 CPU 전용. GPU 는 python check_env.py 안내대로 CUDA 빌드 설치.
 torch
 openpyxl
+python-docx         # 결과 꾸러미의 Word 보고서(없으면 HTML 보고서로 대신함)
 pyarrow
 pydantic>=2
 python-dotenv

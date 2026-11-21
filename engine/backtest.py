@@ -17,6 +17,7 @@
  이 파일에 있는 것
    CostModel              사고팔 때 드는 비용(수수료·슬리피지·세금)
    run_backtest           신호 → 자산곡선 (핵심)
+   shannon_benchmark      비교 기준 '섀넌 50:50'(ETF 절반·현금 절반, 한 달마다 다시 맞춤, 비용 포함) — 2026-11-15
    performance            수익률 → 성적표(총수익·연복리·샤프·최대낙폭 …)
    bootstrap_excess_pvalue  "B&H 보다 나은 게 우연인가?" 를 숫자로 (부트스트랩 p값)
    deflated_sharpe_pvalue   "여러 번 시도해서 운 좋게 나온 최고 성적 아닌가?" 보정
@@ -75,6 +76,7 @@ def run_backtest(
     cost: CostModel = CostModel(),
     initial_capital: float = 1.0,
     periods_per_year: int = 252,
+    rebalance: pd.Series | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """신호를 체결해 자산곡선을 만든다.
 
@@ -84,6 +86,12 @@ def run_backtest(
       cost             CostModel. 기본 = 수수료 0.015% + 슬리피지 5bp.
       initial_capital  시작 금액. 기본 1.0 → 결과 equity 가 1.35 면 35% 번 것. (금액이 아니라 '배수'로 보면 됨)
       periods_per_year 1년에 몇 기간인가. 일간 252(한국 거래일 수), 주간 52, 월간 12. 연율화(샤프·연복리)에만 쓰임.
+      rebalance        (2026-11-15, 섀넌 재조정용) None 이면 아래 '회계' 그대로 — 기존 모델은 모두 None(계산 불변).
+                       True/False 시리즈를 주면 '흘러가는 비율' 회계: 들고 있는 비율이 가격을 따라 바뀌고(ETF 가 오르면 비율이 늘고
+                       내리면 줄고), 목표가 바뀐 날 또는 rebalance=True 인 날에만 목표로 다시 맞추며 그때만 |목표 − 흘러간 비율| 만큼 비용을 낸다.
+                         흘러간 비율  w' = h·(1+r) / (1 + h·r)      (h = 그 기간 들고 간 비율, r = 그 기간 보유 수익률, 현금 수익 0)
+                       0/1 신호에서는 흘러가도 0·1 그대로라 두 회계가 같다(시험 test_01_signals_same_with_or_without_drift).
+                       비용으로 줄어든 금액은 비율 계산에 넣지 않는다(비용은 한 번에 0.065% 수준이라 영향이 작음 — 단순화).
 
     회계(결정일 t 행에 기록):
     - pos_t: t 마감 후 결정한 목표 포지션. 실제 보유는 t+1 시가부터.
@@ -112,7 +120,10 @@ def run_backtest(
     entry = p["open"].shift(-1)  # 진입 가격 = 다음날(t+1) 시가.  shift(-1) = 한 칸 '뒤 날짜' 값을 지금 행으로 당겨 옴
     exit_ = p["open"].shift(-2)  # 청산 가격 = 그다음날(t+2) 시가
     hold_ret = exit_ / entry - 1.0  # 한 기간 들고 있었을 때의 수익률. 예) 101/102 − 1 = −0.98%
-    turnover = pos.diff().abs().fillna(pos.abs())  # 포지션이 바뀐 양. 0→1 이면 1, 1→1 이면 0. 첫날은 0 에서 시작한 것으로 봄
+    if rebalance is None:
+        turnover = pos.diff().abs().fillna(pos.abs())  # 포지션이 바뀐 양. 0→1 이면 1, 1→1 이면 0. 첫날은 0 에서 시작한 것으로 봄
+    else:
+        pos, turnover = _drift_positions(pos, hold_ret, rebalance.reindex(idx).fillna(False).astype(bool))
     gross = pos * hold_ret  # 비용 빼기 전 수익 = 들고 있던 비율 × 그 기간 수익률
     costs = turnover * cost.one_way  # 비용 = 바꾼 양 × 편도 비용
     net = gross - costs  # 순수익률
@@ -126,6 +137,7 @@ def run_backtest(
             "position": pos,                    # 실제로 들고 갈 비율(0~1)
             "hold_return": hold_ret,            # t+1 시가 → t+2 시가 수익률
             "gross_return": gross,              # 포지션 × 보유수익
+            "turnover": turnover,               # 그날 사거나 판 양(비율). 비용 = 이 값 × 편도 비용 (2026-11-15 열 추가 — 값은 예전 계산 그대로)
             "cost": costs,                      # 그날 낸 비용
             "net_return": net,                  # 순수익
             "equity": equity,                   # 전략 자산(시작 = initial_capital)
@@ -140,6 +152,54 @@ def run_backtest(
         total_cost=float(costs.sum()),  # 낸 비용의 합(수익률 단위). 0.01 = 1%
     )
     return daily, summary
+
+
+def _drift_positions(target: pd.Series, hold_ret: pd.Series, rebalance: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """흘러가는 비율 회계(run_backtest 의 rebalance 설명). 반환 (실제로 들고 간 비율 h, 사거나 판 양).
+    결정일 t: 목표가 바뀌었거나(t=0 은 0 에서 시작) rebalance[t] 이면 h_t = 목표_t, 거래량 = |목표_t − w_t|; 아니면 h_t = w_t, 거래량 0.
+    w_{t+1} = h_t(1+r_t)/(1+h_t·r_t) — r_t 가 없으면(끝의 두 행) h_t 그대로."""
+    tg = target.to_numpy(dtype=float)
+    r = hold_ret.to_numpy(dtype=float)
+    rb = rebalance.to_numpy(dtype=bool)
+    h = np.zeros(len(tg)); tv = np.zeros(len(tg))
+    w, prev = 0.0, 0.0
+    for t in range(len(tg)):
+        if t == 0 or tg[t] != prev or rb[t]:
+            h[t] = tg[t]; tv[t] = abs(tg[t] - w)
+        else:
+            h[t] = w
+        prev = tg[t]
+        w = h[t] * (1 + r[t]) / (1 + h[t] * r[t]) if np.isfinite(r[t]) and (1 + h[t] * r[t]) != 0 else h[t]
+    return pd.Series(h, index=target.index), pd.Series(tv, index=target.index)
+
+
+def period_end_mask(index: pd.DatetimeIndex, every: str) -> np.ndarray:
+    """재조정 날(2026-11-15): 기간(D 일·W 주·M 월·Q 분기)마다 그 기간의 마지막 결정일 = True. 그날 결정 → 다음 기간 첫 시가에 체결.
+    데이터 끝의 기간은 끝났는지 알 수 없어 넣지 않는다(마지막 행은 어차피 보유 수익이 없다)."""
+    if every not in ("D", "W", "M", "Q"):
+        raise ValueError(f"재조정 주기는 D·W·M·Q 중 하나: {every}")
+    per = pd.DatetimeIndex(index).to_period("D" if every == "D" else every)
+    nxt = np.append(per[1:].to_numpy(), None)
+    out = np.array([n is not None and n != p for p, n in zip(per.to_numpy(), nxt)], dtype=bool)
+    return out
+
+
+SHANNON_WEIGHT = 0.5   # 결과 화면의 비교 기준(섀넌 50:50) — 바꾸지 않는 고정값(2026-11-15)
+SHANNON_EVERY = "M"    # 한 달에 한 번 다시 맞춤
+
+
+def shannon_benchmark(prices: pd.DataFrame, start, end, *, cost: CostModel = CostModel(), periods_per_year: int = 252,
+                      weight: float = SHANNON_WEIGHT, every: str = SHANNON_EVERY) -> tuple[pd.Series, dict]:
+    """비교 기준 '섀넌 50:50'(2026-11-15): 평가 구간 [start, end] 동안 ETF 비율 weight, 나머지 현금, every 마다 다시 맞춤, 비용 포함.
+    반환 (구간의 기간별 순수익률 — 비용 뺀 값, 성과 dict). 자산곡선 = (1 + 순수익률).cumprod(). B&H 기준(비용 없음)과 달리 재조정 비용을 넣는다 — 이 기준의 약점이 비용이기 때문."""
+    sig = pd.Series(np.nan, index=prices.index)
+    sig.loc[start:end] = weight
+    reb = pd.Series(period_end_mask(prices.index, every), index=prices.index)
+    d, _ = run_backtest(prices, sig, cost=cost, periods_per_year=periods_per_year, rebalance=reb)
+    seg = d.loc[start:end]
+    met = performance(seg["net_return"], None, periods_per_year=periods_per_year)
+    met.update(weight=weight, every=every, total_cost=float(seg["cost"].sum()), n_trades=int((seg["turnover"] > 0).sum()))
+    return seg["net_return"], met
 
 
 def performance(r: pd.Series, bench: pd.Series | None = None, *, periods_per_year: int = 252) -> dict:

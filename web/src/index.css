@@ -237,6 +237,8 @@ svg.mflow { margin-top: 4px; }
 .pcard .pc-what { color: var(--ink); margin-bottom: 3px; }
 .pcard .pc-up b { color: #3c7d55; font-weight: 600; }
 .pcard .pc-down b { color: #a8761f; font-weight: 600; }
+.pcard .pc-how { margin-top: 3px; color: var(--ink); }
+.pcard .pc-how b { color: #2f5f9e; font-weight: 600; margin-right: 4px; }
 .pcard details { margin-top: 3px; color: var(--ink-2); }
 .pcard details summary { cursor: pointer; font-size: 11px; color: #8a919d; }
 
@@ -344,3 +346,7 @@ svg.mflow { margin-top: 4px; }
 .varvals .checks li { margin: 2px 0; }
 .varvals table.mini { font-size: 12px; margin-top: 4px; }
 .varvals .varedit { margin-top: 10px; }
+
+.cfg-table td { vertical-align: top; }
+.cfg-table .cfg-group td { background: var(--panel-alt, #f3f5f8); font-weight: 600; }
+a.btn { display: inline-block; padding: 4px 10px; border: 1px solid #c9ced6; border-radius: 6px; text-decoration: none; color: inherit; }

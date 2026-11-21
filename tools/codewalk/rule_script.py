@@ -271,10 +271,10 @@ def build(cap: dict) -> dict:
       "③ <b>run_backtest</b> 가 다음 날 시가에 체결해 자산곡선을 만들고 ④ <b>performance</b> 가 성적표를, ⑤ 부트스트랩·Deflated Sharpe 가 '우연인가' 를 계산합니다.",
       say=("호출 순서입니다. 규칙 모델이 학습 없이 전체 기간의 포지션을 한 번에 내면, 학습 모델과 같은 평가 구간만 남기고 봉인 구간의 신호를 지웁니다. "
            "그다음 백테스트, 성적표, 그리고 부트스트랩과 디플레이티드 샤프 검정 순서로 계산합니다."),
-      code=C(EXP, src.span(EXP, 'if plugin.INPUT_SHAPE == "rule":', 'pred[:] = pos.values') + src.span(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)", "perf.update(n_trades=int((turnover > 0).sum())"),
-             src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)"), "_run_experiment", 1, 1),
+      code=C(EXP, src.span(EXP, 'if plugin.INPUT_SHAPE == "rule":', 'pred[:] = pos.values') + src.span(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy, rebalance=rebal)", "perf.update(n_trades=int((turnover > 0).sum())"),
+             src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy, rebalance=rebal)"), "_run_experiment", 1, 1),
       notes={src.line(EXP, "pos = pd.Series(model.positions(ds.prices, ds.X)"): "규칙 모델: 학습 없이 전체 기간의 포지션(0 또는 1)을 한 번에",
-             src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)"): "다음 날 시가 체결·비용 → 날마다의 순수익",
+             src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy, rebalance=rebal)"): "다음 날 시가 체결·비용 → 날마다의 순수익",
              src.line(EXP, 'perf = performance(daily["net_return"], daily["hold_return"], periods_per_year=ppy)'): "첫 신호 ~ 마지막 신호 구간만으로 성적표"},
       stack=stk, nodes=["sig", "win", "fill", "perf"])
     # ================================================================ 1. 신호

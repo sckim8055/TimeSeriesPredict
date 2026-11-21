@@ -3,7 +3,7 @@ export type Meta = {
   models: { file: string; name: string; input_shape: string; target_types: string[]; params: Record<string, any>; param_groups?: string[] | null; uses_validation?: boolean; doc?: string; seq_len_default?: Record<string, number> | null }[]
   variables: Variable[]; groups: string[]; master_warnings: string[]; lag_defaults: Record<string, number>
   variable_sets: VariableSet[]; forecast_targets: { id: string; name: string; freq: string; group: string; domain: string }[]; experiment_counters: Record<string, number>; sealed_evaluations_by_mode: Record<string, any[]>; data_versions: { id: string; created_utc?: string; tickers: string[]; variables?: number; incomplete?: boolean; failed_items?: string[] }[]
-  tickers: { id: string; name: string; kind?: string }[]; defaults: any; experiment_counter: number; sealed_evaluations: any[]; device: string; transforms: string[]; price_api?: Record<string, any[]>; data_version_collect?: { start: string; end: string | null; created_utc: string | null }
+  tickers: { id: string; name: string; kind?: string }[]; defaults: any; experiment_counter: number; sealed_evaluations: any[]; device: string; transforms: string[]; transform_options: import('./TransformSelect').TransformOption[]; price_api?: Record<string, any[]>; data_version_collect?: { start: string; end: string | null; created_utc: string | null }
 }
 export type VariableSet = { id: string; name: string; description: string; variable_ids: string[]; transforms: Record<string, string>; lag_override: Record<string, number>; recommended_for: string[] }
 export type Variable = { id: string; name: string; description: string; group: string; domain: string; freq: string; lag_days: number; lag_confirmed: boolean; source: string; transform: string; active: boolean; duplicate_of: string; usable: boolean; has_data: boolean; note: string; source_code: string; api?: any; stored: { file: string; first: string; last: string; n: number; upload: string | null } | null }
@@ -45,6 +45,8 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   meta: () => j<Meta>('/api/meta'),
   varSources: () => j<any[]>('/api/variables/sources'),
+  technicalInfo: (freq: string) => j<any>(`/api/technical-info?freq=${encodeURIComponent(freq)}`),
+  dataChecks: (version?: string) => j<any>('/api/data-checks' + (version ? `?version=${encodeURIComponent(version)}` : '')),
   varValues: (id: string, version?: string) => j<any>(`/api/variables/${encodeURIComponent(id)}/values` + (version ? `?version=${encodeURIComponent(version)}` : '')),
   tickerValues: (id: string, version?: string) => j<any>(`/api/tickers/${encodeURIComponent(id)}/values` + (version ? `?version=${encodeURIComponent(version)}` : '')),
   varEdit: (id: string, body: any) => j<any>(`/api/variables/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
@@ -58,7 +60,8 @@ export const api = {
   jobs: () => j<Job[]>('/api/jobs'),
   explain: (config: any, date?: string, epochs?: number) => j<any>('/api/explain?' + new URLSearchParams({ ...(date ? { date } : {}), ...(epochs ? { epochs: String(epochs) } : {}) }).toString(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config, sealed: false }) }),
   flow: (config: any) => j<any>('/api/flow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config, sealed: false }) }),
-  logs: (q: { date?: string; tail?: number; run?: string; level?: string; q?: string }) => j<{ files: string[]; file: string | null; lines: string[]; total: number }>('/api/logs?' + new URLSearchParams(Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])).toString()),
+  splitPlan: (config: any, ratios?: number[] | null) => j<any>('/api/split-plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config, ratios: ratios ?? null }) }),
+  logs: (q: { date?: string; tail?: number; run?: string; level?: string; q?: string; kind?: 'tsp' | 'access' }) => j<{ files: string[]; file: string | null; lines: string[]; total: number }>('/api/logs?' + new URLSearchParams(Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])).toString()),
   job: (id: string) => j<Job>(`/api/jobs/${id}`),
   cancel: (id: string) => j<{ cancelled: boolean }>(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   results: (mode: Mode = 'trading') => j<ResultRow[]>(`/api/results?mode=${mode}`),

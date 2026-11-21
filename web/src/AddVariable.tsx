@@ -1,10 +1,11 @@
+import TransformSelect, { type TransformOption } from './TransformSelect'
 import { useEffect, useState } from 'react'
 import { api } from './api'
 
 /** 화면에서 변수 추가 + 데이터 가져오기 (2026-11-12).
  *  순서를 하나로: ① 출처를 고르고 코드를 넣는다 → ② [받아 보기]로 실제 값이 오는지 본다 → ③ 이름을 넣고 [변수 추가] → ④ [데이터 가져오기].
  *  접속 키는 여기서 받지 않는다(.env 파일에만). 지원하는 출처만 고를 수 있다. */
-export default function AddVariable({ onChanged }: { onChanged: () => void }) {
+export default function AddVariable({ onChanged, transformOptions = [] }: { onChanged: () => void; transformOptions?: TransformOption[] }) {
   const [sources, setSources] = useState<any[]>([])
   const [source, setSource] = useState('YF')
   const [code, setCode] = useState('')
@@ -73,8 +74,7 @@ export default function AddVariable({ onChanged }: { onChanged: () => void }) {
         <div className="field"><label>주기 <span className="hint">자료로 정합니다</span></label>
           <b>{chk.freq ? ({ D: '일', W: '주', M: '월', Q: '분기', H: '반기', Y: '연' } as any)[chk.freq] : '판별 못 함'}</b>
           <span className="hint">{chk.freq_basis}</span></div>
-        <div className="field"><label>모델에 넣는 꼴</label><select value={transform} onChange={e => setTransform(e.target.value)}>
-          <option value="pct">변화율 (가격·지수·환율 — 보통 이것)</option><option value="diff">차이 (금리·비율처럼 % 단위인 값)</option><option value="none">값 그대로</option></select></div>
+        <div className="field"><label>모델에 넣는 꼴</label><TransformSelect value={transform} onChange={setTransform} options={transformOptions} /></div>
         <div className="field"><label>묶음</label><input value={group} onChange={e => setGroup(e.target.value)} placeholder="예: C" /></div>
         <div className="field"><label>발표시차(일) <span className="hint">모르면 비워 두세요</span></label><input value={lag} onChange={e => setLag(e.target.value.replace(/[^0-9]/g, ''))} placeholder="비우면 기본값(미확인 표시)" /></div>
       </div>

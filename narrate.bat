@@ -5,7 +5,8 @@ REM Usage: narrate.bat ridge          (several: narrate.bat ridge lgbm)
 REM        narrate.bat --list-voices  (your voice names and IDs)
 REM        narrate.bat ridge --dry-run (characters needed and credits left, nothing is made)
 chcp 65001 >nul
-set PY=C:\Users\test\AppData\Local\Python\pythoncore-3.14-64\python.exe
+REM set PY=C:\Users\test\AppData\Local\Python\pythoncore-3.14-64\python.exe
+set PY=C:\Users\test\AppData\Local\Programs\Python\Python314\python.exe
 if not exist "%PY%" set PY=python
 cd /d %~dp0
 "%PY%" tools\narrate.py %*

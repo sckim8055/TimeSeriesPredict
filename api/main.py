@@ -58,7 +58,16 @@ app = FastAPI(title="TimeSeriesPredict API", version="0.1", default_response_cla
 from engine import logs as _logs  # noqa: E402
 
 alog = _logs.setup("api", "api")
+acclog = _logs.access_logger()   # 접속 기록 logs/access_날짜.log (2026-11-17)
 
+
+def _client_info(request) -> tuple[str, str, str]:
+    """(보낸 주소, 경로, 브라우저 정보). 주소: uvicorn 이 앞단 프록시(Tailscale)가 붙인 X-Forwarded-For 를 믿고(127.0.0.1 에서 온 것만) 원래 주소로 바꿔 준 값.
+    경로: Tailscale 이 붙이는 머리글이 있으면 '외부(Funnel)', 없으면 '노트북 직접'. 주소는 기록용일 뿐 막는 데 쓰지 않는다(막는 것은 암호)."""
+    ip = request.client.host if request.client else "-"
+    via = "외부(Funnel)" if _is_external(request) else "노트북 직접"
+    ua = (request.headers.get("user-agent") or "-").replace("\n", " ")[:160]
+    return ip, via, ua
 
 @app.middleware("http")
 async def _log_requests(request, call_next):
@@ -77,7 +86,11 @@ async def _log_requests(request, call_next):
         raise
     ms = (_t.perf_counter() - t0) * 1000
     lvl = 20 if (request.url.path.startswith("/api/") and request.method != "GET") or resp.status_code >= 400 else 10
-    alog.log(lvl, "%s %s%s → %d (%.0fms, 본문 %dB)", request.method, request.url.path, f"?{request.url.query}" if request.url.query else "", resp.status_code, ms, len(body))
+    ip, via, ua = _client_info(request)
+    q = f"?{request.url.query}" if request.url.query else ""
+    alog.log(lvl, "%s %s%s → %d (%.0fms, 본문 %dB) · %s %s", request.method, request.url.path, q, resp.status_code, ms, len(body), ip, via)
+    # 접속 기록: 한 줄 = 시각 | 보낸 주소 | 경로 | 방법 주소 | 결과 | 걸린 시간 | 본문 크기 | 브라우저 정보 (암호 머리글 등 머리글 값은 남기지 않음)
+    acclog.info("%s | %s | %s %s%s | %d | %.0fms | %dB | %s", ip, via, request.method, request.url.path, q, resp.status_code, ms, len(body), ua)
     return resp
 
 
@@ -86,7 +99,8 @@ async def _log_requests(request, call_next):
 #   .env 의 TSP_WRITE_PASSWORD 가 있으면: /api 의 GET 이 아닌 요청(실험 실행·데이터 가져오기·변수/종목 추가·삭제·계산 따라가기 등)은
 #     머리글 X-TSP-Password 가 맞아야 통과. 보기(GET)는 열려 있다.
 #   없으면: 노트북에서 직접 하는 요청은 지금처럼 통과, Funnel 로 들어온 요청(머리글 Tailscale-Funnel-Request — Tailscale 이 붙인다)은 막는다.
-#   Funnel 로 들어온 요청은 모두 127.0.0.1 에서 온 것처럼 보이므로 주소로는 가릴 수 없다 — 그래서 암호가 기본 방어.
+#   Funnel 로 들어온 요청은 연결상 127.0.0.1 에서 온다(uvicorn 이 X-Forwarded-For 로 원래 주소를 보여 주지만, 그 값은 접속 기록용으로만 쓴다).
+#   주소로 막지 않고 암호가 기본 방어(2026-11-17 설명 고침 — 전에는 '주소로는 가릴 수 없다'고만 적혀 있었다).
 # ---------------------------------------------------------------------------
 _WRONG_DELAY = 1.0   # 틀린 암호마다 기다리는 초(마구 넣어 보기를 늦춘다). 서버 전체에서 한 번에 하나씩(아래 _WRONG_LOCK)
 import threading as _threading  # noqa: E402
@@ -115,7 +129,8 @@ def _origin_problem(request) -> str:
     return f"다른 사이트({origin})에서 보낸 요청이라 막았습니다 — 이 화면은 {host or '이 서버'} 에서 직접 열어 쓰세요"
 _OPEN_METHODS = ("GET", "HEAD", "OPTIONS")
 # POST 이지만 아무것도 저장하지 않는 '보기' — 화면을 열면 저절로 불리는 설명 계산(2026-11-13: 화면을 열자마자 암호 창이 떠서 뺌)
-_OPEN_POST_PATHS = ("/api/flow", "/api/explain")
+# 2026-11-21: /api/split-plan(검증 계획 표, 학습 없음·저장 없음)을 11-18 에 만들면서 여기에 넣지 않아 화면을 열자마자 다시 암호 창이 떴다 — 추가
+_OPEN_POST_PATHS = ("/api/flow", "/api/explain", "/api/split-plan")
 
 
 def _write_password() -> str:
@@ -242,7 +257,9 @@ def meta():
         "sealed_evaluations_by_mode": sealed,
         "forecast_targets": forecast_targets,
         "device": default_device(),
-        "transforms": ["none", "pct", "pct5", "pct20", "diff", "diff5", "diff20", "log", "logdiff"],
+        # 변환 선택지는 engine.experiment.TRANSFORM_OPTIONS 한 곳에서(2026-11-14 — 화면 세 곳과 도움말이 같은 목록·설명을 쓰게)
+        "transforms": [o["value"] for o in _TRANSFORM_OPTIONS],
+        "transform_options": _TRANSFORM_OPTIONS,
         "variable_sets": _variable_sets(),
     }
 
@@ -492,8 +509,9 @@ def add_variable(body: VariableBody) -> dict:
 # ---------------------------------------------------------------------------
 # 변수 값 보기 · CSV · 발표시차·변환 고치기 (2026-11-13)
 # ---------------------------------------------------------------------------
-_GAP_DAYS = {"D": 12, "W": 21, "M": 45, "Q": 120, "H": 220, "Y": 400}   # 이보다 긴 빈 기간을 알린다(일간 12일: 가장 긴 휴장 = 2017 추석 연휴 11일은 정상)
-_OUTLIER_Z = 8.0                                                        # 하루 변화의 강건 z(중앙값·MAD) 기준
+# 빈 기간·되돌림 점검 규칙은 engine/datacheck.py 한 곳에 둔다(2026-11-14 — 자료 점검표와 [값 보기]가 같은 규칙을 쓰게)
+from engine.experiment import TRANSFORM_OPTIONS as _TRANSFORM_OPTIONS  # noqa: E402
+from engine.datacheck import GAP_DAYS as _GAP_DAYS, OUTLIER_Z as _OUTLIER_Z, gap_and_reversal as _gap_and_reversal_checks  # noqa: E402
 
 
 def _pick_version(version: str | None) -> str:
@@ -518,38 +536,43 @@ def _series_of(vid: str, version: str | None):
     return v, ver, long
 
 
-def _gap_and_reversal_checks(s: pd.Series, freq: str, skip_reversal_note: str | None = None) -> dict:
-    """빈 기간·하루 튀었다 되돌아온 날·가장 큰 움직임(변수·종목 가격 공통, 2026-11-13). 값을 바꾸지 않는다."""
-    gaps = []
-    lim = _GAP_DAYS.get(freq, 45)
-    d = s.index.to_series().diff().dt.days
-    for t, days in d[d > lim].items():
-        prev = s.index[s.index.get_loc(t) - 1]
-        gaps.append({"from": str(prev.date()), "to": str(t.date()), "days": int(days)})
-    reversals, moves, rev_note = [], [], skip_reversal_note
-    if rev_note is None:
-        ser = s.dropna()
-        pos = bool((ser > 0).all())
-        r = (np.log(ser).diff() if pos else ser.diff()).dropna()
-        # 규칙(2026-11-13 검토 7 — 도움말 10장과 같은 말): 하루 변화 r 의 강건 z = |r − 중앙값| ÷ (1.4826·MAD).
-        # 이틀 연속 z > 8 이고, 두 날의 움직임(중앙값을 뺀 값)이 방향이 반대이며, 둘째 날이 첫째 날 움직임의 2/3 이상을 되돌리면 '확인해 볼 날'.
-        # (|a + b| < 0.5·min(|a|,|b|) 은 b = −x·a 일 때 x > 2/3 과 같다.) 값을 바꾸지 않고 알리기만 한다.
-        med = float(r.median()) if len(r) else 0.0
-        mad = float((r - med).abs().median()) * 1.4826 if len(r) >= 10 else 0.0
-        if len(r) < 10:
-            rev_note = "값이 10개 미만이라 튀었다 되돌아온 날을 점검하지 않았습니다"
-        elif mad == 0:
-            rev_note = "하루 변화의 절반 이상이 같은 값(대부분 변화 없음)이라 흩어짐(MAD)이 0 — 튀었다 되돌아온 날을 이 방법으로 점검할 수 없습니다. 그래프를 직접 보세요"
-        if mad > 0:
-            a_, ix = (r - med).to_numpy(), r.index
-            for i in range(len(a_) - 1):
-                if (abs(a_[i]) > _OUTLIER_Z * mad and abs(a_[i + 1]) > _OUTLIER_Z * mad and np.sign(a_[i]) != np.sign(a_[i + 1])
-                        and abs(a_[i] + a_[i + 1]) < 0.5 * min(abs(a_[i]), abs(a_[i + 1]))):
-                    t = ix[i]; k = ser.index.get_loc(t)
-                    reversals.append({"date": str(t.date()), "before": float(ser.iloc[k - 1]), "value": float(ser.iloc[k]), "after": float(ser.iloc[k + 1])})
-            for t in r.abs().sort_values(ascending=False).index[:5]:
-                moves.append({"date": str(t.date()), "change": float(r[t]), "kind": "로그 변화" if pos else "차이", "value": float(ser[t])})
-    return {"gaps": gaps, "gap_days_limit": lim, "reversals": reversals, "reversal_z": _OUTLIER_Z, "reversal_note": rev_note, "largest_moves": moves}
+@app.get("/api/technical-info")
+def technical_info(freq: str = "D") -> dict:
+    """기술지표 설명(2026-11-14): 변수 사전에 없는 A_ 입력의 이름·묶음·계산식과 묶음별 '왜 있나·읽는 법', 엔진이 계산한 예시.
+    정의는 engine/features.py 한 곳(TECH_GROUP_DOCS·PRESETS·technical_block) — 도움말 20장 5절과 같은 내용."""
+    from engine.features import PRESETS, TECH_GROUP_DOCS, TECH_ORIGIN, feature_description, preset_calendar_weeks, technical_columns, technical_example, technical_group
+    if freq not in PRESETS:
+        raise HTTPException(400, f"주기는 {', '.join(PRESETS)} 중 하나")
+    cols = technical_columns(freq)
+    return {"freq": freq, "preset": {k: list(v) if isinstance(v, tuple) else v for k, v in PRESETS[freq].items()},
+            "columns": [{"name": c, "group": technical_group(c), "desc": feature_description(c)} for c in cols],
+            "groups": TECH_GROUP_DOCS, "example": technical_example(),
+            "origin": TECH_ORIGIN, "calendar_weeks": preset_calendar_weeks()}  # 출처·주기별 창의 대략 주 수(2026-11-14)
+
+
+_DC_CACHE: dict = {}
+
+
+@app.get("/api/data-checks")
+def data_checks(version: str | None = None) -> dict:
+    """자료 점검표(2026-11-14): 사용 가능한 변수 전부의 정상성·계절성·계절조정 표시·빈 기간·확인해 볼 날과 신호.
+    값을 바꾸지 않는다. 같은 데이터 버전·같은 변수 사전이면 다시 계산하지 않는다(서버 메모리에만 둠)."""
+    from engine.datacheck import CROSS_RULE, RULE, check_table, cross_table
+    from engine.store import DataVersion
+    reg, _ = _registry()
+    ver = _pick_version(version)
+    mp = DATA / "variable_master.xlsx"
+    key = (ver, mp.stat().st_mtime if mp.exists() else None, tuple(reg.ids()))
+    if key not in _DC_CACHE:
+        dv = DataVersion(DATA, ver)
+        rows = check_table(dv, reg)
+        cross = cross_table(dv, reg)       # 다른 출처와 대조(2026-11-14, 표시만) — duplicate_of 짝 전부
+        _DC_CACHE.clear()
+        _DC_CACHE[key] = {"version": ver, "rows": rows, "rule": RULE,
+                          "counts": {c: sum(1 for r in rows if r["signal"] == c) for c in ("초록", "노랑", "회색")},
+                          "cross": cross, "cross_rule": CROSS_RULE,
+                          "cross_counts": {c: sum(1 for r in cross if r["signal"] == c) for c in ("초록", "노랑", "회색")}}
+    return _DC_CACHE[key]
 
 
 @app.get("/api/variables/{vid}/values")
@@ -587,7 +610,13 @@ def variable_values(vid: str, version: str | None = None) -> dict:
     # 변수가 모델보다 촘촘하면(일간 변수 → 주·월간 모델, 간격을 적지 않은 pct·diff·logdiff) 결정일 사이의 변화를 다시 구한다(experiment.build_dataset).
     tr_note = ("원래 주기에서 바꾼 값입니다. 실험에서는 여기에 발표시차·날짜 맞추기를 더 하고, 이 변수보다 느린 주기의 모델(예: 일간 변수를 월간 모델에)에서는 "
                "결정일 사이의 변화를 다시 구하므로 모델에 들어가는 값과 다를 수 있습니다") if t_low not in ("", "none") else None
+    from engine.datacheck import CROSS_RULE, check_variable, cross_table
+    from engine.store import DataVersion
+    dc = check_variable(v, long)          # 자료 점검표의 이 변수 줄(정상성·계절성·계절조정 표시, 2026-11-14)
+    reg, _ = _registry()
+    cross = cross_table(DataVersion(DATA, ver), reg, ids=[vid])   # 이 변수가 들어간 다른 출처 짝(2026-11-14, 표시만)
     return {**base, "n": int(len(s)), "first": str(s.index.min().date()), "last": str(s.index.max().date()), "values": vals, "message": msg, "transform_note": tr_note,
+            "datacheck": dc, "cross": cross, "cross_rule": CROSS_RULE,
             "checks": {**chk, "duplicate_dates": dup, "nonpositive": nonpos, "n_nan": int(s.isna().sum())}}
 
 
@@ -833,6 +862,32 @@ def flow(body: SubmitBody):
         raise HTTPException(422, f"흐름 계산 오류: {e}")
 
 
+class SplitPlanBody(BaseModel):
+    config: dict
+    ratios: list[float] | None = None   # [학습, 검증, 테스트](%) — 주면 날짜를 계산, 없으면 설정의 날짜로 계획만
+
+
+@app.post("/api/split-plan")
+def split_plan_api(body: SplitPlanBody):
+    """검증 계획(학습 없음): 워크포워드는 폴드 수·첫/마지막 폴드의 자르는 순서·개수, 1회 분할은 비율이나 날짜로 나눈 구간·개수, 빈 칸 처리."""
+    from engine.splitplan import validation_plan
+    from engine.store import DataVersion
+    try:
+        cfg = dict(body.config)
+        vs = _versions()
+        if not vs:
+            raise HTTPException(400, "데이터 버전이 없습니다")
+        vid = cfg.get("data_version") or vs[-1]["id"]
+        reg, _ = _registry()
+        if body.ratios is not None and len(body.ratios) != 3:
+            raise HTTPException(422, "비율은 [학습, 검증, 테스트] 세 개입니다")
+        return validation_plan(cfg, DataVersion(DATA, vid), reg, ratios=body.ratios)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(422, f"분할 계획 오류: {e}")
+
+
 @app.post("/api/experiments")
 def submit(body: SubmitBody):
     try:
@@ -923,11 +978,16 @@ def list_jobs(limit: int = 100):
 
 
 @app.get("/api/logs")
-def get_logs(date: str | None = None, tail: int = 400, run: str | None = None, level: str | None = None, q: str | None = None):
-    """개발 로그 보기. date=YYYYMMDD(기본 오늘), run=작업 ID 일부, level=DEBUG/INFO/WARNING/ERROR(이상), q=포함 문자열."""
+def get_logs(date: str | None = None, tail: int = 400, run: str | None = None, level: str | None = None, q: str | None = None, kind: str = "tsp"):
+    """개발 로그 보기. date=YYYYMMDD(기본 최신), run=작업 ID 일부, level=DEBUG/INFO/WARNING/ERROR(이상), q=포함 문자열.
+    kind=tsp(개발 로그, 기본) / access(접속 기록 — 2026-11-17)."""
     from engine.logs import LOG_DIR
-    files = sorted(p.name for p in LOG_DIR.glob("tsp_*.log")) if LOG_DIR.exists() else []
-    name = f"tsp_{date}.log" if date else (files[-1] if files else None)
+    if kind not in ("tsp", "access"):
+        raise HTTPException(400, "kind 는 tsp 또는 access")
+    if date is not None and not (len(date) == 8 and date.isdigit()):
+        raise HTTPException(400, "date 는 YYYYMMDD")
+    files = sorted(p.name for p in LOG_DIR.glob(f"{kind}_*.log")) if LOG_DIR.exists() else []
+    name = f"{kind}_{date}.log" if date else (files[-1] if files else None)
     lines: list[str] = []
     if name and (LOG_DIR / name).exists():
         order = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -941,7 +1001,7 @@ def get_logs(date: str | None = None, tail: int = 400, run: str | None = None, l
                     buf[-1] += line
         for ln in buf:
             parts = ln.split(None, 3)
-            lvn = parts[2] if len(parts) > 2 else "DEBUG"
+            lvn = parts[2] if len(parts) > 2 and kind == "tsp" else "INFO"
             if lvn in order and order.index(lvn) < lv:
                 continue
             if run and f"[run={run}" not in ln and run not in ln[:80]:
@@ -1050,6 +1110,145 @@ def _holm_by_family(rows: list[dict]) -> None:
             r["family_size"] = r["p_holm_m"]
 
 
+@app.get("/api/config-guide")
+def config_guide():
+    """실험 설정(JSON)의 모든 칸과 뜻·기본값·선택지 — 설정 스키마(ExperimentConfig 의 Field description)에서 그대로 만든다(2026-11-20)."""
+    from engine.experiment import ExperimentConfig
+    sch = ExperimentConfig.model_json_schema()
+    defs = sch.get("$defs", {})
+    out: list[dict] = []
+
+    def ref_of(v: dict):
+        r = v.get("$ref") or next((x.get("$ref") for x in v.get("allOf", []) + v.get("anyOf", []) if isinstance(x, dict) and x.get("$ref")), None)
+        return r.split("/")[-1] if r else None
+
+    def choices(v: dict):
+        if "enum" in v:
+            return v["enum"]
+        for x in v.get("anyOf", []):
+            if isinstance(x, dict) and "enum" in x:
+                return x["enum"]
+        return None
+
+    def walk(props: dict, prefix: str):
+        for k, v in props.items():
+            name = ref_of(v)
+            out.append({"path": prefix + k, "desc": v.get("description", ""), "default": v.get("default"), "choices": choices(v), "group": bool(name)})
+            if name:
+                walk(defs[name]["properties"], prefix + k + ".")
+    walk(sch["properties"], "")
+    return {"fields": out}
+
+
+@app.get("/api/results/{stem}/logs.zip")
+def result_logs_zip(stem: str):
+    """이 결과에 관한 로그를 한 번에 내려받기(2026-11-20): 결과 JSON, 작업 설정·작업 출력 로그, 개발 로그(tsp_*.log)에서 이 실행의 줄,
+    실행 기록(run_log.jsonl)의 줄, 실행 시간대의 접속 기록. 로그 파일은 바꾸지 않고 읽기만 한다."""
+    import io
+    import zipfile
+    from datetime import datetime, timedelta
+    from engine.logs import LOG_DIR
+    from api.jobs import CONFIG_DIR, JOBS_DIR
+    p = _find_result(stem)
+    if p is None:
+        raise HTTPException(404, "결과 없음")
+    r = json.loads(p.read_text(encoding="utf-8"))
+    rr = r.get("run_record") or {}
+    run_id, job_id = rr.get("run_id"), rr.get("job_id")
+    if not job_id and JOBS_DIR.exists():   # 옛 결과: 작업 기록의 result_path 로 찾는다
+        for jp in JOBS_DIR.glob("*.json"):
+            try:
+                j = json.loads(jp.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+            if str(j.get("result_path") or "").replace("\\", "/").endswith(p.name):
+                job_id = j.get("id") or jp.stem
+                break
+
+    def local(ts: str | None):
+        try:
+            return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
+        except Exception:  # noqa: BLE001
+            return None
+    t0 = local(rr.get("started_utc"))
+    t1 = local(rr.get("finished_utc")) or t0
+    days: list[str] = []
+    if t0:
+        d = t0.date() - timedelta(days=1)
+        while d <= (t1 or t0).date() + timedelta(days=1):
+            days.append(d.strftime("%Y%m%d"))
+            d += timedelta(days=1)
+    tags = [f"[run={x}]" for x in (job_id, run_id) if x]
+    readme = [f"결과 {stem} 의 로그 묶음 — 만든 시각 {datetime.now():%Y-%m-%d %H:%M:%S}",
+              f"run_id={run_id} · job_id={job_id} · 실행 {t0} ~ {t1} (서버 시각)", "",
+              "result.json            결과 전체(설정·기간·폴드·지표·실행 기록)",
+              "job_config.json        화면이 보낸 실험 설정(작업)",
+              "job_output.log         실험 프로세스 화면 출력 전체(results/jobs/<job_id>.log)",
+              "dev_log_this_run.log   개발 로그(logs/tsp_*.log)에서 이 실행 태그([run=…])가 붙은 줄",
+              "run_log.jsonl          실행 기록(results/<mode>/run_log.jsonl)에서 이 run_id 의 줄",
+              "access_during_run.log  실행 시간대의 접속 기록(logs/access_*.log)", ""]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("result.json", p.read_text(encoding="utf-8"))
+        missing = []
+        if job_id and (CONFIG_DIR / f"{job_id}.json").exists():
+            z.writestr("job_config.json", (CONFIG_DIR / f"{job_id}.json").read_text(encoding="utf-8", errors="replace"))
+        else:
+            missing.append("job_config.json — 작업 설정 파일 없음(CLI 로 직접 실행했거나 옛 결과)")
+        if job_id and (JOBS_DIR / f"{job_id}.log").exists():
+            z.writestr("job_output.log", (JOBS_DIR / f"{job_id}.log").read_text(encoding="utf-8", errors="replace"))
+        else:
+            missing.append("job_output.log — 작업 출력 로그 없음")
+        dev, acc = [], []
+        for day in days:
+            fp = LOG_DIR / f"tsp_{day}.log"
+            if fp.exists() and tags:
+                keep = False
+                for line in fp.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if line[:4].isdigit():
+                        keep = any(t in line for t in tags)
+                    if keep:
+                        dev.append(line)
+            ap = LOG_DIR / f"access_{day}.log"
+            if ap.exists() and t0:
+                lo, hi = t0 - timedelta(minutes=1), (t1 or t0) + timedelta(minutes=1)
+                for line in ap.read_text(encoding="utf-8", errors="replace").splitlines():
+                    try:
+                        ts = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+                    if lo <= ts <= hi:
+                        acc.append(line)
+        z.writestr("dev_log_this_run.log", "\n".join(dev) + ("\n" if dev else ""))
+        if not dev:
+            missing.append("dev_log_this_run.log 이 비어 있음 — 개발 로그가 생기기 전(2026-11-06) 결과이거나 로그 파일이 지워짐")
+        z.writestr("access_during_run.log", "\n".join(acc) + ("\n" if acc else ""))
+        rl = []
+        rp = p.parent / "run_log.jsonl"
+        if rp.exists() and run_id:
+            rl = [ln for ln in rp.read_text(encoding="utf-8", errors="replace").splitlines() if run_id in ln]
+        z.writestr("run_log.jsonl", "\n".join(rl) + ("\n" if rl else ""))
+        z.writestr("README.txt", "\n".join(readme + (["빠진 것:"] + ["- " + m for m in missing] if missing else [])) + "\n")
+    return Response(buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{stem}_logs.zip"'})
+
+
+@app.get("/api/results/{stem}/package.zip")
+def result_package_zip(stem: str):
+    """결과 꾸러미(2026-11-21): 사전(설정·모델·입력 자료와 뜻)·사중(실행 기록·폴드·로그)·사후(결과·지표와 뜻·일별 결과)와
+    Word 보고서를 zip 하나로. engine/report_pack.py. 결과·로그는 읽기만 한다."""
+    from engine.logs import LOG_DIR
+    from engine.report_pack import build_package
+    from api.jobs import CONFIG_DIR, JOBS_DIR
+    p = _find_result(stem)
+    if p is None:
+        raise HTTPException(404, "결과 없음")
+    reg, _ = _registry()
+    data = build_package(stem, p, data_root=DATA, registry=reg, log_dir=LOG_DIR, jobs_dir=JOBS_DIR, config_dir=CONFIG_DIR)
+    return Response(data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{stem}_package.zip"'})
+
+
 @app.get("/api/results/{stem}")
 def result_detail(stem: str):
     p = _find_result(stem)
@@ -1077,6 +1276,7 @@ def result_series(stem: str):
     d = d.dropna(subset=["net_return"])
     eq = (1 + d["net_return"]).cumprod()
     bh = (1 + d["hold_return"]).cumprod()
+    sh = (1 + d["shannon_return"].fillna(0)).cumprod() if "shannon_return" in d else None   # 비교 기준 섀넌 50:50(2026-11-15 이후 결과만)
     dd = eq / eq.cummax() - 1
     # 실제 vs 예측 (전체 기간): 예측이 없는 앞부분 = 학습 워밍업, 봉인 이후 = 봉인 구간
     k = int(r["config"]["target"]["k"])
@@ -1093,6 +1293,7 @@ def result_series(stem: str):
     return {
         "date": [x.strftime("%Y-%m-%d") for x in d.index],
         "equity": eq.round(5).tolist(), "benchmark": bh.round(5).tolist(), "drawdown": dd.round(4).tolist(),
+        "shannon": None if sh is None else sh.round(5).tolist(),
         "position": d["position"].fillna(0).tolist(),
         "full": {
             "date": [x.strftime("%Y-%m-%d") for x in full.index],
@@ -1235,8 +1436,11 @@ def guide_walk(name: str):
 
 @app.get("/api/guide/{doc_id}")
 def guide_doc(doc_id: str):
+    # 이름만 받는다(2026-11-14): 전에는 '..' 만 막아, 윈도우에서 'F:\\…' 같은 드라이브 경로나 절대 경로를 주면 도움말 폴더 밖의 .md 를 읽을 수 있었다.
+    if not doc_id or any(c in doc_id for c in "/\\:") or ".." in doc_id:
+        raise HTTPException(404, "문서 없음")
     p = GUIDE_BUILD / f"{doc_id}.md"
-    if not p.exists() or ".." in doc_id:
+    if not p.exists() or p.resolve().parent != GUIDE_BUILD.resolve():
         raise HTTPException(404, "문서 없음")
     return {"id": doc_id, "markdown": p.read_text(encoding="utf-8")}
 

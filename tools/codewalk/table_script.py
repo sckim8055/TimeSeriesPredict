@@ -1248,7 +1248,7 @@ def build(cap: dict) -> dict:
         has_dm = dmv is not None and dmp is not None and np.isfinite(dmv) and np.isfinite(dmp)
         dm_sig = has_dm and dmv > 0 and dmp < 0.05
         ln_sig = src.line(EXP, "signal = (pred > cfg.trade.threshold).astype(float).where(pred.notna())")   # 2026-11-12: 신호 변환이 _signal_from_prediction 함수로 옮겨짐   # 개발 구간 평가(봉인 아님) 갈래
-        ln_bt = src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)")
+        ln_bt = src.line(EXP, "daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy, rebalance=rebal)")
         ln_dm = src.line(EXP, 'dm, dm_p = diebold_mariano(e.values, (0 - ev["target"]).values, h=k)')
         lab_tr = (lab_trade(pp[ok], yy[ok], thr, pf["exposure"], pm["rmse"], pm["dir_acc"]) if all(k_ in pf for k_ in ("exposure",)) and all(k_ in pm for k_ in ("rmse", "dir_acc")) else None)
         # 봉인 경계: 보유 구간(t+1 시가 → t+1+k 시가)이 봉인 구간 안에 있는 결정 — 엔진은 결정일만 봉인 전으로 자른다

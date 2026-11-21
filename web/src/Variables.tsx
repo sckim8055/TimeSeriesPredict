@@ -1,3 +1,4 @@
+import TechnicalInfo from './TechnicalInfo'
 import { Fragment, useMemo, useState } from 'react'
 
 /** 데이터 받는 법(engine/api_spec.py): 같은 값을 다른 사람이 다시 받을 수 있게 주소·매개변수·응답에서 쓰는 열·코드 위치. API 키는 자리표시자만. */
@@ -20,7 +21,7 @@ export function ApiSpec({ a }: { a: any }) {
 import type { Meta } from './api'
 import { SourceBadge, SOURCE_INFO, KIND_SYMBOL, KIND_LABEL } from './source'
 import AddVariable from './AddVariable'
-import VariableValues, { TickerValues } from './VariableValues'
+import VariableValues, { DataCheckPanel, TickerValues } from './VariableValues'
 
 export default function Variables({ meta, onReload }: { meta: Meta; onReload?: () => void }) {
   const [q, setQ] = useState('')
@@ -33,7 +34,7 @@ export default function Variables({ meta, onReload }: { meta: Meta; onReload?: (
     <div>
       <h2>변수 사전</h2>
       <p className="lead"><code>data/variable_master.xlsx</code> 가 유일한 기준입니다. 인터넷 출처의 변수는 아래 '변수 추가'로 넣을 수 있고, 각 줄의 [값 보기]에서 저장된 값·점검을 보고 발표시차·변환을 고칠 수 있습니다(그 밖의 수정은 엑셀을 고친 뒤 새로고침). lag_days 는 "기준일(기간 시작일) → 공개일" 일수이며 변수별로 다릅니다. 발표시차는 2026-11-05 에 기관 공표일정·발표 보도로 검증했습니다: <b>✓ 확인</b> 49개, <b>? 근거 부족</b> 16개. 오른쪽 "발표시차 근거" 열에 관측 공표일 범위와 계산(최장+여유)이, 마우스를 올리면 출처 전문이 보입니다. 상세는 도움말 「발표시차(lag) 검증 보고서」.</p>
-      <AddVariable onChanged={() => onReload?.()} />
+      <AddVariable onChanged={() => onReload?.()} transformOptions={meta.transform_options} />
       <div className="toolbar">
         <input placeholder="id·이름·그룹으로 찾기" value={q} onChange={e => setQ(e.target.value)} style={{ width: 260 }} />
         <span className="hint">{(['file', 'api', 'derived'] as const).map(k => { const n = meta.variables.filter(v => (SOURCE_INFO[v.source]?.kind ?? 'api') === k).length; return <span key={k} style={{ marginRight: 10 }}>{KIND_SYMBOL[k]} {KIND_LABEL[k]} {n}개</span> })}</span>
@@ -53,9 +54,11 @@ export default function Variables({ meta, onReload }: { meta: Meta; onReload?: (
               <td>{!v.active && <span className="badge muted">active=N</span>}{v.duplicate_of && <span className="badge muted">중복 → {v.duplicate_of}</span>}{!v.has_data && <span className="badge fail">데이터 없음</span>}{v.usable && v.has_data && <span className="badge pass">사용 가능</span>}</td>
             <td style={{ whiteSpace: 'normal', maxWidth: 460, fontSize: 12, color: 'var(--ink-2)' }} title={v.note}>{(() => { const ev = (v.note || '').split(' | ').find(x => x.startsWith('[lag 검증'))?.replace(/^\[lag 검증 [0-9-]+\] /, '') ?? ''; const [head, rest] = ev.split('. 출처: '); return <>{head}{rest && <div style={{ color: 'var(--ink-3, #8a94a6)', marginTop: 2 }}>출처·수정: {rest}</div>}</> })()}</td></tr>
             {openApi === v.id && v.api && <tr><td colSpan={14} style={{ background: '#fafbfc' }}><ApiSpec a={v.api} /></td></tr>}
-            {openVal === v.id && <tr><td colSpan={14} style={{ background: '#fafbfc', whiteSpace: 'normal' }}><VariableValues id={v.id} onChanged={() => onReload?.()} /></td></tr>}</Fragment>))}</tbody>
+            {openVal === v.id && <tr><td colSpan={14} style={{ background: '#fafbfc', whiteSpace: 'normal' }}><VariableValues id={v.id} onChanged={() => onReload?.()} transformOptions={meta.transform_options} /></td></tr>}</Fragment>))}</tbody>
         </table>
       </div>
+      <DataCheckPanel />
+      <TechnicalInfo />
       <div className="panel"><h3>종목 가격</h3>
         <p className="hint">실험이 읽는 가격(시가·고가·저가·종가·거래량)입니다. [값 보기]로 그래프·점검·CSV 를 봅니다. 종목은 위 '종목 추가'로 넣고, [데이터 가져오기]가 끝나면 가격이 생깁니다.</p>
         <table><tbody>{meta.tickers.map(t => <Fragment key={t.id}><tr>

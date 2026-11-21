@@ -48,12 +48,12 @@ function guideKeys(model: string, step: string, cls: boolean): string[] {
     fold: ['folds'], target: ['target'], decide: ['decision'], compound: ['compound'],
     scale: ['standardize'], window: biva ? ['minmax'] : rnn ? ['standardize'] : [], scale_params: biva ? ['minmax'] : ['standardize'],
     weighted_sum: cls ? ['ridge_sum', 'logistic'] : ['ridge_sum'],
-    fit: model === 'ridge' ? (cls ? ['ridge_fit', 'logistic'] : ['ridge_fit']) : model === 'lightgbm_model' ? ['lgbm'] : series ? (model === 'sarima' ? ['arima', 'sarima'] : ['arima'])
+    fit: model === 'ridge' ? (cls ? ['ridge_fit', 'logistic'] : ['ridge_fit']) : model === 'lightgbm_model' ? ['lgbm'] : model === 'hmm' ? ['hmm_fit'] : series ? (model === 'sarima' ? ['arima', 'sarima'] : ['arima'])
       : model === 'vecm' ? ['vecm'] : (rnn || biva) ? ['nn_train'] : [],
-    trees: ['lgbm'], filter: ['kalman'], roots: ['roots'], recursion: model === 'vecm' ? ['vecm'] : model === 'sarima' ? ['sarima', 'kalman'] : ['arima', 'kalman'],
+    trees: ['lgbm'], filter: model === 'hmm' ? ['hmm_filter'] : ['kalman'], states: ['hmm_fit'], ahead: ['hmm_filter'], roots: ['roots'], recursion: model === 'vecm' ? ['vecm'] : model === 'sarima' ? ['sarima', 'kalman'] : ['arima', 'kalman'],
     cells: [model === 'gru' ? 'gru_cell' : 'lstm_cell'], head: ['rnn_head'],
     brits: ['brits'], decomp: ['moving_avg'], trend: ['conv1d'], seasonal: ['conv1d'], vae_enc: ['vae', 'lstm_cell'], vae_z: ['vae'], vae_dec: ['vae'], combine: ['biva_combine'], noise: ['noise'],
-    rule: ({ ma_cross: ['rule_ma'], momentum: ['rule_momentum'], rsi_rule: ['rule_rsi'], sox_gap_fade: ['rule_quantile'] } as Record<string, string[]>)[model] ?? [],
+    rule: ({ ma_cross: ['rule_ma'], momentum: ['rule_momentum'], rsi_rule: ['rule_rsi'], sox_gap_fade: ['rule_quantile'], shannon: ['rule_shannon'] } as Record<string, string[]>)[model] ?? [],
   }
   return m[step] ?? []
 }
@@ -281,16 +281,29 @@ EASY.gru = { ...EASY.lstm, slow: 'GRU 는 실제로 학습을 돌리므로 "계�
   lanes: [EASY.lstm.lanes[0], { t: '② 맞히기 — 결정일마다', cards: [EASY.lstm.lanes[1].cards[0],
     { h: '시점마다 셀 계산', p: ['첫 시점부터 차례로: r·z 문과 새 후보 n = tanh(입력 + r × 지난 기억의 영향) → 새 기억 h = (1 − z) × n + z × 지난 기억.'] },
     EASY.lstm.lanes[1].cards[2], DECIDE] }] }
+EASY.hmm = {
+  lead: 'HMM 시장 상태는 다른 재료를 쓰지 않고 "이 가격의 변화율 뒤에 눈에 안 보이는 상태(예: 잔잔한 상승기 / 출렁이는 하락기)가 있고, 상태마다 변화율의 평균·흩어짐이 다르다"고 보고 다음을 맞힙니다. 상태는 직접 보이지 않아 확률로만 추정합니다.',
+  lanes: [
+    { t: '① 배우기 — 폴드마다 한 번', learn: true, cards: [
+      { h: '재료: 변화율 하나', tone: 'data', p: ['학습 창의 "어제 종가 대비 오늘 종가 변화율"만 씁니다. 고른 변수·기술지표는 무시됩니다.'], rule: 'r = 오늘 종가 ÷ 어제 종가 − 1' },
+      { h: '상태 찾기 (Baum–Welch)', tone: 'filter', p: ['상태별 평균·흩어짐과 "상태가 바뀔 확률"을, 이 변화율들이 가장 그럴듯하게 나오도록 반복 계산으로 정합니다. 난수를 쓰지 않아 다시 해도 같습니다.'], rule: '상태 j 의 변화율 ~ 정규(평균 μ_j, 흩어짐 σ_j)' },
+    ] },
+    { t: '② 맞히기 — 결정일마다 (모수는 그대로)', cards: [
+      { h: '지금 어느 상태일까', tone: 'data', p: ['처음부터 결정일까지 변화율을 하루씩 넣으며 "어제 상태 확률 × 바뀔 확률"로 짐작하고, 오늘 변화율로 다시 맞춥니다. 결정일 이후는 쓰지 않습니다.'] },
+      { h: '앞날의 상태 확률 → 예측', p: ['앞날 상태는 모르므로 바뀔 확률만 곱해 나가고, 그 확률로 상태 평균을 가중해 변화율을 예측합니다.'], rule: '예측 r̂ = Σ (상태 확률 × 상태 평균)' },
+      { h: 'k 기간 수익률로 묶기', p: ['매매 모드는 다음 날 시가에 사므로 첫 기간 예측은 버리고 그다음 k 개를 복리로 묶습니다(ARIMA 와 같은 근사).'], rule: '예측 = (1 + r̂₁) × … × (1 + r̂ₖ) − 1' }, DECIDE] },
+  ] }
 const RULE_EASY: Record<string, string> = {
   buy_and_hold: '항상 보유: 평가 구간 첫날 사서 끝까지 들고 있습니다. 학습도 판단도 없습니다. 모든 전략이 이겨야 하는 기준선입니다.',
   ma_cross: '이동평균 교차: 결정일까지 최근 짧은 기간 종가 평균(빠른 흐름)이 긴 기간 평균(느린 흐름)보다 위면 오르는 흐름으로 보고 보유, 아니면 현금. 학습은 없습니다.',
   momentum: '모멘텀: 결정일 종가가 정한 기간 전 종가보다 높으면(올랐으면) 그 흐름이 이어진다고 보고 보유, 아니면 현금. 학습은 없습니다.',
   rsi_rule: 'RSI 규칙: 최근 오른 폭·내린 폭의 평균으로 만든 0~100 점수(RSI)가 아래 문턱보다 낮으면(많이 떨어짐) 사고, 위 문턱보다 높으면(많이 오름) 팔고, 그 사이면 어제 상태를 그대로 둡니다. 학습은 없습니다.',
+  shannon: '섀넌 재조정: 가격을 보지 않고 ETF 비율(기본 50%)을 목표로 둡니다. 그 사이에는 비율이 가격을 따라 흘러가고(오르면 늘고 내리면 줄고), 정한 주기(기본 달마다)의 마지막 결정일에 다시 목표 비율로 맞춥니다 — 그때만 비용. 학습은 없습니다.',
   sox_gap_fade: 'SOX 급등 회피: 고른 변수(예: 필라델피아 반도체 지수 변화율)가 그 전 일정 기간 값들 중 상위 몇 % 안에 들 만큼 크면 다음 날은 현금, 아니면 보유. 기준은 결정일 당일을 뺀 과거로만 계산합니다. 학습은 없습니다.',
 }
 
 export function ModelEasy({ model, config, manual }: { model: string; config: any; manual?: boolean }) {
-  if (RULE_EASY[model]) return <div className="easy"><p className="easy-lead"><b>{RULE_EASY[model]}</b> 진입 임계치는 쓰지 않고 규칙이 바로 포지션(1 = 보유, 0 = 현금)을 냅니다. 성적은 같은 설정의 학습 모델이 평가받는 날짜와 같은 구간으로 매깁니다.</p><ExplainView config={config} auto={!manual} /></div>
+  if (RULE_EASY[model]) return <div className="easy"><p className="easy-lead"><b>{RULE_EASY[model]}</b> 진입 임계치는 쓰지 않고 규칙이 바로 포지션({model === 'shannon' ? 'ETF 비율' : '1 = 보유, 0 = 현금'})을 냅니다. 성적은 같은 설정의 학습 모델이 평가받는 날짜와 같은 구간으로 매깁니다.</p><ExplainView config={config} auto={!manual} /></div>
   const e = EASY[model]
   if (!e) return <div className="easy"><p className="easy-lead">이 모델의 계산 따라가기는 준비 중입니다.</p></div>
   return <div className="easy">

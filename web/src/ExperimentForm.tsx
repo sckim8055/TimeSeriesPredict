@@ -1,6 +1,8 @@
+import TransformSelect from './TransformSelect'
 import { useMemo, useState, useEffect } from 'react'
 import { api, type Meta, type Mode, type Variable, type VariableSet } from './api'
 import { ModelFlow, techCount } from './ModelFlow'
+import SplitPlan from './SplitPlan'
 import { helpOf } from './paramHelp'
 import { ValidationDiagram } from './ValidationDiagram'
 import { SourceBadge, SOURCE_INFO, KIND_SYMBOL, KIND_LABEL as SRC_KIND_LABEL } from './source'
@@ -54,6 +56,8 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
   const [slippage, setSlippage] = useState(5)
   const [fee, setFee] = useState(0.00015)
   const [tradeThreshold, setTradeThreshold] = useState(0)
+  const [sizing, setSizing] = useState<'threshold' | 'kelly'>('threshold')   // 투자 비율 정하기(2026-11-15)
+  const [kellyFrac, setKellyFrac] = useState(0.5)
   const [trainLen, setTrainLen] = useState(mode === 'forecast' ? 60 : 756)
   const [testLen, setTestLen] = useState(mode === 'forecast' ? 1 : 21)
   const [sealedFrom, setSealedFrom] = useState(mode === 'forecast' ? '2024-01-01' : '2025-01-01')
@@ -146,7 +150,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
     variable_transforms: Object.fromEntries(selected.filter(v => transforms[v] != null && transforms[v] !== (meta.variables.find(x => x.id === v)?.transform ?? 'none')).map(v => [v, transforms[v]])),  // 기본값과 같으면 보내지 않음
     lag_override: Object.fromEntries(selected.filter(v => lagOverride[v] != null && lagOverride[v] !== meta.variables.find(x => x.id === v)?.lag_days).map(v => [v, lagOverride[v]])),
     use_technical: useTechnical, ...(useTechnical && techSel ? { technical_features: techSel } : {}), fill, model: modelFile, model_params: params,
-    trade: { threshold: tradeThreshold, fee_rate: fee, slippage_bp: slippage },
+    trade: { threshold: tradeThreshold, fee_rate: fee, slippage_bp: slippage, ...(sizing === 'kelly' ? { sizing, kelly_fraction: kellyFrac } : {}) },
     start: dataStart || null, end: dataEnd || null, ...(model.input_shape === 'window' && seqLen !== '' ? { seq_len: seqLen } : {}),
     validation: { train_len: trainLen, test_len: testLen, sealed_from: sealedFrom || null, mode: valMode, val_frac: valFrac,
       test_start: valMode === 'split' ? splitDate : (testStart || null), test_end: testEnd || null, val_start: valMode === 'split' && valStart ? valStart : null }, data_version: dataVersion || null, seed,
@@ -162,6 +166,27 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
     }, 500)
     return () => clearTimeout(t)
   }, [flowKey])
+  // 검증 계획: 워크포워드·1회 분할 모두 실제로 쓰이는 구간(엔진과 같은 규칙으로 센 값) + 1회 분할의 비율로 날짜 채우기
+  const [ratios, setRatios] = useState<[number, number, number]>([60, 10, 30])   // 원본 BIVA data_loader.py 의 학습·검증·시험 비율
+  const [plan, setPlan] = useState<any>(null)
+  const [planBusy, setPlanBusy] = useState(false)
+  const [planErr, setPlanErr] = useState<string | null>(null)
+  useEffect(() => {
+    if (valMode === 'split' && !splitDate) { setPlan(null); setPlanErr(null); return }
+    setPlanBusy(true)
+    const t = setTimeout(() => {
+      api.splitPlan(config).then(r => { setPlan(r); setPlanErr(null) }).catch(e => { setPlan(null); setPlanErr(e.message) }).finally(() => setPlanBusy(false))
+    }, 600)
+    return () => clearTimeout(t)
+  }, [flowKey, valMode])
+  const fillByRatio = () => {
+    setPlanBusy(true)
+    api.splitPlan(config, ratios).then(r => {
+      setValStart(r.dates.val_start ?? ''); setSplitDate(r.dates.test_start ?? ''); setTestEnd(r.dates.test_end ?? '')
+      setPlan(r); setPlanErr(null)
+    }).catch(e => setPlanErr(e.message)).finally(() => setPlanBusy(false))
+  }
+  const ratioSum = ratios[0] + ratios[1] + ratios[2]
   const techAll: { name: string; group: string; desc: string }[] = flow?.input?.technical_all ?? []
   useEffect(() => {  // 주기·모드가 바뀌어 고른 이름이 목록에 없으면 전부 선택으로 되돌린다(이름이 주기마다 다름)
     if (techSel && techAll.length && techSel.some(n => !techAll.find(t => t.name === n))) setTechSel(null)
@@ -304,7 +329,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           <ul style={{ listStyle: 'none', paddingLeft: 4 }}>{techAll.map(t => <li key={t.name}><label><input type="checkbox" checked={techOn(t.name)} onChange={() => { const cur = techAll.map(x => x.name).filter(techOn); setTech(techOn(t.name) ? cur.filter(n => n !== t.name) : [...cur, t.name]) }} /> <code>{t.name}</code> {t.desc}</label></li>)}</ul>
         </details>}
         <p className="hint legend">출처 배지: <span className="badge srcb src-xlsx">■ 엑셀</span> 업로드한 엑셀 파일 · <span className="badge srcb src-ecos">● ECOS</span><span className="badge srcb src-fred">● FRED</span><span className="badge srcb src-yf">● Yahoo</span> API 자동 수집 · <span className="badge srcb src-derived">◆ 파생</span> 다른 변수로 계산. 마우스를 올리면 파일·시트·열 또는 API 코드와 저장 기간이 보입니다.</p>
-        <p className="hint legend"><span className="badge lagb pass">✓ 37일</span> 발표시차 = 기준일(예: 1월 CPI → 1-01) 뒤 며칠부터 그 값을 쓰는가. <b>✓</b> 공표일정으로 확인 · <span className="badge lagb warn">? 82일</span> 근거 부족. 마우스를 올리면 근거가 보입니다. 변수를 체크하면 변환·발표시차 칸이 열리고 <b>기본값이 미리 들어가 있습니다</b> — 바꾼 칸만 주황색으로 표시되고 이 실험에만 적용됩니다.</p>
+        <p className="hint legend"><span className="badge lagb pass">✓ 37일</span> 발표시차 = 기준일(예: 1월 CPI → 1-01) 뒤 며칠부터 그 값을 쓰는가. <b>✓</b> 공표일정으로 확인 · <span className="badge lagb warn">? 82일</span> 근거 부족. 마우스를 올리면 근거가 보입니다. 변수를 체크하면 변환·발표시차 칸이 열리고 <b>기본값이 미리 들어가 있습니다</b> — 바꾼 칸만 주황색으로 표시되고 <b>이 실험에만</b> 적용됩니다 — 엑셀 변수 사전과 받아 둔 데이터는 그대로이고, 바꾼 내용은 이 실험의 결과에 기록됩니다. 기본값 자체를 바꾸려면 변수 사전 화면의 [값 보기] → '고치기'(도움말 20장 4-5).</p>
         {Array.from(byGroup.entries()).map(([g, vars]) => (
           <div key={g} style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
@@ -330,7 +355,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
                       return <span className="ctl" onClick={e => e.preventDefault()}>
                         <span className={'ctlbox' + (trChanged ? ' changed' : '')} title={`변환 — 원래 주기에서 먼저 적용. 기본값(변수 사전) ${v.transform ?? 'none'}`}>
                           <span className="cl">변환</span>
-                          <select value={trNow} onChange={e => setTransforms({ ...transforms, [v.id]: e.target.value })}>{meta.transforms.map(t => <option key={t}>{t}</option>)}</select>
+                          <TransformSelect compact value={trNow} onChange={t => setTransforms({ ...transforms, [v.id]: t })} options={meta.transform_options} />
                         </span>
                         <span className={'ctlbox' + (lagChanged ? ' changed' : '')} title={`발표시차(달력일). 기본값 ${v.lag_days}일 — 바꾸면 이 실험에서만 적용되고 결과에 기록됩니다.\n${lagEvidence(v.note)}`}>
                           <span className="cl">발표시차</span>
@@ -354,7 +379,10 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
         <div className="row">
           <div className="field"><label>저주기 채움</label><select value={fill} onChange={e => setFill(e.target.value)}><option value="ffill">ffill (미래 정보 없음)</option><option value="bfill">bfill (미래 정보 누출!)</option><option value="interp">interp (미래 정보 누출!)</option></select></div>
           {!isForecast && <>
-          <div className="field"><label>진입 임계치</label><input type="number" step="any" value={tradeThreshold} onChange={e => setTradeThreshold(+e.target.value)} /></div>
+          <div className="field"><label title="문턱: 예측이 문턱을 넘으면 전부 보유, 아니면 현금(기본). 켈리: 과거에 같은 자신감으로 예측했을 때의 실제 수익으로 비율(0~100%)을 정함 — 결정일에 결과가 나온 과거만 씀">투자 비율 정하기</label>
+            <select value={sizing} onChange={e => setSizing(e.target.value as any)}><option value="threshold">문턱 (넘으면 전부, 아니면 현금)</option><option value="kelly">켈리 (과거 결과로 비율 정함)</option></select></div>
+          {sizing === 'kelly' && <div className="field"><label title="0.5 = 절반 켈리(기본, 추정이 틀려도 덜 잃음). 1 = 전부 켈리">켈리 분수</label><input type="number" step="0.05" min={0.05} max={1} value={kellyFrac} onChange={e => setKellyFrac(+e.target.value)} /></div>}
+          {sizing === 'threshold' && <div className="field"><label>진입 임계치</label><input type="number" step="any" value={tradeThreshold} onChange={e => setTradeThreshold(+e.target.value)} /></div>}
           <div className="field"><label>수수료율</label><input type="number" step="any" value={fee} onChange={e => setFee(+e.target.value)} /></div>
           <div className="field"><label>슬리피지(bp, 편도)</label><input type="number" step="any" value={slippage} onChange={e => setSlippage(+e.target.value)} /></div>
           </>}
@@ -393,6 +421,13 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
             <div className={"field" + (vHover === 'val_frac' ? " hot" : "")} onMouseEnter={() => setVHover('val_frac')} onMouseLeave={() => setVHover(null)}><label>검증 비율 <span className="hint">— {model.uses_validation ? `${model.name ?? modelFile} 은 학습 창 뒤쪽 이 비율로 학습 멈출 때를 정함` : `${model.name ?? modelFile} 은 쓰지 않음(학습 창 전체로 학습)`}</span></label><input type="number" step="0.01" min={0} max={0.5} value={valFrac} disabled={!model.uses_validation} onChange={e => setValFrac(+e.target.value)} /></div>
             <div className={"field" + (vHover === 'test_start' ? " hot" : "")} onMouseEnter={() => setVHover('test_start')} onMouseLeave={() => setVHover(null)}><label>평가 시작일</label><input value={testStart} placeholder="학습 창이 차는 첫날" onChange={e => setTestStart(e.target.value)} /></div>
           </> : <>
+            <div className="field"><label>비율로 나누기 <span className="hint">— 학습 : 검증 : 테스트 (%)</span></label>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {[0, 1, 2].map(i => <input key={i} type="number" min={0} max={100} step={1} style={{ width: 56 }} value={ratios[i]}
+                  onChange={e => { const r = [...ratios] as [number, number, number]; r[i] = +e.target.value; setRatios(r) }} />)}
+                <button type="button" disabled={ratioSum !== 100 || planBusy} onClick={fillByRatio}>비율로 날짜 채우기</button>
+              </div>
+              <span className="hint">{ratioSum !== 100 ? `합이 ${ratioSum} — 100 이어야 합니다` : '정답이 있는 결정일 수 N 으로 학습 = int(N×학습%), 테스트 = int(N×테스트%), 나머지 = 검증(원본 BIVA 규칙). 채운 날짜는 아래에서 고칠 수 있습니다.'}</span></div>
             <div className={"field" + (vHover === 'val_start' ? " hot" : "")} onMouseEnter={() => setVHover('val_start')} onMouseLeave={() => setVHover(null)}><label>검증 시작일 <span className="hint">— 딥러닝·LightGBM 만</span></label><input value={valStart} placeholder={`비우면 학습 뒤쪽 ${Math.round(valFrac * 100)}%`} onChange={e => setValStart(e.target.value)} /></div>
             <div className={"field" + (vHover === 'test_start' ? " hot" : "")} onMouseEnter={() => setVHover('test_start')} onMouseLeave={() => setVHover(null)}><label>테스트 시작일</label><input value={splitDate} onChange={e => setSplitDate(e.target.value)} /></div>
           </>}
@@ -414,6 +449,7 @@ export default function ExperimentForm({ meta, mode, onSubmitted }: Props) {
           seqLen={model.input_shape === 'window' ? (seqLen === '' ? seqDefault : seqLen) : null} usesVal={!!model.uses_validation} unit={UNIT[effFreq] ?? ''}
           dates={{ start: dataStart || common?.start, valStart, testStart: valMode === 'split' ? splitDate : testStart, testEnd, sealed: sealedFrom, end: dataEnd || common?.end }}
           hoverKey={vHover} onHover={setVHover} />
+        <SplitPlan plan={plan} busy={planBusy} err={planErr} />
         <p className="hint">구간 사이에는 <b>{isForecast ? 'k' : '1+k'}개 행을 비웁니다</b>(학습 정답이 다음 구간의 값을 쓰지 않게). 검증 구간은 조기종료(언제 학습을 멈출지)에만 씁니다 — 검증을 쓰지 않는 모델(Ridge·ARIMA·SARIMA·VECM)은 그 구간도 학습에 써서, <b>모든 모델의 정보 마감일이 같습니다</b>. 실제로 쓴 기간은 결과의 periods 에 기록됩니다.
           {valMode === 'walkforward' && ' 모델마다 필요한 과거 길이가 달라 첫 평가일이 달라질 수 있으니, 비교할 실험들은 평가 시작일을 같게 정하세요.'}</p>
         {common && tlTo && common.end < tlTo && <div className="verdict warn">{common.endBy} 의 값이 {common.end} 이후로는 갱신되지 않습니다. 그 뒤 기간은 마지막 값이 그대로 이어진 낡은 입력으로 학습·평가됩니다 — 데이터 사용 종료를 {common.end} 로 두는 것을 권합니다.</div>}
@@ -439,12 +475,13 @@ function PcHead({ h, code, def }: { h: { name: string } | null; code: string; de
   return <div className="pc-head"><span className="pc-name">{h?.name ?? code}{h && <code>{code}</code>}</span><span className="pc-def">{def}</span></div>
 }
 /** 무엇인지 + 키우면/줄이면 + 자세히(원래 설명) */
-function PcHelp({ h, detail }: { h: { what: string; up?: string; down?: string; choice?: boolean } | null; detail: string }) {
+function PcHelp({ h, detail }: { h: { what: string; up?: string; down?: string; choice?: boolean; how?: string } | null; detail: string }) {
   if (!h) return <div className="pc-desc">{detail}</div>
   return <div className="pc-desc">
-    <div className="pc-what">{h.what}</div>
+    {h.what && <div className="pc-what">{h.what}</div>}
     {h.up && <div className="pc-up"><b>{h.choice || !h.down ? '•' : '▲ 키우면'}</b> {h.up}</div>}
     {h.down && <div className="pc-down"><b>{h.choice ? '•' : '▼ 줄이면'}</b> {h.down}</div>}
+    {h.how && <div className="pc-how"><b>고르는 법</b> {h.how}</div>}
     <details><summary>자세히</summary>{detail}</details>
   </div>
 }

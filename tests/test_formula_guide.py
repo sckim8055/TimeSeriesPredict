@@ -21,7 +21,8 @@ def test_doc_has_every_section_marker():
     s = DOC.read_text(encoding="utf-8")
     for key in ["symbols", "folds", "standardize", "minmax", "target", "decision", "ridge_sum", "ridge_fit", "logistic", "lgbm", "arima", "kalman", "sarima",
                 "compound", "vecm", "nn_train", "lstm_cell", "gru_cell", "rnn_head", "brits", "moving_avg", "conv1d", "vae", "biva_combine", "noise",
-                "rule_ma", "rule_momentum", "rule_rsi", "rule_quantile", "metrics", "dm"]:
+                "rule_ma", "rule_momentum", "rule_rsi", "rule_quantile", "metrics", "dm",
+                "rule_shannon", "hmm_filter", "hmm_fit", "kelly", "confidence", "cross_source"]:
         assert f"<!--f:{key}-->" in s, key
 
 
@@ -299,3 +300,26 @@ def test_anim_rules_use_model_positions():
             assert p is None; continue
         state = 1.0 if v < 30 else 0.0 if v > 70 else (state if state is not None else 0.0)
         assert p == state
+
+
+def test_2026_11_15_examples_match_code():
+    """29~34절(섀넌·HMM·켈리·자신감 확인표·다른 출처 대조)의 작은 예 숫자 = 실제 코드 계산."""
+    from engine.backtest import CostModel, _drift_positions
+    from engine.sizing import confidence_table
+    from models.hmm import forward
+    h, tv = _drift_positions(pd.Series([0.5, 0.5]), pd.Series([0.10, 0.0]), pd.Series([False, True]))
+    assert r(0.5 * 1.1 / 1.05, 4) == 0.5238 and r(0.45 / 0.95, 4) == 0.4737 and r(tv.iloc[1], 4) == 0.0238
+    assert CostModel().one_way == 0.00065 and r(tv.iloc[1] * CostModel().one_way * 100, 4) == 0.0015
+    A = np.array([[0.9, 0.1], [0.1, 0.9]])
+    a, _ = forward(np.array([0.5]), np.array([0.5, 0.5]), A, np.array([-1.0, 1.0]), np.array([1.0, 1.0]))
+    q = a[-1] @ A
+    assert [r(x) for x in a[-1]] == [0.269, 0.731] and [r(x) for x in q] == [0.315, 0.685] and r(q @ np.array([-1, 1])) == 0.370
+    assert r(math.exp(-0.5 * 1.5 ** 2) / math.sqrt(2 * math.pi), 4) == 0.1295 and r(math.exp(-0.5 * 0.25) / math.sqrt(2 * math.pi), 4) == 0.3521
+    assert 0.0005 / 0.02 ** 2 == 1.25 and r(0.5 * 0.0005 / 0.0004, 3) == 0.625
+    rc = pd.Series([-0.10, 0.0, 0.05, 0.10, 0.20]).rank().corr(pd.Series(range(5), dtype=float))
+    rc2 = pd.Series([0.03, 0.10, -0.01, 0.08, -0.04]).rank().corr(pd.Series(range(5), dtype=float))
+    assert r(rc, 2) == 1.0 and r(rc2, 2) == -0.5
+    rng = np.random.default_rng(0)
+    pred = pd.Series(rng.normal(size=500)); ct = confidence_table(pred, pred * 0.01 + rng.normal(0, 0.001, 500))
+    assert ct["verdict"] == "맞음"                                                     # 같은 판정 규칙
+    assert r(math.log(1323.0 / 1278.1), 4) == 0.0345 and max(8 * 0.003, 0.01) == 0.024 and abs(0.0345 - 0.002) > 0.024

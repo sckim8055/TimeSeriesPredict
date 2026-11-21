@@ -26,7 +26,7 @@ import logging
 
 from engine import calendar as cal
 from engine.logs import describe, step
-from engine.backtest import performance, CostModel, bootstrap_excess_pvalue, clark_west, deflated_sharpe_pvalue, diebold_mariano, diebold_mariano_brier, return_moments, run_backtest
+from engine.backtest import performance, CostModel, bootstrap_excess_pvalue, clark_west, deflated_sharpe_pvalue, diebold_mariano, diebold_mariano_brier, return_moments, run_backtest, shannon_benchmark
 from engine.features import select_technical, technical_block
 from engine.registry import Registry
 from engine.store import DataVersion
@@ -44,25 +44,29 @@ log_f = logging.getLogger("tsp.engine.fold")
 class TargetSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")  # 모르는 키(오타)는 오류 — 조용히 기본값으로 돌지 않게(2026-11-10)
     # volatility(2026-11-12): 수익률이 아니라 그 뒤 k 기간의 실현 변동성을 맞힌다(매매 모드·학습 모델만). 매매 규칙은 '예측 변동성이 높으면 비중을 줄임'
-    kind: Literal["return", "logreturn", "direction", "event", "volatility"] = "return"
+    kind: Literal["return", "logreturn", "direction", "event", "volatility"] = Field("return", description="무엇을 맞힐지. return: k 기간 수익률 / logreturn: 로그 수익률 / direction: 오르면 1·아니면 0 / event: 수익률이 threshold 를 넘으면 1 / volatility: 뒤 k 기간 실현 변동성")
     k: int = Field(1, ge=1, description="예측 지평(주기 수)")
-    threshold: float = 0.0
+    threshold: float = Field(0.0, description="kind=event 일 때만: 수익률이 이 값을 넘으면 1(사건). 다른 kind 에서는 쓰지 않음")
 
 
 class TradeRule(BaseModel):
     model_config = ConfigDict(extra="forbid")  # 모르는 키(오타)는 오류 — 조용히 기본값으로 돌지 않게(2026-11-10)
     threshold: float = Field(0.0, description="regression: 예상수익률 > threshold → 롱. classification: 확률 > 0.5+threshold → 롱")
-    fee_rate: float = 0.00015
-    slippage_bp: float = 5.0
+    fee_rate: float = Field(0.00015, description="편도 수수료 비율 (0.00015 = 0.015%). 사고팔 때마다 거래 금액에 곱해 뺀다")
+    slippage_bp: float = Field(5.0, description="편도 슬리피지(bp, 1bp = 0.01%) — 원하는 가격과 실제 체결 가격의 차이. 수수료와 더해 비용이 된다")
+    # 투자 비율 정하기(2026-11-15, engine/sizing.py): threshold = 예측이 문턱을 넘으면 전부·아니면 현금(기존), kelly = 과거 결과로 보정한 켈리 비율
+    sizing: Literal["threshold", "kelly"] = Field("threshold", description="threshold: 문턱 넘으면 전부 보유 / kelly: 과거에 같은 자신감일 때의 실제 수익으로 비율(0~1)")
+    kelly_fraction: float = Field(0.5, gt=0.0, le=1.0, description="켈리 분수 — 0.5 = 절반 켈리(기본). 1 = 전부 켈리(추정이 틀리면 크게 잃을 수 있음)")
+    kelly_min_history: int | None = Field(None, ge=20, description="켈리 준비 기간 — 결과가 나온 과거 예측이 이 개수가 될 때까지 현금. 비우면 주기별(일 250·주 52·월 24)")
 
 
 class Validation(BaseModel):
     model_config = ConfigDict(extra="forbid")  # 모르는 키(오타)는 오류 — 조용히 기본값으로 돌지 않게(2026-11-10)
     train_len: int = Field(756, description="학습 창 길이(주기 수). 일간 3년≈756")
     test_len: int = Field(21, description="재학습 주기(주기 수). 일간 1개월≈21")
-    embargo: int | None = None  # None → 1+k
-    sealed_from: str | None = None  # 'YYYY-MM-DD' 이후는 봉인(폴드 생성 안 함)
-    val_frac: float = 0.15  # 학습 창 뒤쪽 비율을 검증용(조기종료 등)으로
+    embargo: int | None = Field(None, description="비움(행 수) — 학습 끝과 테스트(검증) 시작 사이를 비우는 수. 비우면 매매 1+k · 예측 연구 k (결정일의 정답이 그만큼 뒤의 값을 쓰므로)")  # None → 1+k
+    sealed_from: str | None = Field(None, description="봉인 시작일 'YYYY-MM-DD'. 이 날 이후는 개발 중 계산하지 않음(최종 확인용으로 남겨 둠)")
+    val_frac: float = Field(0.15, description="검증 비율 — 학습 창(구간) 뒤쪽 이 비율을 조기 종료용 검증으로 뗌. 검증이 10개 미만이면 검증 없이 전부 학습. 검증을 쓰지 않는 모델은 무시")
     mode: Literal["walkforward", "split"] = Field("walkforward", description="walkforward: 창을 밀며 반복 재학습 / split: 1회 분할(노트북 방식, split_date 이전 학습·이후 테스트)")
     split_date: str | None = Field(None, description="(이전 이름) mode=split 의 테스트 시작일. test_start 가 있으면 test_start 를 쓴다")
     val_start: str | None = Field(None, description="mode=split 에서 검증 시작일 'YYYY-MM-DD'. 검증 구간 = [val_start, 테스트 시작 − embargo). 비우면 val_frac")
@@ -108,31 +112,31 @@ class ExperimentConfig(BaseModel):
             raise ValueError(f"종목 묶어 학습(pool_tickers)에 같은 종목을 두 번 넣었습니다: {sorted(set(dup))} — 한 번씩만 넣어 주세요")
         return self
 
-    name: str = ""
+    name: str = Field("", description="결과 이름(메모). 계산·해시에는 들어가지 않음")
     mode: Literal["trading", "forecast"] = Field("trading", description="trading: 매매 시뮬레이션(ETF 가격, 체결·비용·B&H) / forecast: 예측 연구(임의 시계열, 오차 지표·naive 대비)")
     target_variable: str | None = Field(None, description="forecast 모드의 대상 변수 id (마스터). 주기는 그 변수의 원래 주기")
     forecast_info_time: Literal["stamp", "release"] = Field(
         "stamp", description="forecast 모드에서 외생변수를 '언제까지 알려진 것'으로 맞출지. stamp: 대상 값의 기준일 t(보수적, 기본). "
                              "release: 대상 값 v[t] 가 공개되는 시점 t+lag_대상 — 실제로 예측을 하는 시점의 정보 집합(현실적)")
-    ticker: str = "091160"
-    frequency: Literal["D", "W", "M"] = "D"
+    ticker: str = Field("091160", description="매매 모드의 대상 종목 코드(예: 091160 = KODEX 반도체). 가격으로 정답(수익률)과 체결을 계산")
+    frequency: Literal["D", "W", "M"] = Field("D", description="결정 주기 — D 일간 / W 주간 / M 월간. 이 간격으로 판단하고 정답 지평 k 도 이 단위")
     start: str | None = Field(None, description="데이터 사용 시작일. 이 날 이전 데이터는 읽지 않는다(학습·검증·테스트 모두)")
     end: str | None = Field(None, description="데이터 사용 종료일. 이 날 이후 데이터는 읽지 않는다")
-    target: TargetSpec = TargetSpec()
+    target: TargetSpec = Field(TargetSpec(), description="맞힐 대상(정답)의 정의")
     variable_ids: list[str] = Field(default_factory=list, description="레지스트리 변수 ID. 비우면 A그룹(기술지표)만")
-    use_technical: bool = True
+    use_technical: bool = Field(True, description="가격으로 만든 기술지표(A 그룹)를 입력에 넣을지")
     technical_features: list[str] | None = Field(None, description="쓸 기술지표 열 이름(A_…). 비우면(None) 전부 — 2026-11-09 추가. 해시에는 값이 있을 때만 들어간다")
-    fill: Literal["ffill", "bfill", "interp"] = "ffill"
-    apply_lag: bool = True
+    fill: Literal["ffill", "bfill", "interp"] = Field("ffill", description="변수를 결정일 달력에 맞출 때 빈 날 채우기. ffill: 직전 값(미래 안 봄) / bfill·interp: 뒤 값을 써서 미래가 섞임(경고)")
+    apply_lag: bool = Field(True, description="발표 시차 적용 — 변수 값을 기준일이 아니라 공개일(기준일 + lag_days)부터 쓴다. 끄면 기준일부터(미래가 섞일 수 있음)")
     variable_transforms: dict[str, str] = Field(default_factory=dict, description="변수별 변환 재정의 {id: none|pct|pct{n}|diff|diff{n}|log|logdiff}. 비우면 마스터의 transform")
     lag_override: dict[str, int] = Field(default_factory=dict, description="변수별 lag_days 재정의(가설 검정용). 결과에 기록된다")
     model: str = Field(..., description="models/ 파일명 (확장자 없이)")
-    model_params: dict[str, Any] = Field(default_factory=dict)
+    model_params: dict[str, Any] = Field(default_factory=dict, description="모델 파라미터 중 기본값과 다르게 준 것만. 실제로 쓰인 전체 값은 결과의 '모델 파라미터'")
     seq_len: int | None = Field(None, description="window 입력 길이 (window 모델만). 비우면 주기별 기본값 D 20 / W 13 / M 12")
-    trade: TradeRule = TradeRule()
-    validation: Validation = Validation()
-    data_version: str = ""
-    seed: int = 2025
+    trade: TradeRule = Field(TradeRule(), description="매매 규칙과 비용(매매 모드)")
+    validation: Validation = Field(Validation(), description="학습·검증·테스트를 나누는 방법")
+    data_version: str = Field("", description="쓴 데이터 버전(수집 시각). 비우면 실행 때 최신 버전 — 결과에는 실제 버전이 기록됨")
+    seed: int = Field(2025, description="난수 시드 — 같은 시드면 같은 결과(재현). 시드에 따라 달라지는 모델만 영향")
     n_seeds: int = Field(1, ge=1, le=50, description="난수에 따라 결과가 달라지는 모델(LSTM·GRU·BIVA·LightGBM)을 폴드마다 시드를 바꿔 몇 번 학습할지. "
                                                      "예측은 그 평균을 쓰고 시드 사이 흩어짐을 결과에 남긴다. 결정적 모델(릿지·ARIMA 등)은 무시. 2026-11-10 추가, 해시에는 1 이 아닐 때만 들어간다")
 
@@ -146,7 +150,11 @@ class ExperimentConfig(BaseModel):
         # technical_features 는 2026-11-09 에 생긴 칸: 기본값(None = 전부)이면 해시에서 빼서 그 전 결과의 이름·재실행 연결을 그대로 둔다
         # n_seeds(2026-11-10)도 같다: 기본값 1 이면 해시에서 뺀다
         ex = {"name"} | ({"technical_features"} if self.technical_features is None else set()) | ({"n_seeds"} if self.n_seeds == 1 else set()) | ({"select_top"} if self.select_top is None else set()) | ({"pool_tickers"} if not self.pool_tickers else set())
-        return hashlib.sha1(self.model_dump_json(exclude=ex).encode()).hexdigest()[:12]
+        # 켈리 칸(2026-11-15)도 같다: 기본(문턱)이면 trade 의 세 칸을 해시에서 빼서 그 전 결과의 지문을 그대로 둔다
+        exd: dict = {k_: True for k_ in ex}
+        if self.trade.sizing == "threshold":
+            exd["trade"] = {"sizing": True, "kelly_fraction": True, "kelly_min_history": True}
+        return hashlib.sha1(self.model_dump_json(exclude=exd).encode()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +238,39 @@ def apply_transform(s: pd.Series, transform: str) -> pd.Series:
         n = int(m.group(2) or 1)
         return s.pct_change(n) if m.group(1) == "pct" else s.diff(n)
     raise ValueError(f"알 수 없는 변환 '{transform}' (none|pct|pct{{n}}|diff|diff{{n}}|log|logdiff)")
+
+
+# 변환 선택지 — 한 곳에서 정의한다(2026-11-14). 서버 meta(실험 화면·[값 보기] 고치기·변수 추가)와 도움말 표({{TRANSFORMS}})가 모두 이것을 읽는다.
+# 엔진은 이 밖의 pct{n}·diff{n}(예: pct3)도 계산한다(_TR_RE) — 변수 사전에 그런 값이 있으면 화면이 그 값을 함께 보여 준다.
+# n 은 '그 변수 자신의 관측 n개 전'이다(월간 pct12 = 12개월 전, 일간 pct5 = 5거래일 전).
+TRANSFORM_OPTIONS: list[dict] = [
+    {"value": "none", "name": "그대로", "formula": "x_t", "meaning": "받은 값을 바꾸지 않는다",
+     "use": "이미 비율·성장률·흐름인 값(GDP 성장률, 순매수대금)", "caution": "가격·지수 같은 수준값에 쓰면 추세가 그대로 남는다"},
+    {"value": "pct", "name": "변화율", "formula": "x_t ÷ x_(t−1) − 1", "meaning": "직전 관측 대비 몇 % 변했나",
+     "use": "가격·지수·환율·잔액·통화량(보통 이것)", "caution": "0 이하 값이 있으면 그날은 계산되지 않음. % 단위 값(금리)에 쓰면 왜곡"},
+    {"value": "pct4", "name": "4개 전 대비 변화율", "formula": "x_t ÷ x_(t−4) − 1", "meaning": "분기 자료면 전년 같은 분기 대비",
+     "use": "계절성이 남은 분기 수준값", "caution": "처음 4개 관측은 값이 없다"},
+    {"value": "pct5", "name": "5개 전 대비 변화율", "formula": "x_t ÷ x_(t−5) − 1", "meaning": "일간 자료면 한 주(5거래일) 변화",
+     "use": "일간 가격의 주간 흐름", "caution": "이웃한 날의 값이 겹쳐 서로 닮는다"},
+    {"value": "pct12", "name": "12개 전 대비 변화율", "formula": "x_t ÷ x_(t−12) − 1", "meaning": "월 자료면 전년 같은 달 대비",
+     "use": "계절성이 남은 월 수준값(소비자물가·고용 원계열 등) — 자료 점검표가 권함", "caution": "처음 12개월은 값이 없다. 이웃한 달끼리 겹쳐 닮는다"},
+    {"value": "pct20", "name": "20개 전 대비 변화율", "formula": "x_t ÷ x_(t−20) − 1", "meaning": "일간 자료면 약 한 달(20거래일) 변화",
+     "use": "일간 가격의 한 달 흐름", "caution": "이웃한 날의 값이 많이 겹친다"},
+    {"value": "diff", "name": "차이", "formula": "x_t − x_(t−1)", "meaning": "직전 관측보다 얼마나 올랐나(단위 그대로)",
+     "use": "금리·비율(%)·확산지수·재고량", "caution": "단위가 큰 값(지수 수천)은 크기가 시기마다 달라진다 — 그런 값은 pct"},
+    {"value": "diff4", "name": "4개 전과의 차이", "formula": "x_t − x_(t−4)", "meaning": "분기 자료면 전년 같은 분기와의 차이",
+     "use": "계절성이 남은 분기 비율값", "caution": "처음 4개 관측은 값이 없다"},
+    {"value": "diff5", "name": "5개 전과의 차이", "formula": "x_t − x_(t−5)", "meaning": "일간 자료면 한 주 동안의 변화",
+     "use": "일간 금리의 주간 흐름", "caution": "이웃한 날의 값이 겹친다"},
+    {"value": "diff12", "name": "12개 전과의 차이", "formula": "x_t − x_(t−12)", "meaning": "월 자료면 전년 같은 달과의 차이",
+     "use": "계절성이 남은 월 비율값(연체율·고용률 원계열 등)", "caution": "처음 12개월은 값이 없다"},
+    {"value": "diff20", "name": "20개 전과의 차이", "formula": "x_t − x_(t−20)", "meaning": "일간 자료면 약 한 달 동안의 변화",
+     "use": "일간 금리의 한 달 흐름", "caution": "이웃한 날의 값이 많이 겹친다"},
+    {"value": "log", "name": "로그", "formula": "ln x_t", "meaning": "수준을 로그 눈금으로(곱셈 변화를 덧셈으로)",
+     "use": "수준 자체를 넣고 싶을 때만", "caution": "추세가 남아 정상성 검사에 걸리기 쉽다. 0 이하 값은 계산 안 됨"},
+    {"value": "logdiff", "name": "로그 차이", "formula": "ln x_t − ln x_(t−1)", "meaning": "로그 수익률 — 작은 변화에서는 변화율과 거의 같다",
+     "use": "가격·지수(변화율 대신)", "caution": "0 이하 값은 계산 안 됨"},
+]
 
 
 def build_dataset(cfg: ExperimentConfig, dv: DataVersion, reg: Registry) -> Dataset:
@@ -562,6 +603,14 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
         d = lambda ix: [str(ix[0].date()), str(ix[-1].date())] if len(ix) else None
         log.append({"train": d(tr_idx), "val": d(va_idx), "test": d(te_idx), "n_train": int(len(tr_idx)), "n_val": int(len(va_idx)), "n_test": int(len(te_idx))})
         log_f.debug("폴드 %d/%d: 학습 %s(%d) · 검증 %s(%d) · 테스트 %s(%d)", len(log), len(folds), d(tr_idx), len(tr_idx), d(va_idx), len(va_idx), d(te_idx), len(te_idx))
+    def _note(**kw):  # 마지막 폴드 기록에 덧붙임(기록만 — 계산은 바꾸지 않음, 2026-11-21 결과 꾸러미 '데이터 변화 단계')
+        if log is not None and log:
+            log[-1].update(kw)
+
+    def _scale_rec(sc, cols):
+        if isinstance(sc, MinMaxScaler):
+            return {"kind": "minmax", "features": list(cols), "min": [float(x) for x in sc.data_min_], "max": [float(x) for x in sc.data_max_]}
+        return {"kind": "standard", "features": list(cols), "mean": [float(x) for x in sc.mean_], "std": [float(x) for x in sc.scale_]}
     t_fold = time.time()
     last_print = time.time()
     for fi, f in enumerate(folds, 1):
@@ -701,6 +750,7 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
             scaler = (MinMaxScaler() if params.get("input_scaler") == "minmax" else StandardScaler()).fit(full[feat].ffill().values)
             Xf = scaler.transform(full[feat].ffill().values)
             fill_val = np.nanmean(Xf, axis=0)  # 빈 칸을 채울 '학습 구간 평균'(표준화면 0)
+            n_blank_fill = int(np.isnan(Xf).sum()) if not accepts_nan else 0
             if not accepts_nan:
                 Xf = np.where(np.isnan(Xf), fill_val[None, :], Xf)
             Xw, yw = cal.make_windows(Xf, full["y"].values, cfg.seq_len)
@@ -717,6 +767,8 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
             te_idx = te.index
             m, n_tr, n_va, p, fit_p, imp_f, fd = _fit_reps(f, Xw, yw, _nval(win_idx, f), Xtw, Xw if (want_fit and len(Xw)) else None, n_feat=len(feat))
             _log(f, win_idx[:n_tr], win_idx[len(win_idx) - n_va:] if n_va else win_idx[:0], te_idx)
+            _note(scale=_scale_rec(scaler, feat), n_blank_filled=n_blank_fill, n_blank_left_nan=int(np.isnan(Xf).sum()) if accepts_nan else 0,
+                  n_windows=int(len(win_idx)), n_windows_dropped=int((~ok).sum()))
             pred.loc[te_idx] = p[: len(te_idx)]
             if capture is not None:
                 capture.update(kind="window", fold=f, model=m, scaler=scaler, fill_val=fill_val, Xw=Xw, yw=yw, win_idx=win_idx, n_tr=n_tr, n_va=n_va,
@@ -730,6 +782,7 @@ def _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type,
             if ds.pool:
                 fd["n_pool"] = int(n_pool)
             _log(f, tr.index[:n_tr - n_pool], tr.index[len(tr) - n_va:] if n_va else tr.index[:0], te_valid.index)
+            _note(scale=_scale_rec(scaler, feat), n_train_dropped_blank=int(len(ds.X.loc[f.train]) - len(tr)), n_test_not_predicted=int(len(te) - len(te_valid)))
             pred.loc[te_valid.index] = p
             if capture is not None:
                 capture.update(kind="table", fold=f, model=m, scaler=scaler, tr=tr, te=te, te_valid=te_valid, Xtr=Xtr, ytr=ytr, Xte=Xte,
@@ -774,6 +827,21 @@ def _signal_from_prediction(cfg, pred: pd.Series, bench: pd.Series | None, targe
     else:
         signal = (pred > 0.5 + cfg.trade.threshold).astype(float).where(pred.notna())
     return signal
+
+
+def _confidence(pred: pd.Series, ds, k: int):
+    from engine.sizing import confidence_table, realized_hold_return
+    return confidence_table(pred.dropna(), realized_hold_return(ds.prices, k))
+
+
+def _apply_sizing(cfg, ds, pred: pd.Series, signal: pd.Series, k: int):
+    """trade.sizing = kelly 면 문턱 신호 대신 켈리 비율(engine/sizing.py — 결정일에 결과가 나온 과거만). 아니면 그대로."""
+    if cfg.trade.sizing != "kelly":
+        return signal, None
+    from engine.sizing import KELLY_MIN_HISTORY, kelly_positions, realized_hold_return
+    mh = cfg.trade.kelly_min_history or KELLY_MIN_HISTORY.get(cfg.frequency, 250)
+    w, info = kelly_positions(pred, realized_hold_return(ds.prices, k), k=k, fraction=cfg.trade.kelly_fraction, min_history=mh)
+    return w.where(signal.notna()), info
 
 
 def pool_training_rows(pds: "Dataset", lo, cut, h: int) -> pd.DataFrame:
@@ -961,6 +1029,18 @@ def run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_t
                        "note": "다른 종목의 행은 학습에만 보탰다. 예측·지표·검정은 대상 종목만"}
     res["feature_relevance"] = relevance_summary(diags, res.get("feature_names") or [], cfg.select_top)  # 입력 변수의 연관성 순위(폴드 안에서 잰 값)
     res["model_diag"] = diag_summary(diags)  # 학습 진단(시드 수·조기 종료 지점·상수 예측 폴드). 표 입력·창 입력 모델만
+    # 자료 점검표 중 이 실험이 쓴 변수의 줄(2026-11-14). 계산에는 쓰지 않는 기록이다. 봉인 시작일이 있으면 그 앞의 값만으로 검사해
+    # 봉인 구간 값이 점검에 섞이지 않게 한다. 점검이 실패해도 실험은 그대로(이유만 남김).
+    try:
+        from engine.datacheck import check_table
+        used, _ = reg.resolve_many(cfg.variable_ids)
+        if cfg.mode == "forecast" and cfg.target_variable and cfg.target_variable not in used:
+            used = [cfg.target_variable] + list(used)
+        tr_over, _ = reg.remap_overrides(cfg.variable_ids, cfg.variable_transforms)
+        upto = cfg.validation.sealed_from
+        res["data_checks"] = {"upto": upto, "rows": check_table(dv, reg, ids=list(used), transforms=tr_over, upto=upto)}
+    except Exception as e:  # noqa: BLE001
+        res["data_checks"] = {"upto": cfg.validation.sealed_from, "rows": [], "error": f"{type(e).__name__}: {e}"[:300]}
     md = res["model_diag"]
     # 퇴화 판정을 넓힌다(2026-11-10): 그 전에는 '중요도 합이 0'일 때만 잡아, 트리가 1그루라도 생기면(중요도 > 0) 사실상 상수 예측이어도 표시되지 않았다.
     # 이제 (가) 평가 구간 전체에서 예측이 한 값이거나 (나) 확인할 수 있는 모든 폴드에서 테스트 예측이 변하지 않으면 퇴화로 표시한다.
@@ -997,6 +1077,7 @@ def run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_t
         "first_fold": fold_log[0] if fold_log else None,
         "last_fold": fold_log[-1] if fold_log else None,
         "test": [fold_log[0]["test"][0], fold_log[-1]["test"][1]] if fold_log and fold_log[0]["test"] and fold_log[-1]["test"] else None,
+        "folds": fold_log,   # 모든 폴드의 학습·검증·테스트 날짜와 개수(2026-11-20 — 그 전 결과는 첫·마지막 폴드만)
     }
     res["seal_policy"] = seal_note  # 봉인 정책 적용 내역(정책이 없는 대상은 None)
     res["data_version"] = dv.id  # 실제로 읽은 버전(예측 모드는 설정에 적힌 값을 그대로 적어, --data-version 으로 돌리면 틀리거나 비었다 — 2026-11-10)
@@ -1120,6 +1201,13 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
                              "규칙 모델과 ARIMA·SARIMA·VECM 은 수익률(가격)을 맞히도록 만들어져 있습니다")
     cfg, plugin, params, target_type, ds = prepare(cfg, dv, reg, device=device)
     k = cfg.target.k
+    if cfg.trade.sizing == "kelly":
+        if cfg.mode == "forecast":
+            raise ValueError("켈리 투자 비율은 매매 모드에서만 쓸 수 있습니다")
+        if plugin.INPUT_SHAPE == "rule":
+            raise ValueError("켈리 투자 비율은 예측을 내는 모델에서만 쓸 수 있습니다 — 규칙 모델은 예측 없이 바로 비율을 냅니다")
+        if cfg.target.kind == "volatility":
+            raise ValueError("켈리 투자 비율은 변동성 타겟과 함께 쓸 수 없습니다 — 변동성 타겟은 이미 비율(기준 ÷ 예측 변동성)을 정합니다")
 
     pred = pd.Series(np.nan, index=ds.prices.index, name="prediction")
     importances: list[np.ndarray] = []
@@ -1128,8 +1216,12 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
 
     if cfg.mode == "forecast" and plugin.INPUT_SHAPE == "rule":
         raise ValueError("예측 연구 모드에는 규칙(매매) 모델을 쓸 수 없습니다")
+    kelly_info = None  # 켈리 투자 비율을 쓴 경우의 정보(2026-11-15)
+    rebal = None  # 재조정 날(섀넌 재조정처럼 '흘러가는 비율'을 쓰는 규칙만, 2026-11-15). None = 예전 회계
     if plugin.INPUT_SHAPE == "rule":
         model: RuleModel = plugin.Model(params)
+        if getattr(model, "REBALANCE", False):
+            rebal = pd.Series(model.rebalance_days(ds.prices), index=ds.prices.index)
         pos = pd.Series(model.positions(ds.prices, ds.X) if getattr(model, "USES_VARIABLES", False) else model.positions(ds.prices), index=ds.prices.index)
         if not sealed:
             # 규칙 모델은 학습이 없어 첫날부터 신호를 낼 수 있지만, 학습 모델과 같은 날짜로 성적을 매겨야 비교가 공정하다.
@@ -1146,6 +1238,7 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         pred, n_folds, importances = _predict_sealed(cfg, plugin, params, ds, device, cfg.validation.sealed_from, k, log=fold_log, diags=diags)
         bench = train_mean_benchmark(ds, sealed_folds(cfg, ds, k))
         signal = _signal_from_prediction(cfg, pred, bench, target_type)
+        signal, kelly_info = _apply_sizing(cfg, ds, pred, signal, k)
     else:
         folds, is_split = make_folds(cfg, ds, k)
         bench = train_mean_benchmark(ds, folds)
@@ -1156,6 +1249,7 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
             pred, n_folds, importances = _walkforward_predict(cfg, plugin, params, ds, device, folds, k, target_type, log=fold_log, diags=diags)
         # 신호 변환
         signal = _signal_from_prediction(cfg, pred, bench, target_type)
+        signal, kelly_info = _apply_sizing(cfg, ds, pred, signal, k)
 
     cost = CostModel(fee_rate=cfg.trade.fee_rate, slippage_bp=cfg.trade.slippage_bp)
     ppy = {"D": 252, "W": 52, "M": 12}[cfg.frequency]
@@ -1181,7 +1275,7 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         signal = signal.where(signal.index < sealed_from)
         pred = pred.where(pred.index < sealed_from)
 
-    daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy)
+    daily_full, _ = run_backtest(ds.prices, signal, cost=cost, periods_per_year=ppy, rebalance=rebal)
     daily_full["prediction"] = pred
     daily_full["target"] = ds.y
     if bench is not None:
@@ -1194,8 +1288,15 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         raise RuntimeError("신호가 하나도 없습니다")
     daily = daily_full.loc[has.index.min(): has.index.max()].copy()
     perf = performance(daily["net_return"], daily["hold_return"], periods_per_year=ppy)
-    turnover = daily["position"].diff().abs().fillna(daily["position"].abs())
+    # 거래량: 예전 회계는 포지션 변화량, 흘러가는 비율 회계는 실제로 사고판 양(비율이 흘러간 것은 거래가 아님 — 2026-11-15)
+    turnover = daily["position"].diff().abs().fillna(daily["position"].abs()) if rebal is None else daily["turnover"]
     perf.update(n_trades=int((turnover > 0).sum()), turnover=float(turnover.sum()), exposure=float(daily["position"].mean()), total_cost=float(daily["cost"].sum()))
+
+    # 비교 기준 '섀넌 50:50'(2026-11-15): 같은 평가 구간·같은 비용으로 ETF 절반·현금 절반, 한 달마다 다시 맞춤.
+    # B&H(늘 100%)와 짝 — '판단 없이 절반만 투자해도 이만큼'. 모델 성적에는 영향 없음(비교용 숫자만 추가).
+    sh_ret, sh_met = shannon_benchmark(ds.prices, daily.index.min(), daily.index.max(), cost=cost, periods_per_year=ppy)
+    daily_full["shannon_return"] = sh_ret          # 평가 구간만 값(그 밖 NaN) — 결과 *_daily.parquet 에 남아 손으로 다시 계산 가능
+    perf["shannon"] = sh_met
 
     # 예측 성능 (예측이 있는 구간)
     ev = daily[["prediction", "target"]].dropna()
@@ -1272,7 +1373,11 @@ def _run_experiment(cfg: ExperimentConfig, dv: DataVersion, reg: Registry, *, n_
         "feature_names": ds.feature_names,
         "feature_importance": fi_mean,
         "trade_rule_used": ({"kind": "volatility_target", "rule": "비중 = 학습 창 평균 변동성 ÷ 예측 변동성 (0~1 로 자름)"} if cfg.target.kind == "volatility"
+                            else {"kind": "kelly", "rule": "비율 = 분수 × μ_b ÷ σ²_b (결정일에 결과가 나온 과거 예측 중 같은 자신감 묶음의 실제 수익), 0~1 로 자름", **(kelly_info or {})} if kelly_info is not None
                             else {"kind": "rule" if plugin.INPUT_SHAPE == "rule" else "threshold", "threshold": cfg.trade.threshold}),
+        # 자신감 확인표(2026-11-15): 예측 크기 순 5묶음의 실제 결과 — 진단용(매매 결정에는 안 씀). 예측을 내는 모델만
+        "confidence_table": (None if plugin.INPUT_SHAPE == "rule" or cfg.target.kind == "volatility" else
+                             _confidence(pred.loc[daily.index.min(): daily.index.max()], ds, k)),
         "degenerate_model": degenerate,
         "sealed_evaluation": bool(sealed),
         "evaluation_period": [str(daily.index[0].date()), str(daily.index[-1].date())],

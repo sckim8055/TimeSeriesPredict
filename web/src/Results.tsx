@@ -1,7 +1,9 @@
+import { DataCheckTable } from './VariableValues'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createChart, type IChartApi, LineSeries, HistogramSeries, createSeriesMarkers } from 'lightweight-charts'
 import { api, num, pct, type Mode, type ResultRow } from './api'
 import { FormulaGuide } from './EasyFlow'
+import { ConfigTable, ParamTable, FoldTable } from './ResultConfig'
 import { SealedInfo, SealedLog, SealedPanel } from './Sealed'
 
 function verdict(r: ResultRow): { cls: 'pass' | 'warn' | 'fail' | 'muted'; text: string } {
@@ -129,10 +131,12 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
     const c = createChart(chartRef.current, { height: 300, layout: { textColor: '#1c2027', background: { color: '#fff' }, fontFamily: 'Pretendard Variable, sans-serif' }, grid: { vertLines: { color: '#eceff3' }, horzLines: { color: '#eceff3' } }, rightPriceScale: { borderColor: '#d9dde4' }, timeScale: { borderColor: '#d9dde4', minBarSpacing: 0.02 } })
     const eq = c.addSeries(LineSeries, { color: '#23466e', lineWidth: 2, title: '전략' })
     const bh = c.addSeries(LineSeries, { color: '#9aa3b2', lineWidth: 1, title: 'B&H' })
+    const sh = s.shannon ? c.addSeries(LineSeries, { color: '#b07a2a', lineWidth: 1, lineStyle: 2, title: '섀넌 50:50' }) : null
     const pos = c.addSeries(HistogramSeries, { color: 'rgba(15,110,99,.25)', priceScaleId: 'pos', title: '포지션' })
     c.priceScale('pos').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
     eq.setData(s.date.map((d: string, i: number) => ({ time: d, value: s.equity[i] })))
     bh.setData(s.date.map((d: string, i: number) => ({ time: d, value: s.benchmark[i] })))
+    sh?.setData(s.date.map((d: string, i: number) => ({ time: d, value: s.shannon[i] })))
     pos.setData(s.date.map((d: string, i: number) => ({ time: d, value: s.position[i] })))
     c.timeScale().fitContent()
     chart.current = c
@@ -187,11 +191,14 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
           {r.periods?.first_fold && <dl className="kv periods"><dt>실제 사용 기간</dt><dd>데이터 {r.periods.data?.join(' ~ ')} · 구간 사이 비움 {r.periods.embargo}행 · 검증 {r.periods.validation_rule === 'date' ? '날짜 지정' : r.periods.validation_rule}</dd>
             <dt>{r.n_folds > 1 ? '첫 폴드' : '폴드'}</dt><dd>학습 {r.periods.first_fold.train?.join('~')} ({r.periods.first_fold.n_train}){r.periods.first_fold.val && <> · 검증 {r.periods.first_fold.val.join('~')} ({r.periods.first_fold.n_val})</>} · 테스트 {r.periods.first_fold.test?.join('~')} ({r.periods.first_fold.n_test})</dd>
             {r.n_folds > 1 && <><dt>마지막 폴드</dt><dd>학습 {r.periods.last_fold.train?.join('~')} ({r.periods.last_fold.n_train}){r.periods.last_fold.val && <> · 검증 {r.periods.last_fold.val.join('~')} ({r.periods.last_fold.n_val})</>} · 테스트 {r.periods.last_fold.test?.join('~')}</dd></>}</dl>}
+          {r.periods && <details><summary className="hint">모든 폴드의 기간과 개수{r.periods.folds ? ` (${r.periods.folds.length}개)` : ''} — 학습·검증·테스트가 어디부터 어디까지인지</summary><FoldTable periods={r.periods} /></details>}
           <dl className="kv"><dt>예측 수</dt><dd>{r.n_predictions} ({r.n_folds} 폴드)</dd><dt>방향정확도</dt><dd>{pct(pm.dir_acc)}{pm.dir_acc_naive != null && <> (naive {pct(pm.dir_acc_naive)})</>}</dd><dt>RMSE</dt><dd>{num(pm.rmse, 5)}{pm.rmse_naive != null && <> · naive {num(pm.rmse_naive, 5)} · 0예측 {num(pm.rmse_zero, 5)}</>}</dd><dt>DM vs 0예측</dt><dd>{num(pm.dm_vs_zero, 2)} (p {num(pm.dm_vs_zero_p)}) {pm.dm_vs_zero != null && (pm.dm_vs_zero < 0 ? '← 0예측보다 오차 작음' : '← 0예측보다 오차 큼')} <span className="hint">이 방법·이 학습 창의 정확도 비교(추정 잡음 포함)</span></dd>
             {pm.cw_vs_mean != null && <><dt>CW vs 학습 창 평균</dt><dd>{num(pm.cw_vs_mean, 2)} (한쪽 p {num(pm.cw_vs_mean_p)}) {pm.cw_vs_mean_p < 0.05 ? '← 평균을 아는 것 이상의 예측 정보가 있다는 증거' : '← 평균 이상의 예측 정보의 증거 없음'} <span className="hint">Clark–West: 추정 잡음을 뺀 비교. 기준 = 폴드마다 학습 창의 타겟 평균{pm.r2_oos_vs_mean != null && <> · 표본 밖 R² {num(pm.r2_oos_vs_mean, 4)}</>}</span></dd></>}
             {pm.cw_vs_zero != null && <><dt>CW vs 0예측</dt><dd>{num(pm.cw_vs_zero, 2)} (한쪽 p {num(pm.cw_vs_zero_p)}) <span className="hint">예측이 실제와 같은 쪽으로 움직이는가(평균 포함) — 타겟 평균이 0 이 아니면 평균만 맞혀도 유의해지므로 변수 정보의 증거로 쓰지 않음</span></dd></>}
             {pm.rmse_naive != null && r.config?.target?.kind === 'volatility' && <><dt>변동성 예측</dt><dd>RMSE {num(pm.rmse, 5)} · 최근 변동성 그대로(naive) {num(pm.rmse_naive, 5)} · DM {num(pm.dm_vs_naive, 2)} (p {num(pm.dm_vs_naive_p)}) · 상관 {num(pm.corr, 3)} <span className="hint">매매 규칙: 비중 = 학습 창 평균 변동성 ÷ 예측 변동성(0~1). 방향은 맞히지 않음</span></dd></>}
             {r.pool && <><dt>종목 묶어 학습</dt><dd>{r.pool.tickers.join(', ')} 의 행을 학습에만 보탬 — 폴드당 {num(r.pool.rows_min, 0)}~{num(r.pool.rows_max, 0)}행(평균 {num(r.pool.rows_mean, 0)}). <span className="hint">{r.pool.note}</span></dd></>}
+            {r.data_checks?.rows?.length > 0 && <><dt>쓴 변수의 자료 점검</dt><dd><details><summary>{['노랑', '회색', '초록'].map(c => { const n = r.data_checks.rows.filter((x: any) => x.signal === c).length; return n ? `${c} ${n}` : '' }).filter(Boolean).join(' · ')} — 펼쳐 보기</summary>
+              <DataCheckTable rows={r.data_checks.rows} upto={r.data_checks.upto} /></details></dd></>}
             {r.feature_relevance && <><dt>입력의 연관성 순위</dt><dd><details><summary>{r.feature_relevance.selected ? `폴드마다 상위 ${r.feature_relevance.top_n}개만 사용` : '전부 사용(순위만 기록)'} · 1위 {r.feature_relevance.features[0]?.name} — 펼쳐 보기</summary>
               <span className="hint">{r.feature_relevance.method}. {r.feature_relevance.n_folds}개 폴드의 요약 — 전체 자료를 보고 매긴 순위가 아닙니다. '상위 비율'이 낮으면 폴드마다 순위가 바뀐다는 뜻(믿을 순위가 아님).</span>
               <table><thead><tr><th>#</th><th>입력</th><th>평균 |순위상관|</th><th>평균 등수</th><th>상위 {r.feature_relevance.top_n} 안에 든 폴드</th>{r.feature_relevance.selected && <th>실제로 쓰인 폴드</th>}</tr></thead>
@@ -203,16 +210,21 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
               {r.model_diag.constant_folds > 0 && <> · 상수 예측 폴드 {r.model_diag.constant_folds}/{r.model_diag.folds_checked_for_constant}</>}</dd></>}
             {pm.dm_vs_naive != null && <><dt>DM vs naive</dt><dd>{num(pm.dm_vs_naive, 2)} (p {num(pm.dm_vs_naive_p)}) {pm.dm_vs_naive < 0 ? '← naive 보다 나음' : '← naive 보다 나쁨'}</dd></>}
             {pm.level_rmse != null && <><dt>수준값 오차</dt><dd>RMSE {num(pm.level_rmse, 3)} · MAPE {pct(pm.level_mape, 2)}</dd></>}
-            {pm.auc != null && <><dt>AUC</dt><dd>{num(pm.auc)}</dd></>}</dl></div>
+            {pm.auc != null && <><dt>AUC</dt><dd>{num(pm.auc)}</dd></>}</dl>
+          {r.confidence_table?.rows?.length > 0 && <ConfidenceTable ct={r.confidence_table} />}</div>
         {!isF && <div className="panel"><h3>매매 성과 (평가 구간)</h3>
-          <dl className="kv"><dt>샤프</dt><dd>{num(pf.sharpe)}</dd><dt>소르티노</dt><dd>{num(pf.sortino)}</dd><dt>CAGR</dt><dd>{pct(pf.cagr)} (B&amp;H {pct(pf.benchmark_cagr)})</dd><dt>MDD</dt><dd>{pct(pf.mdd)} (B&amp;H {pct(pf.benchmark_mdd)})</dd><dt>승률</dt><dd>{pct(pf.win_rate)}</dd><dt>전환 횟수</dt><dd>{pf.n_trades} · 노출 {pct(pf.exposure, 0)} · 비용 합계 {pct(pf.total_cost, 2)}</dd><dt>초과수익 p (블록 부트스트랩)</dt><dd>{num(pf.bootstrap_p_excess)}</dd><dt>Deflated Sharpe p</dt><dd>{num(pf.deflated_sharpe_p)} (시도 {pf.n_trials_so_far}회)</dd></dl></div>}
+          <dl className="kv"><dt>샤프</dt><dd>{num(pf.sharpe)}</dd><dt>소르티노</dt><dd>{num(pf.sortino)}</dd><dt>CAGR</dt><dd>{pct(pf.cagr)} (B&amp;H {pct(pf.benchmark_cagr)}{pf.shannon && <> · 섀넌 50:50 {pct(pf.shannon.cagr)}</>})</dd><dt>MDD</dt><dd>{pct(pf.mdd)} (B&amp;H {pct(pf.benchmark_mdd)}{pf.shannon && <> · 섀넌 50:50 {pct(pf.shannon.mdd)}</>})</dd>{pf.shannon && <><dt title="ETF 50%·현금 50%를 한 달마다 다시 맞춘 비교 기준(같은 평가 구간·같은 비용). 판단 없이 절반만 투자해도 이만큼 — 모델이 이것을 못 이기면 판단이 도움이 안 된 것">섀넌 50:50 기준</dt><dd>샤프 {num(pf.shannon.sharpe)} · 총수익 {pct(pf.shannon.total_return)} (전략 {pct(pf.total_return)}) · 재조정 {pf.shannon.n_trades}회 · 비용 {pct(pf.shannon.total_cost, 2)}</dd></>}<dt>승률</dt><dd>{pct(pf.win_rate)}</dd><dt>전환 횟수</dt><dd>{pf.n_trades} · 노출 {pct(pf.exposure, 0)} · 비용 합계 {pct(pf.total_cost, 2)}</dd>{r.trade_rule_used?.kind === 'kelly' && <><dt title={r.trade_rule_used.rule}>켈리 투자 비율</dt><dd>분수 {r.trade_rule_used.fraction} · 평균 비율 {pct(r.trade_rule_used.mean_weight, 0)} · 준비 기간(현금) {r.trade_rule_used.n_warmup}/{r.trade_rule_used.n_decisions}일 — 과거 결과 {r.trade_rule_used.min_history}개가 모일 때까지</dd></>}<dt>초과수익 p (블록 부트스트랩)</dt><dd>{num(pf.bootstrap_p_excess)}</dd><dt>Deflated Sharpe p</dt><dd>{num(pf.deflated_sharpe_p)} (시도 {pf.n_trials_so_far}회)</dd></dl></div>}
         <div className="panel"><h3>설정</h3>
           <dl className="kv"><dt>변수</dt><dd>{(c.variable_ids ?? []).join(', ') || '(없음)'}{c.use_technical ? ' + 기술지표' : ''}</dd>
             {Object.keys(c.variable_transforms ?? {}).length > 0 && <><dt>변환</dt><dd>{Object.entries(c.variable_transforms).map(([k, v]) => `${k}:${v}`).join(', ')}</dd></>}
             {Object.keys(c.lag_override ?? {}).length > 0 && <><dt>lag 재정의</dt><dd>{Object.entries(c.lag_override).map(([k, v]) => `${k}=${v}`).join(', ')}</dd></>}
             {r.lag_unconfirmed?.length > 0 && <><dt>lag 미확인</dt><dd>{r.lag_unconfirmed.join(', ')}</dd></>}
             <dt>모델 파라미터</dt><dd>{JSON.stringify(r.model.params)}</dd>{!isF && <><dt>비용</dt><dd>수수료 {c.trade.fee_rate}, 슬리피지 {c.trade.slippage_bp}bp</dd></>}<dt>검증</dt><dd>학습 {c.validation.train_len} / 재학습 {c.validation.test_len} / 봉인 {c.validation.sealed_from ?? '없음'}</dd><dt>코드</dt><dd>{r.code_version} · 시드 {c.seed} · 해시 {r.config_hash}</dd></dl>
-          <details><summary className="hint">설정 JSON</summary><pre className="log">{JSON.stringify(c, null, 1)}</pre></details>
+          <details><summary className="hint">설정 전체와 뜻 — 모든 칸의 이 결과 값·기본값·뜻 (굵게 = 기본값에서 바꾼 칸)</summary><ConfigTable config={c} /></details>
+          <details><summary className="hint">모델 파라미터 전체와 뜻 — 실제로 쓰인 값</summary><ParamTable modelFile={c.model} params={r.model.params} /></details>
+          <details><summary className="hint">설정 JSON (원본 그대로)</summary><pre className="log">{JSON.stringify(c, null, 1)}</pre></details>
+          <div style={{ marginTop: 10 }}><a className="btn" href={`/api/results/${encodeURIComponent(stem)}/package.zip`} download>결과 꾸러미 내려받기 (zip · Word 보고서)</a> <span className="hint">사전(설정·모델·입력 자료와 뜻·데이터 변화 단계·검증 계획) · 사중(실행 기록·폴드별 기간·눈금·계산 따라가기·로그) · 사후(결과·지표와 뜻·일별 결과) — 이 zip 하나로 결과의 모든 것</span></div>
+          <div style={{ marginTop: 6 }}><a className="btn" href={`/api/results/${encodeURIComponent(stem)}/logs.zip`} download>로그만 내려받기 (zip)</a> <span className="hint">결과·작업 설정·작업 출력·개발 로그(이 실행 줄)·실행 기록·실행 시간대 접속 기록</span></div>
           <div style={{ marginTop: 10 }}><button onClick={async () => { if (confirm('이 결과 파일을 지웁니다. 실험 카운터는 줄지 않습니다.')) { await api.remove(stem); onDeleted() } }}>결과 삭제</button></div>
         </div>
       </div>
@@ -274,4 +286,18 @@ function ActualVsPred({ full }: { full: any }) {
       <p className="hint">{full.target_variable ? `예측 연구: 검정 = 실제, 빨강 = 모델이 t 에서 내다본 ${full.k}기간 뒤 값(t+${full.k} 위치에 그림), 회색 = naive(직전 ${full.k}기간 변화율 유지)${full.fit_return ? ', 청록 = 학습 적합(in-sample, 성과에 미사용)' : ''}. 빨강이 회색보다 검정에 가까워야 의미가 있습니다.` : full.is_rule ? '규칙 모델은 예측값이 없습니다(포지션만 냄).' : full.mode === 'split' ? `1회 분할: ${full.split_date} 이전은 학습(청록 = 학습 적합값, 모델이 이미 본 데이터라 항상 좋아 보입니다 — 성과·검정에는 쓰지 않음), 이후는 테스트(빨강).` : `예측은 모두 테스트 구간 값입니다 — 워크포워드는 모델이 보지 않은 날만 예측합니다. 가격 모드의 "예측 청산가" = 진입가(t+1 시가) × (1 + 예측수익률). 실제 청산가는 t+1+k 시가.`} 봉인 구간은 봉인 평가(아래 '봉인 평가' 칸 또는 명령줄 --sealed)를 하기 전까지 예측이 없습니다.</p>
     </div>
   )
+}
+
+
+/** 자신감 확인표(2026-11-15, engine/sizing.confidence_table): 예측 크기 순 5묶음의 실제 결과. 진단용 — 매매 결정에는 쓰지 않음. */
+function ConfidenceTable({ ct }: { ct: any }) {
+  const pc = (x: number | null | undefined, d = 2) => x == null ? '' : `${(x * 100).toFixed(d)}%`
+  const tone = ct.verdict === '맞음' ? 'pass' : ct.verdict === '반대' ? 'fail' : 'warn'
+  return <details className="apidet" style={{ marginTop: 8 }} open>
+    <summary><b>자신감 확인표</b> <span className={'badge ' + tone}>{ct.verdict}</span> — 모델이 자신 있을 때 실제로 더 잘 맞았나</summary>
+    <p className="hint">{ct.rule}</p>
+    <table><thead><tr><th>묶음 (자신감 낮음 → 높음)</th><th>개수</th><th>예측 범위</th><th>적중률(실제 수익 &gt; 0)</th><th>평균 실제 수익</th></tr></thead>
+      <tbody>{ct.rows.map((x: any) => <tr key={x.bin}><td>{x.bin}</td><td className="num">{x.n}</td><td className="num">{x.pred_min.toFixed(5)} ~ {x.pred_max.toFixed(5)}</td><td className="num">{pc(x.hit_rate, 1)}</td><td className="num">{pc(x.mean_realized, 3)}</td></tr>)}</tbody></table>
+    <p className="hint">묶음 번호와 평균 실제 수익의 순위상관 {ct.rank_corr?.toFixed(2)} · 맨 위 − 맨 아래 {pc(ct.top_minus_bottom, 3)}{ct.t_top_bottom != null && <> (t {ct.t_top_bottom.toFixed(2)} — 보유 기간이 겹치면 실제보다 크게 나옴, 참고용)</>}. 실제 수익 = 다음 날 시가에 사서 k 기간 뒤 시가에 판 수익.</p>
+  </details>
 }

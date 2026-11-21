@@ -272,6 +272,21 @@ function SeriesFlow({ c, seasonal }: { c: Ctx; seasonal?: boolean }) {
   </Svg>
 }
 
+/* ------------------------------------------------------------------ HMM (2026-11-15) */
+function HmmFlow({ c }: { c: Ctx }) {
+  const f = c.f, kk = f.input?.target?.k ?? 1
+  return <Svg w={1280} h={190} label="HMM 데이터 흐름">
+    <Box x={16} y={20} w={300} h={150} t="입력: 대상 하나의 1기간 변화율 r_τ" tone="data" s={['선택한 변수·기술지표는 쓰지 않음(단변량)', fitText(f), '결정일까지의 값만']} />
+    <Ar x1={316} y1={95} x2={346} y2={95} />
+    <Box x={346} y={20} w={300} h={150} t="숨은 상태 (학습 창, Baum–Welch)" tone="filter" s={['상태마다 평균 μ·흩어짐 σ', '상태가 바뀔 확률 A', '출발점 2개 중 로그우도 최대(난수 없음)']}>
+      <Pc c={c} x={356} y={140} k="n_states" label="상태 수" /></Box>
+    <Ar x1={646} y1={95} x2={676} y2={95} />
+    <Box x={676} y={20} w={300} h={150} t="지금 상태 확률 (앞방향만)" tone="core" s={['하루씩: 어제 확률 × A → 오늘 변화율로 다시 맞춤', '결정일 뒤 자료는 쓰지 않음', 'p_t(j) = P(상태 j | 결정일까지)']} />
+    <Ar x1={976} y1={95} x2={1006} y2={95} />
+    <Box x={1006} y={20} w={258} h={150} t="예측 ŷ" tone="out" s={['앞날 상태 확률 = p_t · A^h', '예측 r̂ = 상태 확률로 가중한 평균', `→ 복리로 묶어 ${kk}기간 변화율`]} />
+  </Svg>
+}
+
 /* ------------------------------------------------------------------ VECM */
 function VecmFlow({ c }: { c: Ctx }) {
   const f = c.f, v = f.vecm ?? {}, K = v.K, r = v.r, p = v.p
@@ -305,6 +320,7 @@ function RuleFlow({ c }: { c: Ctx }) {
     ma_cross: [['종가', [`${tk} 종가`], []], ['이동평균 두 개 (거름)', ['짧은 창 = 빠른 흐름, 긴 창 = 느린 흐름', '창이 길수록 잔물결을 더 지움'], ['fast', 'slow']], ['비교', ['짧은 평균 > 긴 평균 → 보유', '아니면 현금'], []]],
     momentum: [['종가', [`${tk} 종가`], []], ['과거 수익률', ['lookback 일 전 대비 변화'], ['lookback']], ['부호로 거름', ['> 0 → 보유, ≤ 0 → 현금'], []]],
     rsi_rule: [['종가', [`${tk} 종가`], []], ['RSI', ['오른 날 평균 ÷ (오른 날 + 내린 날 평균)', '0~100'], ['window']], ['문턱으로 거름', ['< lower → 매수', '> upper → 매도'], ['lower', 'upper']]],
+    shannon: [['종가', [`${tk} 종가 — 비율이 흘러가는 계산에만`], []], ['목표 비율', ['ETF weight · 현금 1 − weight', '가격을 보지 않음'], ['weight']], ['주기마다 다시 맞춤', ['그 주기 마지막 결정일 → 다음 시가 체결', '그 사이 비율은 가격 따라 흘러감, 비용은 맞출 때만'], ['every']]],
     sox_gap_fade: [['변수 값(t)', ['SOX 등 일간 변화율'], ['column']], ['과거 분위수', ['t 이전 window 일(당일 제외)', '그 중 q 분위 값'], ['window', 'q']], ['규칙으로 거름', ['avoid_top: 급등한 다음날 현금'], ['mode']]],
   }
   const steps = R[m] ?? []
@@ -332,7 +348,7 @@ export function ModelFlow(props: { model: string; flow: F | null; loading: boole
   if (!f || f.model !== props.model) return <p className="hint">{props.loading ? '모델 구조를 재는 중…' : ''}</p>
   const c: Ctx = { f, v: props.value, hp: props.hoverParam, onHp: props.onHoverParam }
   const body = f.model === 'lstm' ? <RnnFlow c={c} /> : f.model === 'gru' ? <RnnFlow c={c} gru /> : f.model === 'biva' ? <BivaFlow c={c} />
-    : f.model === 'ridge' ? <RidgeFlow c={c} /> : f.model === 'lightgbm_model' ? <LgbmFlow c={c} /> : f.model === 'arima' ? <SeriesFlow c={c} />
+    : f.model === 'ridge' ? <RidgeFlow c={c} /> : f.model === 'lightgbm_model' ? <LgbmFlow c={c} /> : f.model === 'arima' ? <SeriesFlow c={c} /> : f.model === 'hmm' ? <HmmFlow c={c} />
     : f.model === 'sarima' ? <SeriesFlow c={c} seasonal /> : f.model === 'vecm' ? <VecmFlow c={c} /> : <RuleFlow c={c} />
   return <HP.Provider value={props.hoverParam}><div className={'mflow-wrap' + (props.loading ? ' loading' : '')}>
     <p className="hint mf-legend"><span className="lg lg-data" />데이터 <span className="lg lg-core" />계산 <span className="lg lg-filter" />거르는 단계(무엇을 남기고 버리나) <span className="lg lg-out" />출력 <span className="lg lg-opt" />선택·학습 때만 · 모양 [B×…] 의 B = 배치(한 번에 넣는 창 수). 숫자는 지금 설정으로 실제 모델을 만들어 잰 값.

@@ -157,9 +157,10 @@ def test_shuffled_target_destroys_signal(tmp_path):
 def test_rule_models_run(tmp_path):
     prices = random_walk_ohlcv(600, seed=4)
     dv, reg = _dv_with(prices, None, tmp_path)
-    for m in ("buy_and_hold", "ma_cross", "momentum", "rsi_rule"):
+    for m in ("buy_and_hold", "ma_cross", "momentum", "rsi_rule", "shannon"):
         res = run_experiment(ExperimentConfig(ticker="TEST", model=m), dv, reg)
         assert "sharpe" in res["performance"], m
+        assert "shannon" in res["performance"] and "shannon_return" in res["_daily"], m   # 비교 기준 섀넌 50:50(2026-11-15)
     bh = run_experiment(ExperimentConfig(ticker="TEST", model="buy_and_hold", trade={"fee_rate": 0, "slippage_bp": 0}), dv, reg)
     assert abs(bh["performance"]["total_return"] - bh["performance"]["benchmark_total_return"]) < 1e-9
 
@@ -616,7 +617,7 @@ def test_explain_ridge_reproduces_model_output_by_hand(tmp_path, kind):
 @pytest.mark.parametrize("model,extra", [
     ("lightgbm_model", {}), ("arima", {}), ("sarima", {"model_params": {"s": 5}}), ("vecm", {"use_technical": False}),
     ("lstm", {"model_params": {"epochs": 3, "hidden": 8}, "seq_len": 5}), ("gru", {"model_params": {"epochs": 3, "hidden": 8}, "seq_len": 5}),
-    ("buy_and_hold", {}), ("ma_cross", {}), ("momentum", {}), ("rsi_rule", {}),
+    ("buy_and_hold", {}), ("ma_cross", {}), ("momentum", {}), ("rsi_rule", {}), ("shannon", {}), ("hmm", {"use_technical": False}),
 ])
 def test_explain_every_model_reproduces_its_output(tmp_path, model, extra):
     """계산 따라가기: 모델마다 손 계산(독립 구현)이 실제 출력과 같아야 한다(정보용 검사 제외)."""
@@ -1485,7 +1486,7 @@ def test_n_seeds_ignored_by_deterministic_models_and_hash_stable(tmp_path):
     p1, _, _ = E._walkforward_predict(cfg, plugin, params, ds, "cpu", folds[:3], 1, tt)
     p5, _, _ = E._walkforward_predict(cfg.model_copy(update={"n_seeds": 5}), plugin, params, ds, "cpu", folds[:3], 1, tt, diags=dg)
     assert np.array_equal(p1.dropna().values, p5.dropna().values) and all(d["n_seeds"] == 1 for d in dg)
-    old = hashlib.sha1(cfg.model_dump_json(exclude={"name", "n_seeds", "technical_features", "select_top", "pool_tickers"}).encode()).hexdigest()[:12]  # 이 칸들이 생기기 전의 해시
+    old = hashlib.sha1(cfg.model_dump_json(exclude={"name": True, "n_seeds": True, "technical_features": True, "select_top": True, "pool_tickers": True, "trade": {"sizing": True, "kelly_fraction": True, "kelly_min_history": True}}).encode()).hexdigest()[:12]  # 이 칸들이 생기기 전의 해시(켈리 칸 2026-11-15 도 뺌)
     assert cfg.config_hash() == old and cfg.model_copy(update={"n_seeds": 3}).config_hash() != old
     with pytest.raises(Exception):
         ExperimentConfig(ticker="TEST", model="ridge", n_seeds=0)
@@ -2027,7 +2028,7 @@ def test_select_top_uses_only_selected_inputs_each_fold(tmp_path):
         rr = run_experiment(ExperimentConfig(**{**base, "model": model, **extra}, variable_ids=ids, select_top=2), dv, reg)
         assert rr["feature_relevance"]["top_n"] == 2 and rr["n_predictions"] > 400
     c = ExperimentConfig(**base, variable_ids=ids)
-    old = hashlib.sha1(c.model_dump_json(exclude={"name", "n_seeds", "technical_features", "select_top", "pool_tickers"}).encode()).hexdigest()[:12]
+    old = hashlib.sha1(c.model_dump_json(exclude={"name": True, "n_seeds": True, "technical_features": True, "select_top": True, "pool_tickers": True, "trade": {"sizing": True, "kelly_fraction": True, "kelly_min_history": True}}).encode()).hexdigest()[:12]
     assert c.config_hash() == old and ExperimentConfig(**base, variable_ids=ids, select_top=3).config_hash() != old
     with pytest.raises(ValueError, match="입력 변수 수"):
         run_experiment(ExperimentConfig(**base, variable_ids=ids, select_top=50), dv, reg)
@@ -2389,13 +2390,20 @@ def test_collect_naver_sliding_window_is_merged_not_failure(tmp_path, monkeypatc
     assert collect.main() == 2
 
 
+def test_open_post_paths_are_exactly_the_view_only_ones():
+    """화면이 저절로 부르는 POST 는 모두 암호 없는 목록에 있어야 한다(2026-11-21 — /api/split-plan 을 빠뜨려 화면을 열자마자 암호 창).
+    web/src/api.ts 에서 'POST' 를 쓰는 함수 중 화면을 열 때(useEffect) 부르는 것: flow·explain·splitPlan."""
+    import api.main as m
+    assert set(m._OPEN_POST_PATHS) == {"/api/flow", "/api/explain", "/api/split-plan"}
+
+
 def test_viewing_explanations_need_no_password(monkeypatch):
     """화면을 열 때 저절로 부르는 설명 계산(/api/flow, /api/explain)은 아무것도 저장하지 않는 '보기'라 암호를 묻지 않는다(2026-11-13 —
     실험 설정 화면을 열자마자 암호 창이 떠서 거부감). 실험 실행·데이터 가져오기 같은 바꾸는 동작은 여전히 암호."""
     import api.main as m
     monkeypatch.setenv("TSP_WRITE_PASSWORD", "long-test-pass-123")
     monkeypatch.setattr(m, "_WRONG_DELAY", 0.0)
-    for path in ("/api/flow", "/api/explain"):
+    for path in ("/api/flow", "/api/explain", "/api/split-plan"):
         st, b = _asgi_call(m.app, "POST", path)
         assert st != 401, (path, st, b)                     # 암호가 아니라 본문 검사(422) 등으로 간다
     for path in ("/api/experiments", "/api/collect", "/api/variables", "/api/tickers", "/api/sealed/run", "/api/ensemble"):
@@ -2993,3 +3001,140 @@ def test_review13_etf_probe_looks_back_far_enough_and_says_so(tmp_path, monkeypa
     monkeypatch.setattr(datago_adapter, "fetch_prices", dg)
     kind, basis = m._probe_kind("005930")
     assert kind == "stock" and (pd.Timestamp.today() - pd.Timestamp(seen["start"])).days >= 119 and "120일" in basis
+
+
+def test_guide_doc_cannot_read_outside_guide_folder(tmp_path, monkeypatch):
+    """2026-11-14: 인터넷 탐색 봇이 /.env 등을 찾는 기록을 보고 파일 주는 주소를 다시 점검 — /api/guide/{doc_id} 가 윈도우 드라이브 경로
+    ('F:\\...\\CLAUDE')나 절대 경로를 받으면 도움말 폴더 밖의 .md 를 읽을 수 있었다('..' 만 막았음). 이름만 쓰고, 도움말 폴더 안인지 확인한다."""
+    import api.main as m
+    from fastapi import HTTPException
+    gb = tmp_path / "guide_build"; gb.mkdir()
+    (gb / "00_시작하기.md").write_text("ok", encoding="utf-8")
+    secret = tmp_path / "secret.md"; secret.write_text("비밀", encoding="utf-8")
+    monkeypatch.setattr(m, "GUIDE_BUILD", gb)
+    assert m.guide_doc("00_시작하기")["markdown"] == "ok"
+    for bad in (str(tmp_path / "secret"), "/" + str(tmp_path / "secret").lstrip("/"), "..\\secret", "C:\\secret", "sub/../../secret"):
+        with pytest.raises(HTTPException):
+            m.guide_doc(bad)
+
+
+def test_transform_menu_has_what_datacheck_recommends(monkeypatch):
+    """2026-11-14: 자료 점검표는 계절성이 남으면 월 pct12·분기 pct4 를 권하는데, 실험 화면 변환 목록(meta.transforms)에 없었다.
+    목록에 넣고, 목록의 모든 값이 엔진이 받는 꼴인지 확인한다."""
+    from engine.experiment import apply_transform
+    import api.main as m
+    tr = m.meta()["transforms"]
+    for need in ("pct4", "pct12", "diff4", "diff12"):
+        assert need in tr
+    s = pd.Series(np.arange(1.0, 40.0))
+    for t in tr:
+        apply_transform(s, t)
+
+
+def test_transform_options_single_source_for_screens_and_guide():
+    """2026-11-14 사용자 지적: 변환 목록이 네 곳(실험 13개 · [값 보기] 고치기 5개+직접 · 변수 추가 3개 · 엑셀 설명 글)에서 달랐다.
+    → engine.experiment.TRANSFORM_OPTIONS 하나에 값·이름·계산식·뜻·맞는 자료·주의를 두고, 서버 meta 와 도움말 표({{TRANSFORMS}})가 모두 그것을 쓴다.
+    도움말 예시 숫자({{TRANSFORM_EXAMPLES}})는 엔진 apply_transform 이 직접 계산한 값이다."""
+    import api.main as m
+    from engine.experiment import TRANSFORM_OPTIONS, apply_transform, _TR_RE
+    vals = [o["value"] for o in TRANSFORM_OPTIONS]
+    assert vals == m.meta()["transforms"] and m.meta()["transform_options"] == TRANSFORM_OPTIONS
+    assert len(vals) == len(set(vals)) and {"none", "pct", "diff", "log", "logdiff", "pct12", "pct4"} <= set(vals)
+    for o in TRANSFORM_OPTIONS:
+        assert all(o.get(k) for k in ("value", "name", "formula", "meaning", "use")), o
+        assert o["value"] in ("none", "log", "logdiff") or _TR_RE.match(o["value"])
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bg", Path(__file__).resolve().parents[1] / "tools" / "build_guide.py")
+    bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)
+    table, ex = bg.transform_table(), bg.transform_examples()
+    for v in vals:
+        assert f"`{v}`" in table and f"`{v}`" in ex
+    s = pd.Series([100.0] * 5 + [108.0] + [120.0] * 7 + [150.0] + [155.0] * 5 + [160.0, 165.0, 170.0, 172.0, 175.0, 180.0])
+    assert f"{float(apply_transform(s, 'pct12').iloc[-1]):.4f}" in ex          # 표의 숫자 = 엔진 계산
+    assert "0.25" in ex and "7.69%" in ex                                          # 금리 예: diff 0.25 vs pct 7.69%(잘못)
+
+
+def test_technical_docs_single_source_for_screen_and_guide():
+    """2026-11-14 사용자 요청: 기술지표 18개가 변수 사전에 없어 '이것은 무엇인가'를 알 수 없었다 → 왜 있나·역할·계산·읽는 법·예시를
+    engine.features.TECH_GROUP_DOCS 한 곳에 두고, 변수 사전 화면(/api/technical-info)과 도움말({{TECH_GROUPS}}·{{TECH_COLUMNS}}·{{TECH_EXAMPLE}})이 모두 그것을 쓴다.
+    예시 숫자는 엔진 함수가 직접 계산한다."""
+    import api.main as m
+    from engine.features import TECH_GROUP_DOCS, TECH_GROUPS, technical_columns, technical_example, feature_description
+    assert [d["group"] for d in TECH_GROUP_DOCS] == [g for _, g in TECH_GROUPS]
+    for d in TECH_GROUP_DOCS:
+        assert all(d.get(k) for k in ("group", "prefix", "why", "analogy", "read", "formula", "caution")), d["group"]
+    info = m.technical_info("D")
+    assert [c["name"] for c in info["columns"]] == technical_columns("D") and len(info["columns"]) == 18
+    assert all(c["desc"] == feature_description(c["name"]) and c["group"] for c in info["columns"])
+    assert [c["name"] for c in m.technical_info("M")["columns"]] == technical_columns("M")
+    ex = technical_example()
+    p = ex["close"]
+    assert abs(ex["values"]["A_ret_1"] - (p[-1] / p[-2] - 1)) < 1e-12 and abs(ex["values"]["A_ret_5"] - (p[-1] / p[-6] - 1)) < 1e-12
+    assert abs(ex["values"]["A_ma_ratio_5"] - (p[-1] / (sum(p[-5:]) / 5) - 1)) < 1e-12
+    assert 0 <= ex["values"]["A_rsi_5"] <= 100
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bg", Path(__file__).resolve().parents[1] / "tools" / "build_guide.py")
+    bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)
+    g, cols, exm = bg.tech_groups_doc(), bg.tech_columns_table(), bg.tech_example_doc()
+    for d in TECH_GROUP_DOCS:
+        assert d["group"] in g and d["why"] in g
+    for c in technical_columns("D"):
+        assert f"`{c}`" in cols
+    assert f"{ex['values']['A_ret_1']:.4f}" in exm and f"{ex['values']['A_ma_ratio_5']:.4f}" in exm
+
+
+def test_technical_origin_recorded_single_source():
+    """2026-11-14: 18개 지표·창 길이를 누가 정했는지 기록이 없었다 → engine.features 한 곳(TECH_GROUP_DOCS[*].origin·TECH_ORIGIN·preset_calendar_weeks)에 두고
+    화면(/api/technical-info)과 도움말(20장 5-9, {{TECH_ORIGIN}})이 같은 글을 쓴다. 설명 속 일간 창 숫자는 PRESETS 와 같아야 한다.
+    주간·월간 창이 '같은 달력 길이'가 아님(예전 설명의 오류)을 표가 보여야 한다."""
+    import api.main as m
+    from engine.features import PRESETS, TECH_GROUP_DOCS, TECH_ORIGIN, preset_calendar_weeks
+    for d in TECH_GROUP_DOCS:
+        assert d.get("origin"), d["group"]
+    o = {d["group"]: d["origin"] for d in TECH_GROUP_DOCS}
+    D = PRESETS["D"]
+    assert "Wilder" in o["RSI"] and f"{D['rsi']}일" in o["RSI"]
+    assert "Appel" in o["MACD"] and "·".join(map(str, D["macd"])) in o["MACD"]
+    assert "·".join(map(str, D["ma"])) in o["이동평균 비율"] and "·".join(map(str, D["lags"])) in o["수익률"]
+    rows = {r["key"]: r for r in preset_calendar_weeks()}
+    assert set(rows) == {"lags", "ma", "vol", "rsi", "macd", "volume"}
+    assert rows["ma"]["D"]["weeks"][-1] == round(D["ma"][-1] / 5, 1)
+    assert rows["ma"]["W"]["weeks"][-1] != rows["ma"]["D"]["weeks"][-1]  # 같은 달력 길이가 아님 — 예전 설명이 틀렸던 점
+    info = m.technical_info("W")
+    assert info["origin"] == TECH_ORIGIN and info["calendar_weeks"] == preset_calendar_weeks()
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bg", Path(__file__).resolve().parents[1] / "tools" / "build_guide.py")
+    bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)
+    doc, groups = bg.tech_origin_doc(), bg.tech_groups_doc()
+    assert TECH_ORIGIN["summary"] in doc and TECH_ORIGIN["weekly_monthly"] in doc
+    for d in TECH_GROUP_DOCS:
+        assert d["origin"] in groups
+    src = (Path(__file__).resolve().parents[1] / "docs" / "guide" / "20_데이터와변수.md").read_text(encoding="utf-8")
+    assert "{{TECH_ORIGIN}}" in src and "같은 달력 길이에 맞춘" not in src
+    feat = (Path(__file__).resolve().parents[1] / "engine" / "features.py").read_text(encoding="utf-8")
+    assert "같은 달력 길이로 환산\n" not in feat
+
+
+def test_shannon_model_equals_shannon_benchmark_and_old_models_unchanged(tmp_path):
+    """섀넌 재조정(2026-11-15): ① 기본값(50%·달마다) 모델의 성과 = 결과에 함께 붙는 비교 기준 '섀넌 50:50' ② 거래 횟수는
+    실제로 사고판 날(흘러간 비율은 거래가 아님) ③ 기존 규칙 모델의 성과 숫자는 섀넌 추가 전과 같은 계산(포지션 변화량으로 거래량)."""
+    from engine.backtest import CostModel, run_backtest
+    prices = random_walk_ohlcv(800, seed=11)
+    dv, reg = _dv_with(prices, None, tmp_path)
+    r = run_experiment(ExperimentConfig(ticker="TEST", model="shannon"), dv, reg)
+    pf, sh = r["performance"], r["performance"]["shannon"]
+    for key in ("total_return", "cagr", "sharpe", "mdd"):
+        assert abs(pf[key] - sh[key]) < 1e-12, key
+    assert pf["n_trades"] == sh["n_trades"] and pf["n_trades"] < 0.1 * pf["n_periods"]       # 달마다 한 번 수준
+    assert abs(pf["exposure"] - 0.5) < 0.05
+    d = r["_daily"]
+    # 다시 맞추는 날 사이에는 거래 0, 비율은 흘러감(0.5 가 아닌 값이 있음)
+    ev = d.loc[r["evaluation_period"][0]: r["evaluation_period"][1]]
+    assert (ev["turnover"] == 0).sum() > 0.8 * len(ev) and (ev["position"].sub(0.5).abs() > 1e-6).any()
+    # 기존 모델: 결과의 성과가 예전 회계(rebalance=None)로 다시 계산한 것과 같다
+    m = run_experiment(ExperimentConfig(ticker="TEST", model="momentum"), dv, reg)
+    dd = m["_daily"]
+    lo, hi = m["evaluation_period"]
+    sig = dd["signal"]
+    d2, _ = run_backtest(prices, sig, cost=CostModel())
+    np.testing.assert_allclose(dd["net_return"].values, d2["net_return"].reindex(dd.index).values, equal_nan=True)

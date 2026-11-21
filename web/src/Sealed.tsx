@@ -26,6 +26,7 @@ function metricRows(isF: boolean, a: any, b?: any): [string, string, string?][] 
     add('샤프', x => F(x).sharpe, x => num(F(x).sharpe))
     add('CAGR (같은 구간 B&H)', x => F(x).cagr, x => `${pct(F(x).cagr)} (${pct(F(x).benchmark_cagr)})`)
     add('MDD (같은 구간 B&H)', x => F(x).mdd, x => `${pct(F(x).mdd)} (${pct(F(x).benchmark_mdd)})`)
+    add('섀넌 50:50 기준 (같은 구간) 샤프 · CAGR', x => F(x).shannon?.sharpe, x => F(x).shannon ? `${num(F(x).shannon.sharpe)} · ${pct(F(x).shannon.cagr)}` : '-')
     add('초과 총수익 (전략 − B&H)', x => F(x).excess_total_return, x => pct(F(x).excess_total_return))
     add('초과수익 p (블록 부트스트랩)', x => F(x).bootstrap_p_excess, x => num(F(x).bootstrap_p_excess))
     add('Deflated Sharpe p (시도 수)', x => F(x).deflated_sharpe_p, x => `${num(F(x).deflated_sharpe_p)} (${F(x).n_trials_so_far ?? ''})`)

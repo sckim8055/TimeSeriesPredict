@@ -141,6 +141,8 @@ def _explain(cfg_dict: dict, dv, reg, *, date: str | None = None, epochs: int | 
         _ridge(out, cfg, ds, reg, cap, t, target_type)
     elif cap["kind"] == "table" and cfg.model == "lightgbm_model":
         _lgbm(out, cfg, ds, reg, cap, t, target_type)
+    elif cap["kind"] == "series" and cfg.model == "hmm":
+        _hmm(out, cfg, ds, cap, t)
     elif cap["kind"] == "series":
         _series(out, cfg, ds, cap, t)
     elif cap["kind"] == "levels":
@@ -553,6 +555,70 @@ def _series(out, cfg, ds, cap, t):
     out["checks"].append({"what": "손으로 묶은 ŷ = 엔진 예측", "manual": agg, "model": model_out, "max_abs_diff": _f(abs(agg - model_out)), "ok": bool(abs(agg - model_out) <= 1e-12)})
 
 
+# ---------------------------------------------------------------------------- HMM 시장 상태 (2026-11-15)
+def _hmm(out, cfg, ds, cap, t):
+    """손 계산은 models.hmm 의 함수를 부르지 않고 따로 쓴다(독립 구현): 앞방향 필터 → 상태 확률 → p·A^h·μ → 복리."""
+    m = cap["model"]
+    k, skip = cfg.target.k, cap["skip"]
+    r_all: pd.Series = cap["r_all"]
+    sc = float(m.scale)
+    K = len(m.mu)
+    tr_idx = r_all.loc[cap["fold"].train].dropna().index
+    out["steps"].append({"id": "input", "title": "재료 — 대상 하나의 1기간 변화율만",
+                         "plain": "이 모델은 다른 변수·기술지표를 쓰지 않고 대상 가격의 '어제 종가 대비 오늘 종가 변화율' 하나만 봅니다. 학습 창의 변화율로 상태별 평균·흩어짐과 상태가 바뀔 확률을 정합니다(Baum–Welch).",
+                         "formula": "r_τ = 종가_τ ÷ 종가_(τ−1) − 1",
+                         "table": {"columns": ["날짜", "종가", "변화율 r"], "rows": [[_d(i), _f(ds.prices["close"].loc[i]), _f(r_all.loc[i])] for i in tr_idx]}})
+    dg = m.diag
+    names = ["하락·출렁임 쪽" if j == 0 else ("상승·잔잔 쪽" if j == K - 1 else "중간") for j in range(K)]
+    out["steps"].append({"id": "states", "title": f"학습 창에서 정한 숨은 상태 {K}개",
+                         "plain": f"상태 번호는 평균이 작은 순입니다. 한 상태에 머무를 확률이 높을수록 상태가 오래 이어집니다. 출발점 2개 중 로그우도가 높은 '{dg['start']}' 의 해를 썼습니다"
+                                  f"(반복 {dg['iters']}회, {'수렴' if dg['converged'] else '반복 한도에서 멈춤'}).",
+                         "formula": "r_t | s_t = j ~ 정규(μ_j, σ_j²),  P(s_t = j | s_(t−1) = i) = A[i, j]",
+                         "table": {"columns": ["상태", "이름(평균 순)", "평균 μ (기간당)", "흩어짐 σ (기간당)", "머무를 확률 A[j,j]"] + [f"→ 상태 {j}" for j in range(K)],
+                                   "rows": [[j, names[j], _f(m.mu[j] / sc), _f(np.sqrt(m.var[j]) / sc), _f(m.A[j, j])] + [_f(m.A[j, i]) for i in range(K)] for j in range(K)]},
+                         "values": {"로그우도": _f(dg["loglik"]), "첫날 상태 확률 π": [_f(v) for v in m.pi]}})
+    hist = r_all.loc[:t].dropna()
+    x = hist.values * sc
+    prev, rows = None, []
+    for i, v in zip(hist.index, x):
+        dens = np.array([np.exp(-0.5 * ((v - m.mu[j]) ** 2 / m.var[j])) / np.sqrt(2 * np.pi * m.var[j]) for j in range(K)])
+        prior = m.pi if prev is None else np.array([sum(prev[i_] * m.A[i_, j] for i_ in range(K)) for j in range(K)])
+        un = prior * dens
+        prev = un / un.sum() if un.sum() > 0 else prior / prior.sum()
+        rows.append([_d(i), _f(v / sc)] + [_f(q) for q in prev])
+    out["steps"].append({"id": "filter", "title": f"결정일 {t.date()} 까지 상태 확률을 하루씩 갱신 (앞방향만)",
+                         "plain": f"정한 모수는 그대로 두고, 처음부터 결정일까지 변화율 {len(hist)}개를 차례로 넣습니다. 매일 '어제 상태 확률 × 바뀔 확률'로 오늘 상태를 미리 짐작하고, 오늘 변화율이 각 상태에서 얼마나 그럴듯한지(밀도)를 곱해 다시 맞춥니다. "
+                                  "결정일 이후 값은 쓰지 않습니다(뒷방향 계산·비터비는 예측에 쓰지 않음).",
+                         "formula": "p_τ(j) ∝ [Σ_i p_(τ−1)(i)·A[i,j]] × 정규밀도(r_τ; μ_j, σ_j²),  Σ_j p_τ(j) = 1",
+                         "table": {"columns": ["날짜", "변화율 r"] + [f"P(상태 {j})" for j in range(K)], "rows": rows}})
+    p_hand = prev
+    p_model = m.filtered(hist.values)
+    out["checks"].append({"what": "손으로 갱신한 결정일 상태 확률 = 모델의 필터 확률", "max_abs_diff": _f(float(np.max(np.abs(p_hand - p_model)))),
+                          "ok": bool(np.allclose(p_hand, p_model, rtol=0, atol=1e-10))})
+    fc_rows, fc, q = [], [], p_hand.copy()
+    for h in range(k + skip):
+        q = np.array([sum(q[i_] * m.A[i_, j] for i_ in range(K)) for j in range(K)])
+        v = float(sum(q[j] * m.mu[j] for j in range(K))) / sc
+        fc.append(v)
+        fc_rows.append([f"t+{h + 1}"] + [_f(z) for z in q] + [_f(v)])
+    fc = np.array(fc)
+    fm = np.asarray(m.forecast(hist.values, k + skip), dtype=float)
+    out["steps"].append({"id": "ahead", "title": f"앞으로 {k + skip}기간의 상태 확률과 변화율 예측",
+                         "plain": "앞날의 상태는 모르므로 '바뀔 확률'만 곱해 나갑니다. 각 기간의 예측 변화율 = 상태 확률로 가중한 상태 평균입니다.",
+                         "formula": "q_(t+h) = p_t · A^h,  r̂_(t+h) = Σ_j q_(t+h)(j) · μ_j",
+                         "table": {"columns": ["예측 시점"] + [f"P(상태 {j})" for j in range(K)] + ["예측 r̂"], "rows": fc_rows}})
+    out["checks"].append({"what": "손으로 구한 앞 기간 예측 = 모델 forecast", "max_abs_diff": _f(float(np.max(np.abs(fc - fm)))), "ok": bool(np.allclose(fc, fm, rtol=0, atol=1e-12))})
+    keep = fc[skip:]
+    agg = float(np.sum(np.log1p(keep))) if cfg.target.kind == "logreturn" else float(np.prod(1 + keep) - 1)
+    model_out = float(cap["pred"].loc[t])
+    out["steps"].append({"id": "compound", "title": f"{k}기간 수익률로 묶기",
+                         "plain": ("매매 모드의 정답은 '다음 날 시가에 사서 k 기간 뒤 시가에 판' 수익률이라 첫 기간 예측은 버리고 그다음 k 개를 복리로 묶습니다(종가 변화율로 예측 — ARIMA 와 같은 근사)." if skip
+                                   else "다음 k 기간의 변화율 예측을 복리로 묶습니다."),
+                         "formula": ("ŷ = Σ ln(1 + r̂)" if cfg.target.kind == "logreturn" else "ŷ = Π (1 + r̂) − 1"),
+                         "values": {**{f"r̂ t+{h + 1 + skip}": _f(v) for h, v in enumerate(keep)}, "ŷ": agg}})
+    out["checks"].append({"what": "손으로 묶은 ŷ = 엔진 예측", "manual": agg, "model": model_out, "max_abs_diff": _f(abs(agg - model_out)), "ok": bool(abs(agg - model_out) <= 1e-12)})
+
+
 # ---------------------------------------------------------------------------- VECM
 def _vecm(out, cfg, ds, cap, t):
     m = cap["model"]
@@ -795,6 +861,18 @@ def _rule(out, cfg, plugin, params, ds, reg, date):
                              "table": {"columns": ["날짜", "종가", "변화 Δ", "상승 평균", "하락 평균", "RSI", "판정", "포지션"], "rows": rows},
                              "values": {"결정일 RSI": _f(rv.loc[t]), "포지션": manual}})
         out["checks"].append({"what": "손으로 계산한 RSI = 엔진 RSI(engine/features.rsi)", "max_abs_diff": _f(np.nanmax(np.abs((rv - code).values))), "ok": bool(np.allclose(rv.values, code.values, equal_nan=True))})
+    elif cfg.model == "shannon":
+        wgt, ev = float(params["weight"]), params["every"]
+        from engine.backtest import period_end_mask
+        is_reb = bool(period_end_mask(ds.prices.index, ev)[i])
+        manual = wgt
+        name = {"D": "매 기간", "W": "주마다", "M": "달마다", "Q": "분기마다"}[ev]
+        out["steps"].append({"id": "rule", "title": f"규칙 — ETF {wgt:.0%} · 현금 {1 - wgt:.0%}, {name} 다시 맞춤",
+                             "plain": f"가격을 보지 않고 늘 ETF {wgt:.0%}를 목표로 합니다. 그 사이에는 비율이 가격을 따라 흘러가고(오르면 늘고 내리면 줄고), "
+                                      f"{name} 그 기간의 마지막 결정일에 다시 {wgt:.0%}로 맞춥니다(다음 날 시가에 체결, 그때만 비용). "
+                                      f"이 결정일은 {'다시 맞추는 날입니다' if is_reb else '다시 맞추는 날이 아니라 흘러간 비율을 그대로 들고 갑니다'}.",
+                             "formula": "목표 = weight;  흘러간 비율 w' = h·(1+r) ÷ (1 + h·r);  다시 맞추는 날이면 h = 목표, 거래량 = |목표 − w|",
+                             "values": {"목표 비율": wgt, "다시 맞추는 날": "예" if is_reb else "아니오"}})
     elif cfg.model == "sox_gap_fade":
         col, w, q, mode = params["column"], int(params["window"]), float(params["q"]), params["mode"]
         s = ds.X[col].astype(float).reindex(ds.prices.index)

@@ -43,6 +43,17 @@ class Variable(BaseModel):
     duplicate_of: str = Field("", description="같은 변수의 대표 ID. 값이 있으면 실험에서 자동 제외되고 대표로 치환")
     active: bool = Field(True, description="사용자 스위치. N이면 모든 실험에서 제외 (duplicate_of 와 별개)")
     note: str = Field("", description="마스터 비고. lag/변환 기본값의 근거가 적혀 있다 (엔진은 쓰지 않음, 화면·문서 표시용)")
+    seasonal_adj: str = Field("", description="계절조정 여부(선택 칸): SA = 조정된 값, NSA = 조정 안 된 원계열, 비우면 모름. 자료 점검표만 쓴다(엔진 계산에는 쓰지 않음, 2026-11-14)")
+
+    @field_validator("seasonal_adj", mode="before")
+    @classmethod
+    def _norm_sa(cls, v) -> str:
+        s = "" if v is None or (isinstance(v, float) and v != v) else str(v).strip().upper()
+        if s in ("", "NAN", "NONE"):
+            return ""
+        if s not in ("SA", "NSA"):
+            raise ValueError(f"seasonal_adj 는 SA 또는 NSA(또는 빈칸)여야 합니다: '{v}'")
+        return s
 
     @property
     def usable(self) -> bool:
