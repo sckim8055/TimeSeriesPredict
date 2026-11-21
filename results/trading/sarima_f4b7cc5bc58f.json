@@ -1,0 +1,5326 @@
+{
+ "config": {
+  "name": "",
+  "mode": "trading",
+  "target_variable": null,
+  "forecast_info_time": "stamp",
+  "ticker": "091160",
+  "frequency": "D",
+  "start": null,
+  "end": null,
+  "target": {
+   "kind": "return",
+   "k": 1,
+   "threshold": 0.0
+  },
+  "variable_ids": [],
+  "use_technical": true,
+  "technical_features": null,
+  "fill": "ffill",
+  "apply_lag": true,
+  "variable_transforms": {},
+  "lag_override": {},
+  "model": "sarima",
+  "model_params": {},
+  "seq_len": 20,
+  "trade": {
+   "threshold": 0.0,
+   "fee_rate": 0.00015,
+   "slippage_bp": 5.0,
+   "sizing": "threshold",
+   "kelly_fraction": 0.5,
+   "kelly_min_history": null
+  },
+  "validation": {
+   "train_len": 756,
+   "test_len": 14,
+   "embargo": null,
+   "sealed_from": "2025-01-01",
+   "val_frac": 0.15,
+   "mode": "walkforward",
+   "split_date": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null
+  },
+  "data_version": "20261112T143734Z",
+  "seed": 2025,
+  "n_seeds": 1,
+  "select_top": null,
+  "pool_tickers": []
+ },
+ "config_hash": "f4b7cc5bc58f",
+ "model": {
+  "file": "sarima",
+  "name": "SARIMA",
+  "input_shape": "series",
+  "params": {
+   "p": 1,
+   "d": 0,
+   "q": 1,
+   "P": 1,
+   "D": 0,
+   "Q": 1,
+   "s": 5,
+   "enforce_stationarity": true,
+   "enforce_invertibility": true,
+   "scale": 100.0,
+   "trend": "auto",
+   "starts": "multi"
+  }
+ },
+ "data_version": "20261112T143734Z",
+ "code_version": "06893cd-dirty",
+ "engine_rev": "2026-11-10",
+ "n_folds": 223,
+ "n_features": 18,
+ "feature_names": [
+  "A_ret_1",
+  "A_ret_2",
+  "A_ret_3",
+  "A_ret_5",
+  "A_ret_10",
+  "A_ret_20",
+  "A_ma_ratio_5",
+  "A_ma_ratio_20",
+  "A_ma_ratio_60",
+  "A_ma_ratio_120",
+  "A_vol_20",
+  "A_vol_60",
+  "A_rsi_14",
+  "A_macd",
+  "A_macd_signal",
+  "A_macd_hist",
+  "A_vol_ratio_5",
+  "A_vol_ratio_20"
+ ],
+ "feature_importance": null,
+ "trade_rule_used": {
+  "kind": "threshold",
+  "threshold": 0.0
+ },
+ "confidence_table": {
+  "rows": [
+   {
+    "bin": 1,
+    "n": 625,
+    "pred_mean": -0.0011172771872224301,
+    "pred_min": -0.004882580075155962,
+    "pred_max": -0.0003658408493455445,
+    "hit_rate": 0.5392,
+    "mean_realized": 0.0011047852091607858,
+    "sd_realized": 0.015985365815854472
+   },
+   {
+    "bin": 2,
+    "n": 624,
+    "pred_mean": -1.8720601638295123e-05,
+    "pred_min": -0.0003649315136221576,
+    "pred_max": 0.00025127137292058066,
+    "hit_rate": 0.5288461538461539,
+    "mean_realized": 0.0011763596677964983,
+    "sd_realized": 0.017094631765917065
+   },
+   {
+    "bin": 3,
+    "n": 624,
+    "pred_mean": 0.00045887615906156144,
+    "pred_min": 0.0002516050633962763,
+    "pred_max": 0.0006615714286279939,
+    "hit_rate": 0.4855769230769231,
+    "mean_realized": -0.0005415180006098946,
+    "sd_realized": 0.018379301017929252
+   },
+   {
+    "bin": 4,
+    "n": 624,
+    "pred_mean": 0.0008706757208766261,
+    "pred_min": 0.0006621224199905296,
+    "pred_max": 0.001138397988921458,
+    "hit_rate": 0.5256410256410257,
+    "mean_realized": -5.835163682897695e-06,
+    "sd_realized": 0.017670277993480466
+   },
+   {
+    "bin": 5,
+    "n": 625,
+    "pred_mean": 0.002209462441966738,
+    "pred_min": 0.0011411059698471782,
+    "pred_max": 0.013455601936709582,
+    "hit_rate": 0.5088,
+    "mean_realized": -4.102920459571102e-05,
+    "sd_realized": 0.0176604859147363
+   }
+  ],
+  "rank_corr": -0.6,
+  "top_minus_bottom": -0.0011458144137564967,
+  "t_top_bottom": -1.2025417908893148,
+  "verdict": "맞지 않음",
+  "rule": "예측을 크기 순으로 5묶음(같은 개수)으로 나눠 묶음마다 실제 결과를 셉니다. 자신감(예측)이 클수록 실제 평균 수익이 커지면 — 묶음 번호와 평균 실현 수익의 순위상관 0.9 이상, 맨 위 묶음 − 맨 아래 묶음 > 0 — '맞음'. 평가 구간 전체를 본 진단이라 매매 결정에는 쓰지 않습니다.",
+  "n": 3122
+ },
+ "degenerate_model": false,
+ "sealed_evaluation": false,
+ "evaluation_period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "leak_warning": false,
+ "lag_days_used": {},
+ "lag_unconfirmed": [],
+ "transforms_used": {},
+ "transform_basis": {},
+ "prediction_metrics": {
+  "rmse": 0.017471801105284433,
+  "mae": 0.012832972364159296,
+  "dir_acc": 0.4926329276105061,
+  "dm_vs_zero": 3.2015830916751282,
+  "dm_vs_zero_p": 0.0013667465062057182,
+  "cw_vs_zero": -1.1425221557763827,
+  "cw_vs_zero_p": 0.8733814789925317,
+  "rmse_zero": 0.01737879040787542,
+  "pred_sd_ratio": 0.07909609126578289,
+  "cw_vs_mean": -1.2628198406900188,
+  "cw_vs_mean_p": 0.8966730336613933,
+  "dm_vs_mean": 3.155498397245947,
+  "dm_vs_mean_p": 0.0016022414660175066,
+  "rmse_mean": 0.017387958903748724,
+  "r2_oos_vs_mean": -0.009666958546889814,
+  "n_vs_mean": 3122
+ },
+ "performance": {
+  "n_periods": 3122,
+  "total_return": -0.7438661267782634,
+  "cagr": -0.10411360158342386,
+  "ann_vol": 0.23997829080631347,
+  "sharpe": -0.33771098298909197,
+  "sortino": -0.43325202831570025,
+  "mdd": -0.7507828391962248,
+  "win_rate": 0.3997113997113997,
+  "benchmark_total_return": 0.795184490306436,
+  "benchmark_cagr": 0.04836146106250183,
+  "benchmark_mdd": -0.46494921971761083,
+  "excess_total_return": -1.5390506170846994,
+  "excess_mean_per_period": -0.0006602767634475186,
+  "n_trades": 1189,
+  "turnover": 1189.0,
+  "exposure": 0.7014734144778988,
+  "total_cost": 0.7728499999999999,
+  "shannon": {
+   "n_periods": 3122,
+   "total_return": 0.47205970317823676,
+   "cagr": 0.0317025846572101,
+   "ann_vol": 0.1367688323832878,
+   "sharpe": 0.2966332738119879,
+   "sortino": 0.4308287890697532,
+   "mdd": -0.25627036328923125,
+   "win_rate": 0.5219638242894057,
+   "weight": 0.5,
+   "every": "M",
+   "total_cost": 0.0016798139030659838,
+   "n_trades": 153
+  },
+  "bootstrap_p_excess": 1.0,
+  "deflated_sharpe_p": 0.9998866392607781,
+  "return_skew": -0.19743106284066395,
+  "return_kurt": 7.138887129913398,
+  "trial_sr_var": 0.00030907363400675203,
+  "n_trials_so_far": 102
+ },
+ "period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "prediction_period": [
+  "2012-04-19",
+  "2024-12-26"
+ ],
+ "n_predictions": 3122,
+ "variable_first_date": {},
+ "device": "cuda",
+ "seconds": 1550.7,
+ "seal_boundary": {
+  "sealed_from": "2025-01-01",
+  "first_sealed_decision": "2024-12-27",
+  "horizon_rows": 2,
+  "rule": "개발 = 정답·수익의 마지막 값 날짜 < sealed_from 인 결정일, 봉인 = 그 밖(빠짐·겹침 없음)"
+ },
+ "feature_relevance": null,
+ "model_diag": {
+  "n_folds": 223,
+  "seeds": {
+   "n_seeds": 1,
+   "rule": "sha256('실험 시드|폴드 첫 테스트 결정일|반복 번호') 앞 8자리(16진) mod (2^31−1)"
+  },
+  "multi_start": {
+   "folds": 223,
+   "improved_folds": 77,
+   "max_llf_gain": 2.524004067340911,
+   "start_used": {
+    "default": 124,
+    "ma-": 3,
+    "nm": 32,
+    "zero": 31,
+    "ar+": 19,
+    "ar-": 10,
+    "ma+": 4
+   },
+   "not_converged_folds": 0
+  }
+ },
+ "data_checks": {
+  "upto": "2025-01-01",
+  "rows": []
+ },
+ "periods": {
+  "data": [
+   "2012-04-19",
+   "2024-12-26"
+  ],
+  "requested": {
+   "start": null,
+   "end": null,
+   "val_start": null,
+   "test_start": null,
+   "test_end": null,
+   "sealed_from": "2025-01-01"
+  },
+  "embargo": 2,
+  "validation_rule": "val_frac=0.15",
+  "n_folds_logged": 223,
+  "first_fold": {
+   "train": [
+    "2007-01-30",
+    "2012-04-16"
+   ],
+   "val": null,
+   "test": [
+    "2012-04-19",
+    "2012-05-09"
+   ],
+   "n_train": 753,
+   "n_val": 0,
+   "n_test": 14,
+   "model_diag": {
+    "start_used": "default",
+    "llf": -1512.0093356147622,
+    "llf_default": -1512.0093356147622,
+    "llf_gain": 0.0,
+    "n_starts": 7,
+    "converged": true
+   }
+  },
+  "last_fold": {
+   "train": [
+    "2021-11-10",
+    "2024-12-03"
+   ],
+   "val": null,
+   "test": [
+    "2024-12-06",
+    "2024-12-26"
+   ],
+   "n_train": 754,
+   "n_val": 0,
+   "n_test": 14,
+   "model_diag": {
+    "start_used": "default",
+    "llf": -1570.3729047893125,
+    "llf_default": -1570.3729047893125,
+    "llf_gain": 0.0,
+    "n_starts": 7,
+    "converged": true
+   }
+  },
+  "test": [
+   "2012-04-19",
+   "2024-12-26"
+  ],
+  "folds": [
+   {
+    "train": [
+     "2007-01-30",
+     "2012-04-16"
+    ],
+    "val": null,
+    "test": [
+     "2012-04-19",
+     "2012-05-09"
+    ],
+    "n_train": 753,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1512.0093356147622,
+     "llf_default": -1512.0093356147622,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-04-27",
+     "2012-05-07"
+    ],
+    "val": null,
+    "test": [
+     "2012-05-10",
+     "2012-05-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1474.277105201645,
+     "llf_default": -1474.277105201645,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-05-26",
+     "2012-05-25"
+    ],
+    "val": null,
+    "test": [
+     "2012-05-31",
+     "2012-06-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1480.779032219391,
+     "llf_default": -1480.779032219391,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-06-15",
+     "2012-06-18"
+    ],
+    "val": null,
+    "test": [
+     "2012-06-21",
+     "2012-07-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1483.0369323444884,
+     "llf_default": -1483.0369323444884,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-07-03",
+     "2012-07-06"
+    ],
+    "val": null,
+    "test": [
+     "2012-07-11",
+     "2012-07-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1481.7273320083773,
+     "llf_default": -1481.7273320083773,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-07-23",
+     "2012-07-26"
+    ],
+    "val": null,
+    "test": [
+     "2012-07-31",
+     "2012-08-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma-",
+     "llf": -1476.6195458812094,
+     "llf_default": -1477.3634003102363,
+     "llf_gain": 0.7438544290268965,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-08-12",
+     "2012-08-16"
+    ],
+    "val": null,
+    "test": [
+     "2012-08-21",
+     "2012-09-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1480.0330849715142,
+     "llf_default": -1481.1630401121402,
+     "llf_gain": 1.1299551406259525,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-09-01",
+     "2012-09-05"
+    ],
+    "val": null,
+    "test": [
+     "2012-09-10",
+     "2012-09-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1475.9531998879606,
+     "llf_default": -1476.8641099255603,
+     "llf_gain": 0.9109100375997059,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-09-21",
+     "2012-09-25"
+    ],
+    "val": null,
+    "test": [
+     "2012-09-28",
+     "2012-10-19"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1473.6489635937178,
+     "llf_default": -1474.5267166841422,
+     "llf_gain": 0.8777530904244486,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-10-12",
+     "2012-10-17"
+    ],
+    "val": null,
+    "test": [
+     "2012-10-22",
+     "2012-11-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1467.4544817527312,
+     "llf_default": -1468.215237880563,
+     "llf_gain": 0.7607561278318826,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-10-30",
+     "2012-11-06"
+    ],
+    "val": null,
+    "test": [
+     "2012-11-09",
+     "2012-11-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1464.9161126670324,
+     "llf_default": -1464.9161126670324,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-11-19",
+     "2012-11-26"
+    ],
+    "val": null,
+    "test": [
+     "2012-11-29",
+     "2012-12-18"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1462.6272757060526,
+     "llf_default": -1463.2748197502588,
+     "llf_gain": 0.6475440442061426,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-12-09",
+     "2012-12-14"
+    ],
+    "val": null,
+    "test": [
+     "2012-12-20",
+     "2013-01-11"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1458.400932215888,
+     "llf_default": -1458.6135152234217,
+     "llf_gain": 0.21258300753379444,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2009-12-30",
+     "2013-01-09"
+    ],
+    "val": null,
+    "test": [
+     "2013-01-14",
+     "2013-01-31"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1460.02748545315,
+     "llf_default": -1460.280700505594,
+     "llf_gain": 0.25321505244414766,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-01-21",
+     "2013-01-29"
+    ],
+    "val": null,
+    "test": [
+     "2013-02-01",
+     "2013-02-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1459.0053257155405,
+     "llf_default": -1459.1192492125224,
+     "llf_gain": 0.11392349698189719,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-02-10",
+     "2013-02-19"
+    ],
+    "val": null,
+    "test": [
+     "2013-02-22",
+     "2013-03-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1450.5372802240367,
+     "llf_default": -1450.5372802240367,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-03-04",
+     "2013-03-12"
+    ],
+    "val": null,
+    "test": [
+     "2013-03-15",
+     "2013-04-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1449.2422267995107,
+     "llf_default": -1449.2422267995107,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-03-24",
+     "2013-04-01"
+    ],
+    "val": null,
+    "test": [
+     "2013-04-04",
+     "2013-04-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1450.8835866478476,
+     "llf_default": -1450.8835866478476,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-04-13",
+     "2013-04-19"
+    ],
+    "val": null,
+    "test": [
+     "2013-04-24",
+     "2013-05-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1448.8725076235191,
+     "llf_default": -1448.8725076235191,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-05-03",
+     "2013-05-10"
+    ],
+    "val": null,
+    "test": [
+     "2013-05-15",
+     "2013-06-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1447.2171334281024,
+     "llf_default": -1448.3635602952643,
+     "llf_gain": 1.1464268671618356,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-05-25",
+     "2013-05-31"
+    ],
+    "val": null,
+    "test": [
+     "2013-06-05",
+     "2013-06-25"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1431.7384391929077,
+     "llf_default": -1431.7573141956932,
+     "llf_gain": 0.01887500278553489,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-06-15",
+     "2013-06-21"
+    ],
+    "val": null,
+    "test": [
+     "2013-06-26",
+     "2013-07-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1433.3546027101706,
+     "llf_default": -1433.370609168184,
+     "llf_gain": 0.01600645801340761,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-07-05",
+     "2013-07-11"
+    ],
+    "val": null,
+    "test": [
+     "2013-07-16",
+     "2013-08-02"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1442.5008227242652,
+     "llf_default": -1444.9616341834346,
+     "llf_gain": 2.460811459169463,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-07-23",
+     "2013-07-31"
+    ],
+    "val": null,
+    "test": [
+     "2013-08-05",
+     "2013-08-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1438.4406225792088,
+     "llf_default": -1440.8091409313324,
+     "llf_gain": 2.3685183521236013,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-08-12",
+     "2013-08-21"
+    ],
+    "val": null,
+    "test": [
+     "2013-08-26",
+     "2013-09-12"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1436.701872571358,
+     "llf_default": -1436.8592079528826,
+     "llf_gain": 0.15733538152449,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-09-01",
+     "2013-09-10"
+    ],
+    "val": null,
+    "test": [
+     "2013-09-13",
+     "2013-10-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1435.1682422426297,
+     "llf_default": -1435.2769168637815,
+     "llf_gain": 0.1086746211517493,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-09-24",
+     "2013-10-04"
+    ],
+    "val": null,
+    "test": [
+     "2013-10-10",
+     "2013-10-29"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1432.5180457366123,
+     "llf_default": -1432.5180457366123,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-10-14",
+     "2013-10-25"
+    ],
+    "val": null,
+    "test": [
+     "2013-10-30",
+     "2013-11-18"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1430.0984008971604,
+     "llf_default": -1430.0984008971604,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-11-03",
+     "2013-11-14"
+    ],
+    "val": null,
+    "test": [
+     "2013-11-19",
+     "2013-12-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1431.8856332852115,
+     "llf_default": -1432.0095749048785,
+     "llf_gain": 0.12394161966699357,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-11-23",
+     "2013-12-04"
+    ],
+    "val": null,
+    "test": [
+     "2013-12-09",
+     "2013-12-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1428.6027529730989,
+     "llf_default": -1428.6027529730989,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2010-12-13",
+     "2013-12-24"
+    ],
+    "val": null,
+    "test": [
+     "2013-12-30",
+     "2014-01-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1426.8820246600353,
+     "llf_default": -1426.8820246600353,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-01-03",
+     "2014-01-16"
+    ],
+    "val": null,
+    "test": [
+     "2014-01-21",
+     "2014-02-11"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1428.3175788391336,
+     "llf_default": -1428.3175788391336,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-01-21",
+     "2014-02-07"
+    ],
+    "val": null,
+    "test": [
+     "2014-02-12",
+     "2014-03-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1431.5015352976734,
+     "llf_default": -1431.5015352976734,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-02-15",
+     "2014-02-27"
+    ],
+    "val": null,
+    "test": [
+     "2014-03-04",
+     "2014-03-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1428.0854308801304,
+     "llf_default": -1428.0854308801304,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-03-08",
+     "2014-03-19"
+    ],
+    "val": null,
+    "test": [
+     "2014-03-24",
+     "2014-04-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1425.6515623689763,
+     "llf_default": -1425.6515623689763,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-03-28",
+     "2014-04-08"
+    ],
+    "val": null,
+    "test": [
+     "2014-04-11",
+     "2014-04-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1421.5503143182134,
+     "llf_default": -1421.5503143182134,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-04-15",
+     "2014-04-28"
+    ],
+    "val": null,
+    "test": [
+     "2014-05-02",
+     "2014-05-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1421.3605674773999,
+     "llf_default": -1421.3605674773999,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-05-06",
+     "2014-05-21"
+    ],
+    "val": null,
+    "test": [
+     "2014-05-26",
+     "2014-06-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1415.0861346989443,
+     "llf_default": -1415.0861346989443,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-05-27",
+     "2014-06-12"
+    ],
+    "val": null,
+    "test": [
+     "2014-06-17",
+     "2014-07-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1408.016774121277,
+     "llf_default": -1408.016774121277,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-06-17",
+     "2014-07-02"
+    ],
+    "val": null,
+    "test": [
+     "2014-07-07",
+     "2014-07-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1402.76525424579,
+     "llf_default": -1402.76525424579,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-07-07",
+     "2014-07-22"
+    ],
+    "val": null,
+    "test": [
+     "2014-07-25",
+     "2014-08-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1394.8222449544526,
+     "llf_default": -1394.8222449544526,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-07-27",
+     "2014-08-11"
+    ],
+    "val": null,
+    "test": [
+     "2014-08-14",
+     "2014-09-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1396.2218877774649,
+     "llf_default": -1396.2218877774649,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-08-17",
+     "2014-09-01"
+    ],
+    "val": null,
+    "test": [
+     "2014-09-04",
+     "2014-09-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma-",
+     "llf": -1361.9156865008736,
+     "llf_default": -1363.0176626030948,
+     "llf_gain": 1.1019761022212151,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-09-06",
+     "2014-09-24"
+    ],
+    "val": null,
+    "test": [
+     "2014-09-29",
+     "2014-10-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1319.8263462776135,
+     "llf_default": -1322.3503503449544,
+     "llf_gain": 2.524004067340911,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-09-28",
+     "2014-10-16"
+    ],
+    "val": null,
+    "test": [
+     "2014-10-21",
+     "2014-11-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1272.7844127779713,
+     "llf_default": -1272.7844127779713,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-10-19",
+     "2014-11-05"
+    ],
+    "val": null,
+    "test": [
+     "2014-11-10",
+     "2014-11-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1262.134457269492,
+     "llf_default": -1263.470265364118,
+     "llf_gain": 1.3358080946259179,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-11-08",
+     "2014-11-25"
+    ],
+    "val": null,
+    "test": [
+     "2014-11-28",
+     "2014-12-17"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1243.7808236165288,
+     "llf_default": -1243.7808236165288,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-11-28",
+     "2014-12-15"
+    ],
+    "val": null,
+    "test": [
+     "2014-12-18",
+     "2015-01-09"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1226.5455942207805,
+     "llf_default": -1226.5462990022909,
+     "llf_gain": 0.000704781510421526,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2011-12-16",
+     "2015-01-07"
+    ],
+    "val": null,
+    "test": [
+     "2015-01-12",
+     "2015-01-29"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1221.0959478929508,
+     "llf_default": -1221.2140733842493,
+     "llf_gain": 0.11812549129854233,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-01-06",
+     "2015-01-27"
+    ],
+    "val": null,
+    "test": [
+     "2015-01-30",
+     "2015-02-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1210.7971649731876,
+     "llf_default": -1211.7241276123077,
+     "llf_gain": 0.92696263912012,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-01-30",
+     "2015-02-16"
+    ],
+    "val": null,
+    "test": [
+     "2015-02-24",
+     "2015-03-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1206.2455559322743,
+     "llf_default": -1206.2455559322743,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-02-17",
+     "2015-03-11"
+    ],
+    "val": null,
+    "test": [
+     "2015-03-16",
+     "2015-04-02"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1204.0971094833028,
+     "llf_default": -1204.6382415685043,
+     "llf_gain": 0.5411320852015251,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-03-09",
+     "2015-03-31"
+    ],
+    "val": null,
+    "test": [
+     "2015-04-03",
+     "2015-04-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1203.284773481439,
+     "llf_default": -1204.6359779673558,
+     "llf_gain": 1.3512044859166963,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-03-29",
+     "2015-04-20"
+    ],
+    "val": null,
+    "test": [
+     "2015-04-23",
+     "2015-05-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1206.6046738355847,
+     "llf_default": -1206.6046738355847,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-04-19",
+     "2015-05-12"
+    ],
+    "val": null,
+    "test": [
+     "2015-05-15",
+     "2015-06-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1207.4243611929146,
+     "llf_default": -1207.4243611929146,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-05-10",
+     "2015-06-02"
+    ],
+    "val": null,
+    "test": [
+     "2015-06-05",
+     "2015-06-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1208.7210920348875,
+     "llf_default": -1209.1031353316735,
+     "llf_gain": 0.3820432967859233,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-05-31",
+     "2015-06-22"
+    ],
+    "val": null,
+    "test": [
+     "2015-06-25",
+     "2015-07-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1185.6360168920487,
+     "llf_default": -1185.6360168920487,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-06-21",
+     "2015-07-10"
+    ],
+    "val": null,
+    "test": [
+     "2015-07-15",
+     "2015-08-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1175.251103514965,
+     "llf_default": -1175.251103514965,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-07-11",
+     "2015-07-30"
+    ],
+    "val": null,
+    "test": [
+     "2015-08-04",
+     "2015-08-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1183.47338534417,
+     "llf_default": -1185.19296922703,
+     "llf_gain": 1.719583882859979,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-07-31",
+     "2015-08-20"
+    ],
+    "val": null,
+    "test": [
+     "2015-08-25",
+     "2015-09-11"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1182.206473358763,
+     "llf_default": -1182.206473358763,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-08-21",
+     "2015-09-09"
+    ],
+    "val": null,
+    "test": [
+     "2015-09-14",
+     "2015-10-05"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1203.1795990177625,
+     "llf_default": -1203.1795990177625,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-09-10",
+     "2015-10-01"
+    ],
+    "val": null,
+    "test": [
+     "2015-10-06",
+     "2015-10-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1199.4635186297512,
+     "llf_default": -1199.4645364213998,
+     "llf_gain": 0.0010177916485645255,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-09-28",
+     "2015-10-22"
+    ],
+    "val": null,
+    "test": [
+     "2015-10-27",
+     "2015-11-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1205.562911168117,
+     "llf_default": -1205.562911168117,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-10-22",
+     "2015-11-11"
+    ],
+    "val": null,
+    "test": [
+     "2015-11-16",
+     "2015-12-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1206.0476888611563,
+     "llf_default": -1206.0476888611563,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-11-09",
+     "2015-12-01"
+    ],
+    "val": null,
+    "test": [
+     "2015-12-04",
+     "2015-12-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1211.5604509037344,
+     "llf_default": -1211.5604509037344,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-11-29",
+     "2015-12-21"
+    ],
+    "val": null,
+    "test": [
+     "2015-12-24",
+     "2016-01-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1208.625444947299,
+     "llf_default": -1208.625444947299,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2012-12-20",
+     "2016-01-13"
+    ],
+    "val": null,
+    "test": [
+     "2016-01-18",
+     "2016-02-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1216.2265743451635,
+     "llf_default": -1216.2265743451635,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-01-14",
+     "2016-02-02"
+    ],
+    "val": null,
+    "test": [
+     "2016-02-05",
+     "2016-02-29"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1215.9121344402706,
+     "llf_default": -1215.9121344402706,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-02-01",
+     "2016-02-25"
+    ],
+    "val": null,
+    "test": [
+     "2016-03-02",
+     "2016-03-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1226.6508340551086,
+     "llf_default": -1226.6508340551086,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-02-22",
+     "2016-03-17"
+    ],
+    "val": null,
+    "test": [
+     "2016-03-22",
+     "2016-04-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1224.8895891078796,
+     "llf_default": -1224.8895891078796,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-03-15",
+     "2016-04-06"
+    ],
+    "val": null,
+    "test": [
+     "2016-04-11",
+     "2016-04-29"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1223.2159816106962,
+     "llf_default": -1223.2159816106962,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-04-04",
+     "2016-04-27"
+    ],
+    "val": null,
+    "test": [
+     "2016-05-02",
+     "2016-05-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1217.7379751262906,
+     "llf_default": -1217.7379751262906,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-04-24",
+     "2016-05-19"
+    ],
+    "val": null,
+    "test": [
+     "2016-05-24",
+     "2016-06-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1214.2333855234851,
+     "llf_default": -1214.2333855234851,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-05-15",
+     "2016-06-09"
+    ],
+    "val": null,
+    "test": [
+     "2016-06-14",
+     "2016-07-01"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1213.2649393422794,
+     "llf_default": -1213.8353538036702,
+     "llf_gain": 0.5704144613907829,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-06-05",
+     "2016-06-29"
+    ],
+    "val": null,
+    "test": [
+     "2016-07-04",
+     "2016-07-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1217.3609348782716,
+     "llf_default": -1217.3609348782716,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-06-26",
+     "2016-07-19"
+    ],
+    "val": null,
+    "test": [
+     "2016-07-22",
+     "2016-08-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1202.6517180984174,
+     "llf_default": -1202.6517180984174,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-07-16",
+     "2016-08-08"
+    ],
+    "val": null,
+    "test": [
+     "2016-08-11",
+     "2016-08-31"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1190.7625524674645,
+     "llf_default": -1191.068641041596,
+     "llf_gain": 0.306088574131536,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-08-05",
+     "2016-08-29"
+    ],
+    "val": null,
+    "test": [
+     "2016-09-01",
+     "2016-09-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1195.5226929371815,
+     "llf_default": -1195.6941714472487,
+     "llf_gain": 0.1714785100671179,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-08-26",
+     "2016-09-21"
+    ],
+    "val": null,
+    "test": [
+     "2016-09-26",
+     "2016-10-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1191.982247518718,
+     "llf_default": -1192.1457055081453,
+     "llf_gain": 0.1634579894273429,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-09-13",
+     "2016-10-12"
+    ],
+    "val": null,
+    "test": [
+     "2016-10-17",
+     "2016-11-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1193.2120934464003,
+     "llf_default": -1193.235240848444,
+     "llf_gain": 0.023147402043605325,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-10-10",
+     "2016-11-01"
+    ],
+    "val": null,
+    "test": [
+     "2016-11-04",
+     "2016-11-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1197.0027592301653,
+     "llf_default": -1197.0027592301653,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-10-30",
+     "2016-11-21"
+    ],
+    "val": null,
+    "test": [
+     "2016-11-24",
+     "2016-12-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1204.0028216450414,
+     "llf_default": -1204.0028216450414,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-11-19",
+     "2016-12-09"
+    ],
+    "val": null,
+    "test": [
+     "2016-12-14",
+     "2017-01-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1198.480115336199,
+     "llf_default": -1198.480115336199,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-12-09",
+     "2016-12-29"
+    ],
+    "val": null,
+    "test": [
+     "2017-01-04",
+     "2017-01-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1200.313909557424,
+     "llf_default": -1200.313909557424,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2013-12-30",
+     "2017-01-19"
+    ],
+    "val": null,
+    "test": [
+     "2017-01-24",
+     "2017-02-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma-",
+     "llf": -1202.7906007071301,
+     "llf_default": -1202.7921721395292,
+     "llf_gain": 0.0015714323990323464,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-01-21",
+     "2017-02-10"
+    ],
+    "val": null,
+    "test": [
+     "2017-02-15",
+     "2017-03-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1202.1254917426638,
+     "llf_default": -1202.1254917426638,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-02-12",
+     "2017-03-03"
+    ],
+    "val": null,
+    "test": [
+     "2017-03-08",
+     "2017-03-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1200.2493042495928,
+     "llf_default": -1200.2493042495928,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-03-04",
+     "2017-03-23"
+    ],
+    "val": null,
+    "test": [
+     "2017-03-28",
+     "2017-04-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1204.1873085172151,
+     "llf_default": -1204.1873085172151,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-03-24",
+     "2017-04-12"
+    ],
+    "val": null,
+    "test": [
+     "2017-04-17",
+     "2017-05-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1202.2975045480564,
+     "llf_default": -1202.2975045480564,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-04-11",
+     "2017-05-04"
+    ],
+    "val": null,
+    "test": [
+     "2017-05-11",
+     "2017-05-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1202.4133475940005,
+     "llf_default": -1202.4133475940005,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-05-02",
+     "2017-05-26"
+    ],
+    "val": null,
+    "test": [
+     "2017-05-31",
+     "2017-06-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1203.523043800904,
+     "llf_default": -1203.523043800904,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-05-26",
+     "2017-06-16"
+    ],
+    "val": null,
+    "test": [
+     "2017-06-21",
+     "2017-07-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1207.530937660378,
+     "llf_default": -1207.530937660378,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-06-17",
+     "2017-07-06"
+    ],
+    "val": null,
+    "test": [
+     "2017-07-11",
+     "2017-07-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1217.4100297305476,
+     "llf_default": -1217.4100297305476,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-07-07",
+     "2017-07-26"
+    ],
+    "val": null,
+    "test": [
+     "2017-07-31",
+     "2017-08-18"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1220.9025203661363,
+     "llf_default": -1220.9025203661363,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-07-25",
+     "2017-08-16"
+    ],
+    "val": null,
+    "test": [
+     "2017-08-21",
+     "2017-09-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1244.3570500266696,
+     "llf_default": -1244.3570500266696,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-08-14",
+     "2017-09-05"
+    ],
+    "val": null,
+    "test": [
+     "2017-09-08",
+     "2017-09-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1237.5561705918826,
+     "llf_default": -1237.5561705918826,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-09-04",
+     "2017-09-25"
+    ],
+    "val": null,
+    "test": [
+     "2017-09-28",
+     "2017-10-25"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1238.0459087987094,
+     "llf_default": -1238.0459087987094,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-09-29",
+     "2017-10-23"
+    ],
+    "val": null,
+    "test": [
+     "2017-10-26",
+     "2017-11-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1241.8646841735272,
+     "llf_default": -1241.8646841735272,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-10-21",
+     "2017-11-10"
+    ],
+    "val": null,
+    "test": [
+     "2017-11-15",
+     "2017-12-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1237.724288928279,
+     "llf_default": -1237.724288928279,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-11-10",
+     "2017-11-30"
+    ],
+    "val": null,
+    "test": [
+     "2017-12-05",
+     "2017-12-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1241.6840081994774,
+     "llf_default": -1241.6840081994774,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-11-28",
+     "2017-12-20"
+    ],
+    "val": null,
+    "test": [
+     "2017-12-26",
+     "2018-01-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1240.6730839458703,
+     "llf_default": -1240.6730839458703,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2014-12-18",
+     "2018-01-12"
+    ],
+    "val": null,
+    "test": [
+     "2018-01-17",
+     "2018-02-05"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1252.8741007398994,
+     "llf_default": -1252.8741007398994,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-01-12",
+     "2018-02-01"
+    ],
+    "val": null,
+    "test": [
+     "2018-02-06",
+     "2018-02-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1255.543492033897,
+     "llf_default": -1255.5437433292923,
+     "llf_gain": 0.0002512953951736563,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-01-30",
+     "2018-02-23"
+    ],
+    "val": null,
+    "test": [
+     "2018-02-28",
+     "2018-03-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1264.5718175348804,
+     "llf_default": -1264.5718175348804,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-02-24",
+     "2018-03-16"
+    ],
+    "val": null,
+    "test": [
+     "2018-03-21",
+     "2018-04-09"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1268.8356481835453,
+     "llf_default": -1268.8356481835453,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-03-16",
+     "2018-04-05"
+    ],
+    "val": null,
+    "test": [
+     "2018-04-10",
+     "2018-04-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1283.5032011385947,
+     "llf_default": -1283.5032011385947,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-04-03",
+     "2018-04-25"
+    ],
+    "val": null,
+    "test": [
+     "2018-04-30",
+     "2018-05-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1284.2956309754518,
+     "llf_default": -1284.2956309754518,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-04-23",
+     "2018-05-17"
+    ],
+    "val": null,
+    "test": [
+     "2018-05-23",
+     "2018-06-12"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1285.3753059283501,
+     "llf_default": -1285.3753059283501,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-05-15",
+     "2018-06-08"
+    ],
+    "val": null,
+    "test": [
+     "2018-06-14",
+     "2018-07-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1283.221815332979,
+     "llf_default": -1283.221815332979,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-06-05",
+     "2018-06-29"
+    ],
+    "val": null,
+    "test": [
+     "2018-07-04",
+     "2018-07-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1291.5934220892168,
+     "llf_default": -1291.5989029241146,
+     "llf_gain": 0.005480834897753084,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-06-25",
+     "2018-07-19"
+    ],
+    "val": null,
+    "test": [
+     "2018-07-24",
+     "2018-08-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1293.4123210952098,
+     "llf_default": -1293.4123210952098,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-07-15",
+     "2018-08-08"
+    ],
+    "val": null,
+    "test": [
+     "2018-08-13",
+     "2018-08-31"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1306.2856285059484,
+     "llf_default": -1306.2856285059484,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-08-04",
+     "2018-08-29"
+    ],
+    "val": null,
+    "test": [
+     "2018-09-03",
+     "2018-09-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1303.1471608122374,
+     "llf_default": -1303.1471608122374,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-08-25",
+     "2018-09-18"
+    ],
+    "val": null,
+    "test": [
+     "2018-09-21",
+     "2018-10-17"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1293.027461070813,
+     "llf_default": -1293.5744674031935,
+     "llf_gain": 0.5470063323805334,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-09-14",
+     "2018-10-15"
+    ],
+    "val": null,
+    "test": [
+     "2018-10-18",
+     "2018-11-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1295.1568343477472,
+     "llf_default": -1295.7130254510143,
+     "llf_gain": 0.5561911032671105,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-10-06",
+     "2018-11-02"
+    ],
+    "val": null,
+    "test": [
+     "2018-11-07",
+     "2018-11-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1309.2802315479705,
+     "llf_default": -1309.7725567661273,
+     "llf_gain": 0.4923252181567932,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-10-27",
+     "2018-11-22"
+    ],
+    "val": null,
+    "test": [
+     "2018-11-27",
+     "2018-12-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1314.4918846500025,
+     "llf_default": -1314.637596722731,
+     "llf_gain": 0.14571207272842912,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-11-16",
+     "2018-12-12"
+    ],
+    "val": null,
+    "test": [
+     "2018-12-17",
+     "2019-01-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1320.215259981952,
+     "llf_default": -1320.5631911321689,
+     "llf_gain": 0.34793115021693666,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-12-04",
+     "2019-01-04"
+    ],
+    "val": null,
+    "test": [
+     "2019-01-09",
+     "2019-01-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1328.1244373018385,
+     "llf_default": -1328.557032529623,
+     "llf_gain": 0.43259522778453174,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2015-12-24",
+     "2019-01-24"
+    ],
+    "val": null,
+    "test": [
+     "2019-01-29",
+     "2019-02-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1338.5678060775376,
+     "llf_default": -1338.5678060775376,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-01-18",
+     "2019-02-18"
+    ],
+    "val": null,
+    "test": [
+     "2019-02-21",
+     "2019-03-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1346.623669916658,
+     "llf_default": -1347.9213201391979,
+     "llf_gain": 1.2976502225399145,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-02-05",
+     "2019-03-11"
+    ],
+    "val": null,
+    "test": [
+     "2019-03-14",
+     "2019-04-02"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1349.2373182394513,
+     "llf_default": -1349.2836263558693,
+     "llf_gain": 0.04630811641800392,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-03-02",
+     "2019-03-29"
+    ],
+    "val": null,
+    "test": [
+     "2019-04-03",
+     "2019-04-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1345.2860963231592,
+     "llf_default": -1345.2860963231592,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-03-22",
+     "2019-04-18"
+    ],
+    "val": null,
+    "test": [
+     "2019-04-23",
+     "2019-05-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1347.7568710868427,
+     "llf_default": -1348.0119100221916,
+     "llf_gain": 0.25503893534892086,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-04-11",
+     "2019-05-10"
+    ],
+    "val": null,
+    "test": [
+     "2019-05-15",
+     "2019-06-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1354.199658454787,
+     "llf_default": -1354.199658454787,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-05-02",
+     "2019-05-30"
+    ],
+    "val": null,
+    "test": [
+     "2019-06-04",
+     "2019-06-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1362.0149745454637,
+     "llf_default": -1362.0958247472572,
+     "llf_gain": 0.08085020179350977,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-05-24",
+     "2019-06-20"
+    ],
+    "val": null,
+    "test": [
+     "2019-06-25",
+     "2019-07-12"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1365.4693390502516,
+     "llf_default": -1365.6722487801462,
+     "llf_gain": 0.20290972989459988,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-06-14",
+     "2019-07-10"
+    ],
+    "val": null,
+    "test": [
+     "2019-07-15",
+     "2019-08-01"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1374.6137074080443,
+     "llf_default": -1374.708659900676,
+     "llf_gain": 0.09495249263159167,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-07-04",
+     "2019-07-30"
+    ],
+    "val": null,
+    "test": [
+     "2019-08-02",
+     "2019-08-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1377.916309100077,
+     "llf_default": -1377.916309100077,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-07-22",
+     "2019-08-20"
+    ],
+    "val": null,
+    "test": [
+     "2019-08-23",
+     "2019-09-11"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1387.321400381185,
+     "llf_default": -1387.321400381185,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-08-11",
+     "2019-09-09"
+    ],
+    "val": null,
+    "test": [
+     "2019-09-16",
+     "2019-10-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1400.2620068591077,
+     "llf_default": -1400.2647598495525,
+     "llf_gain": 0.0027529904448329034,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-09-01",
+     "2019-10-01"
+    ],
+    "val": null,
+    "test": [
+     "2019-10-07",
+     "2019-10-25"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1397.2491060407147,
+     "llf_default": -1397.2491060407147,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-09-26",
+     "2019-10-23"
+    ],
+    "val": null,
+    "test": [
+     "2019-10-28",
+     "2019-11-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1395.0468798069069,
+     "llf_default": -1395.0468798069069,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-10-17",
+     "2019-11-12"
+    ],
+    "val": null,
+    "test": [
+     "2019-11-15",
+     "2019-12-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1397.0655746583038,
+     "llf_default": -1397.0655746583038,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-11-04",
+     "2019-12-02"
+    ],
+    "val": null,
+    "test": [
+     "2019-12-05",
+     "2019-12-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1396.8804786163741,
+     "llf_default": -1396.8812777409707,
+     "llf_gain": 0.0007991245965968119,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-11-24",
+     "2019-12-20"
+    ],
+    "val": null,
+    "test": [
+     "2019-12-26",
+     "2020-01-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1403.5169352973548,
+     "llf_default": -1403.5169352973548,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2016-12-14",
+     "2020-01-14"
+    ],
+    "val": null,
+    "test": [
+     "2020-01-17",
+     "2020-02-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1407.7421398456363,
+     "llf_default": -1408.2586068270869,
+     "llf_gain": 0.5164669814505487,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-01-04",
+     "2020-02-05"
+    ],
+    "val": null,
+    "test": [
+     "2020-02-10",
+     "2020-02-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1413.4991743668377,
+     "llf_default": -1413.4991743668377,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-01-24",
+     "2020-02-25"
+    ],
+    "val": null,
+    "test": [
+     "2020-02-28",
+     "2020-03-18"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1418.7857626712516,
+     "llf_default": -1418.7857626712516,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-02-15",
+     "2020-03-16"
+    ],
+    "val": null,
+    "test": [
+     "2020-03-19",
+     "2020-04-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1451.3703320369364,
+     "llf_default": -1451.6025855705652,
+     "llf_gain": 0.2322535336288638,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-03-08",
+     "2020-04-03"
+    ],
+    "val": null,
+    "test": [
+     "2020-04-08",
+     "2020-04-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1524.3205688588155,
+     "llf_default": -1524.3205688588155,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-03-28",
+     "2020-04-24"
+    ],
+    "val": null,
+    "test": [
+     "2020-04-29",
+     "2020-05-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1535.276062004305,
+     "llf_default": -1535.276062004305,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-04-17",
+     "2020-05-19"
+    ],
+    "val": null,
+    "test": [
+     "2020-05-22",
+     "2020-06-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1540.089796380673,
+     "llf_default": -1540.089796380673,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-05-11",
+     "2020-06-08"
+    ],
+    "val": null,
+    "test": [
+     "2020-06-11",
+     "2020-06-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1544.9137495818388,
+     "llf_default": -1545.17440856082,
+     "llf_gain": 0.2606589789811551,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-05-31",
+     "2020-06-26"
+    ],
+    "val": null,
+    "test": [
+     "2020-07-01",
+     "2020-07-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1557.7374402493679,
+     "llf_default": -1557.9484093168135,
+     "llf_gain": 0.2109690674456033,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-06-21",
+     "2020-07-16"
+    ],
+    "val": null,
+    "test": [
+     "2020-07-21",
+     "2020-08-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1556.903575043311,
+     "llf_default": -1557.2732113298034,
+     "llf_gain": 0.36963628649232305,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-07-11",
+     "2020-08-05"
+    ],
+    "val": null,
+    "test": [
+     "2020-08-10",
+     "2020-08-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1555.9960170415882,
+     "llf_default": -1555.9960170415882,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-07-31",
+     "2020-08-26"
+    ],
+    "val": null,
+    "test": [
+     "2020-08-31",
+     "2020-09-17"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1557.8302270972067,
+     "llf_default": -1557.8302270972067,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-08-21",
+     "2020-09-15"
+    ],
+    "val": null,
+    "test": [
+     "2020-09-18",
+     "2020-10-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1553.6552070084394,
+     "llf_default": -1553.6552070084394,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-09-08",
+     "2020-10-08"
+    ],
+    "val": null,
+    "test": [
+     "2020-10-14",
+     "2020-11-02"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1559.0772966048376,
+     "llf_default": -1559.0775569728992,
+     "llf_gain": 0.0002603680616175552,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-09-28",
+     "2020-10-29"
+    ],
+    "val": null,
+    "test": [
+     "2020-11-03",
+     "2020-11-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1562.604726319015,
+     "llf_default": -1562.6053232036443,
+     "llf_gain": 0.0005968846292034868,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-10-26",
+     "2020-11-18"
+    ],
+    "val": null,
+    "test": [
+     "2020-11-23",
+     "2020-12-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1566.8527491683785,
+     "llf_default": -1566.85900525953,
+     "llf_gain": 0.006256091151499277,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-11-15",
+     "2020-12-08"
+    ],
+    "val": null,
+    "test": [
+     "2020-12-11",
+     "2021-01-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1567.1971625276758,
+     "llf_default": -1567.2115338098083,
+     "llf_gain": 0.014371282132515262,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-12-05",
+     "2020-12-29"
+    ],
+    "val": null,
+    "test": [
+     "2021-01-05",
+     "2021-01-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1567.5509445189969,
+     "llf_default": -1567.5976725497583,
+     "llf_gain": 0.04672803076141463,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2017-12-26",
+     "2021-01-20"
+    ],
+    "val": null,
+    "test": [
+     "2021-01-25",
+     "2021-02-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1568.1834992348481,
+     "llf_default": -1568.2767179040025,
+     "llf_gain": 0.0932186691543393,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-01-17",
+     "2021-02-09"
+    ],
+    "val": null,
+    "test": [
+     "2021-02-16",
+     "2021-03-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1568.7538925404026,
+     "llf_default": -1568.7538925404026,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-02-06",
+     "2021-03-04"
+    ],
+    "val": null,
+    "test": [
+     "2021-03-09",
+     "2021-03-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1574.773738109277,
+     "llf_default": -1574.7796020850585,
+     "llf_gain": 0.005863975781494446,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-02-28",
+     "2021-03-24"
+    ],
+    "val": null,
+    "test": [
+     "2021-03-29",
+     "2021-04-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1576.5481928041595,
+     "llf_default": -1576.5481928041595,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-03-21",
+     "2021-04-13"
+    ],
+    "val": null,
+    "test": [
+     "2021-04-16",
+     "2021-05-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1576.530339599956,
+     "llf_default": -1576.5339589647942,
+     "llf_gain": 0.0036193648381868115,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-04-10",
+     "2021-05-03"
+    ],
+    "val": null,
+    "test": [
+     "2021-05-07",
+     "2021-05-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma+",
+     "llf": -1573.6355928389025,
+     "llf_default": -1573.6383489823015,
+     "llf_gain": 0.002756143398983113,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-04-30",
+     "2021-05-25"
+    ],
+    "val": null,
+    "test": [
+     "2021-05-28",
+     "2021-06-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1576.2988306361106,
+     "llf_default": -1576.2988306361106,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-05-23",
+     "2021-06-14"
+    ],
+    "val": null,
+    "test": [
+     "2021-06-17",
+     "2021-07-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1576.4645856311104,
+     "llf_default": -1576.4645856311104,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-06-14",
+     "2021-07-02"
+    ],
+    "val": null,
+    "test": [
+     "2021-07-07",
+     "2021-07-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1574.590747084028,
+     "llf_default": -1574.7634426657717,
+     "llf_gain": 0.17269558174371014,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-07-04",
+     "2021-07-22"
+    ],
+    "val": null,
+    "test": [
+     "2021-07-27",
+     "2021-08-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1569.1093920804083,
+     "llf_default": -1569.3135067127214,
+     "llf_gain": 0.20411463231312155,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-07-24",
+     "2021-08-11"
+    ],
+    "val": null,
+    "test": [
+     "2021-08-17",
+     "2021-09-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1567.9335756631767,
+     "llf_default": -1567.9337604101036,
+     "llf_gain": 0.00018474692683412286,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-08-13",
+     "2021-09-01"
+    ],
+    "val": null,
+    "test": [
+     "2021-09-06",
+     "2021-09-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1565.9354596867033,
+     "llf_default": -1565.9354596867033,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-09-03",
+     "2021-09-24"
+    ],
+    "val": null,
+    "test": [
+     "2021-09-29",
+     "2021-10-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma+",
+     "llf": -1564.5963600831235,
+     "llf_default": -1564.8128875117175,
+     "llf_gain": 0.21652742859396312,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-09-21",
+     "2021-10-18"
+    ],
+    "val": null,
+    "test": [
+     "2021-10-21",
+     "2021-11-09"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1569.6236844504713,
+     "llf_default": -1569.6255443433145,
+     "llf_gain": 0.001859892843185662,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-10-18",
+     "2021-11-05"
+    ],
+    "val": null,
+    "test": [
+     "2021-11-10",
+     "2021-11-29"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1563.1958162729456,
+     "llf_default": -1563.2070832515706,
+     "llf_gain": 0.011266978624917101,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-11-07",
+     "2021-11-25"
+    ],
+    "val": null,
+    "test": [
+     "2021-11-30",
+     "2021-12-17"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1561.156264760621,
+     "llf_default": -1561.2175991594959,
+     "llf_gain": 0.06133439887480563,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-11-27",
+     "2021-12-15"
+    ],
+    "val": null,
+    "test": [
+     "2021-12-20",
+     "2022-01-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1560.9677032955015,
+     "llf_default": -1560.9879167258555,
+     "llf_gain": 0.020213430354033335,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2018-12-17",
+     "2022-01-05"
+    ],
+    "val": null,
+    "test": [
+     "2022-01-10",
+     "2022-01-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1557.5592854427357,
+     "llf_default": -1557.5712594819508,
+     "llf_gain": 0.011974039215147059,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-01-09",
+     "2022-01-25"
+    ],
+    "val": null,
+    "test": [
+     "2022-01-28",
+     "2022-02-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1556.699719071107,
+     "llf_default": -1556.7256018529295,
+     "llf_gain": 0.0258827818224745,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-01-29",
+     "2022-02-17"
+    ],
+    "val": null,
+    "test": [
+     "2022-02-22",
+     "2022-03-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1557.0527949369987,
+     "llf_default": -1557.0527949369987,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-02-21",
+     "2022-03-11"
+    ],
+    "val": null,
+    "test": [
+     "2022-03-16",
+     "2022-04-04"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1555.4713655470755,
+     "llf_default": -1555.4713655470755,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-03-14",
+     "2022-03-31"
+    ],
+    "val": null,
+    "test": [
+     "2022-04-05",
+     "2022-04-22"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1554.9200479757858,
+     "llf_default": -1554.9245155006306,
+     "llf_gain": 0.004467524844812942,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-04-03",
+     "2022-04-20"
+    ],
+    "val": null,
+    "test": [
+     "2022-04-25",
+     "2022-05-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1553.5737316517834,
+     "llf_default": -1553.612795813698,
+     "llf_gain": 0.03906416191466633,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-04-23",
+     "2022-05-11"
+    ],
+    "val": null,
+    "test": [
+     "2022-05-16",
+     "2022-06-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1553.329894399632,
+     "llf_default": -1555.5359806941622,
+     "llf_gain": 2.2060862945302233,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-05-15",
+     "2022-05-31"
+    ],
+    "val": null,
+    "test": [
+     "2022-06-07",
+     "2022-06-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1554.906699698734,
+     "llf_default": -1554.9075108995294,
+     "llf_gain": 0.0008112007953968714,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-06-04",
+     "2022-06-22"
+    ],
+    "val": null,
+    "test": [
+     "2022-06-27",
+     "2022-07-14"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1557.9067535823979,
+     "llf_default": -1558.1949338433603,
+     "llf_gain": 0.28818026096246285,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-06-25",
+     "2022-07-12"
+    ],
+    "val": null,
+    "test": [
+     "2022-07-15",
+     "2022-08-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma+",
+     "llf": -1573.0636598187834,
+     "llf_default": -1573.1034734128768,
+     "llf_gain": 0.03981359409340257,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-07-15",
+     "2022-08-01"
+    ],
+    "val": null,
+    "test": [
+     "2022-08-04",
+     "2022-08-24"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1568.4422510013035,
+     "llf_default": -1568.5202319424511,
+     "llf_gain": 0.07798094114764353,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-08-02",
+     "2022-08-22"
+    ],
+    "val": null,
+    "test": [
+     "2022-08-25",
+     "2022-09-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1569.0455975096695,
+     "llf_default": -1569.0455975096695,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-08-23",
+     "2022-09-13"
+    ],
+    "val": null,
+    "test": [
+     "2022-09-16",
+     "2022-10-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1567.9534003857766,
+     "llf_default": -1567.9556051589768,
+     "llf_gain": 0.002204773200219279,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-09-16",
+     "2022-10-04"
+    ],
+    "val": null,
+    "test": [
+     "2022-10-07",
+     "2022-10-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1570.1993834349719,
+     "llf_default": -1570.1993834349719,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-10-07",
+     "2022-10-25"
+    ],
+    "val": null,
+    "test": [
+     "2022-10-28",
+     "2022-11-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1575.7749652051639,
+     "llf_default": -1575.7936331342933,
+     "llf_gain": 0.018667929129378535,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-10-28",
+     "2022-11-14"
+    ],
+    "val": null,
+    "test": [
+     "2022-11-17",
+     "2022-12-06"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1583.561442975512,
+     "llf_default": -1583.5872837240536,
+     "llf_gain": 0.02584074854166829,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-11-15",
+     "2022-12-02"
+    ],
+    "val": null,
+    "test": [
+     "2022-12-07",
+     "2022-12-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1586.3229861815785,
+     "llf_default": -1586.323098131385,
+     "llf_gain": 0.00011194980652362574,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-12-05",
+     "2022-12-22"
+    ],
+    "val": null,
+    "test": [
+     "2022-12-27",
+     "2023-01-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1586.6963034512435,
+     "llf_default": -1586.7020717411742,
+     "llf_gain": 0.005768289930756509,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2019-12-26",
+     "2023-01-12"
+    ],
+    "val": null,
+    "test": [
+     "2023-01-17",
+     "2023-02-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1587.098855247079,
+     "llf_default": -1587.098855247079,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-01-17",
+     "2023-02-03"
+    ],
+    "val": null,
+    "test": [
+     "2023-02-08",
+     "2023-02-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1585.0836751606423,
+     "llf_default": -1585.087910711476,
+     "llf_gain": 0.004235550833755042,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-02-10",
+     "2023-02-23"
+    ],
+    "val": null,
+    "test": [
+     "2023-02-28",
+     "2023-03-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1586.691686707046,
+     "llf_default": -1586.691686707046,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-02-28",
+     "2023-03-16"
+    ],
+    "val": null,
+    "test": [
+     "2023-03-21",
+     "2023-04-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1583.4462735626057,
+     "llf_default": -1583.4463809098836,
+     "llf_gain": 0.00010734727788985765,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-03-19",
+     "2023-04-05"
+    ],
+    "val": null,
+    "test": [
+     "2023-04-10",
+     "2023-04-27"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1561.379937356687,
+     "llf_default": -1563.069236756401,
+     "llf_gain": 1.689299399714173,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-04-08",
+     "2023-04-25"
+    ],
+    "val": null,
+    "test": [
+     "2023-04-28",
+     "2023-05-19"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1504.0885293217882,
+     "llf_default": -1504.6022695621464,
+     "llf_gain": 0.5137402403581746,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-04-29",
+     "2023-05-17"
+    ],
+    "val": null,
+    "test": [
+     "2023-05-22",
+     "2023-06-12"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1499.0468110353236,
+     "llf_default": -1499.0468110353236,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-05-22",
+     "2023-06-08"
+    ],
+    "val": null,
+    "test": [
+     "2023-06-13",
+     "2023-06-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1496.9453358272592,
+     "llf_default": -1497.5624049507746,
+     "llf_gain": 0.6170691235154209,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-06-11",
+     "2023-06-28"
+    ],
+    "val": null,
+    "test": [
+     "2023-07-03",
+     "2023-07-20"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1495.9538211465522,
+     "llf_default": -1495.9538211465522,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-07-01",
+     "2023-07-18"
+    ],
+    "val": null,
+    "test": [
+     "2023-07-21",
+     "2023-08-09"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1486.7743126951982,
+     "llf_default": -1486.7743126951982,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-07-21",
+     "2023-08-07"
+    ],
+    "val": null,
+    "test": [
+     "2023-08-10",
+     "2023-08-30"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "zero",
+     "llf": -1498.4105680175378,
+     "llf_default": -1498.5338173013477,
+     "llf_gain": 0.12324928380985511,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-08-10",
+     "2023-08-28"
+    ],
+    "val": null,
+    "test": [
+     "2023-08-31",
+     "2023-09-19"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1499.6455877854112,
+     "llf_default": -1499.6455877854112,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-08-31",
+     "2023-09-15"
+    ],
+    "val": null,
+    "test": [
+     "2023-09-20",
+     "2023-10-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1494.09794761226,
+     "llf_default": -1494.09794761226,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-09-18",
+     "2023-10-12"
+    ],
+    "val": null,
+    "test": [
+     "2023-10-17",
+     "2023-11-03"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1496.5444660394003,
+     "llf_default": -1496.5444660394003,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-10-14",
+     "2023-11-01"
+    ],
+    "val": null,
+    "test": [
+     "2023-11-06",
+     "2023-11-23"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1499.2021197271129,
+     "llf_default": -1499.2021197271129,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-11-03",
+     "2023-11-21"
+    ],
+    "val": null,
+    "test": [
+     "2023-11-24",
+     "2023-12-13"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1502.6687988942604,
+     "llf_default": -1502.6687988942604,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-11-23",
+     "2023-12-11"
+    ],
+    "val": null,
+    "test": [
+     "2023-12-14",
+     "2024-01-05"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ma+",
+     "llf": -1499.564534503159,
+     "llf_default": -1499.662380085624,
+     "llf_gain": 0.09784558246497,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2020-12-11",
+     "2024-01-03"
+    ],
+    "val": null,
+    "test": [
+     "2024-01-08",
+     "2024-01-25"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1498.687301131318,
+     "llf_default": -1498.687301131318,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-01-05",
+     "2024-01-23"
+    ],
+    "val": null,
+    "test": [
+     "2024-01-26",
+     "2024-02-16"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1496.5370109099908,
+     "llf_default": -1496.5370109099908,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-01-25",
+     "2024-02-14"
+    ],
+    "val": null,
+    "test": [
+     "2024-02-19",
+     "2024-03-08"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1499.6178815145588,
+     "llf_default": -1499.6178815145588,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-02-16",
+     "2024-03-06"
+    ],
+    "val": null,
+    "test": [
+     "2024-03-11",
+     "2024-03-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1494.7983098082268,
+     "llf_default": -1494.7983098082268,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-03-09",
+     "2024-03-26"
+    ],
+    "val": null,
+    "test": [
+     "2024-03-29",
+     "2024-04-18"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1489.3484535618022,
+     "llf_default": -1489.4631393119696,
+     "llf_gain": 0.11468575016738214,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-03-29",
+     "2024-04-16"
+    ],
+    "val": null,
+    "test": [
+     "2024-04-19",
+     "2024-05-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1491.3618380840599,
+     "llf_default": -1491.3618380840599,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-04-16",
+     "2024-05-08"
+    ],
+    "val": null,
+    "test": [
+     "2024-05-13",
+     "2024-05-31"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1498.3975098589426,
+     "llf_default": -1498.3975098589426,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-05-07",
+     "2024-05-29"
+    ],
+    "val": null,
+    "test": [
+     "2024-06-03",
+     "2024-06-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1495.4841743060585,
+     "llf_default": -1495.4841743060585,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-05-28",
+     "2024-06-19"
+    ],
+    "val": null,
+    "test": [
+     "2024-06-24",
+     "2024-07-11"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1491.0753857432624,
+     "llf_default": -1491.3833912634254,
+     "llf_gain": 0.3080055201630785,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-06-17",
+     "2024-07-09"
+    ],
+    "val": null,
+    "test": [
+     "2024-07-12",
+     "2024-07-31"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1492.2594471038542,
+     "llf_default": -1492.2594471038542,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-07-07",
+     "2024-07-29"
+    ],
+    "val": null,
+    "test": [
+     "2024-08-01",
+     "2024-08-21"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar-",
+     "llf": -1501.2314665368767,
+     "llf_default": -1501.2607672438949,
+     "llf_gain": 0.029300707018137473,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-07-27",
+     "2024-08-19"
+    ],
+    "val": null,
+    "test": [
+     "2024-08-22",
+     "2024-09-10"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1541.6217404617596,
+     "llf_default": -1541.6217404617596,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-08-17",
+     "2024-09-06"
+    ],
+    "val": null,
+    "test": [
+     "2024-09-11",
+     "2024-10-07"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1549.5754848624542,
+     "llf_default": -1549.5754848624542,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-09-06",
+     "2024-10-02"
+    ],
+    "val": null,
+    "test": [
+     "2024-10-08",
+     "2024-10-28"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1556.2954615702313,
+     "llf_default": -1558.6119715006746,
+     "llf_gain": 2.316509930443317,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-09-29",
+     "2024-10-24"
+    ],
+    "val": null,
+    "test": [
+     "2024-10-29",
+     "2024-11-15"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "nm",
+     "llf": -1564.8196569979505,
+     "llf_default": -1564.8514008649752,
+     "llf_gain": 0.031743867024715655,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-10-21",
+     "2024-11-13"
+    ],
+    "val": null,
+    "test": [
+     "2024-11-18",
+     "2024-12-05"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "ar+",
+     "llf": -1566.383360863123,
+     "llf_default": -1566.4112302007604,
+     "llf_gain": 0.027869337637412173,
+     "n_starts": 7,
+     "converged": true
+    }
+   },
+   {
+    "train": [
+     "2021-11-10",
+     "2024-12-03"
+    ],
+    "val": null,
+    "test": [
+     "2024-12-06",
+     "2024-12-26"
+    ],
+    "n_train": 754,
+    "n_val": 0,
+    "n_test": 14,
+    "model_diag": {
+     "start_used": "default",
+     "llf": -1570.3729047893125,
+     "llf_default": -1570.3729047893125,
+     "llf_gain": 0.0,
+     "n_starts": 7,
+     "converged": true
+    }
+   }
+  ]
+ },
+ "seal_policy": {
+  "target": "091160",
+  "mode": "trading",
+  "policy_date": "2025-01-01",
+  "configured": "2025-01-01",
+  "status": "ok"
+ },
+ "run_record": {
+  "run_id": "20261120T140529Z_814406",
+  "job_id": "20261120_230521_5e73a9",
+  "started_utc": "2026-11-20T14:05:29+00:00",
+  "finished_utc": "2026-11-20T14:31:20+00:00",
+  "command": [
+   "F:\\works\\TimeSeriesPredict\\cli.py",
+   "run",
+   "F:\\works\\TimeSeriesPredict\\results\\jobs\\configs\\20261120_230521_5e73a9.json"
+  ],
+  "host": {
+   "platform": "Windows-11-10.0.26300-SP0",
+   "python": "3.14.10",
+   "machine": "AMD64",
+   "device": "cuda"
+  },
+  "libraries": {
+   "numpy": "2.5.5",
+   "pandas": "2.3.3",
+   "scipy": "1.18.1",
+   "scikit-learn": "1.9.1",
+   "statsmodels": "0.15.0",
+   "lightgbm": "4.7.0",
+   "torch": "2.11.0+cu128",
+   "pydantic": "2.14.3",
+   "pyarrow": "26.0.1",
+   "openpyxl": "3.1.5"
+  },
+  "master": {
+   "path": "F:\\works\\TimeSeriesPredict\\data\\variable_master.xlsx",
+   "sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed",
+   "snapshot": "master_history/8655f2ccbbfb.xlsx"
+  },
+  "data_version": {
+   "id": "20261112T143734Z",
+   "manifest_sha256": "26e51e46107bcde8ea04cf5c92479aa001952b2e03fcc20290d09d8cdc1e11e6",
+   "created_utc": "2026-11-12T14:38:57.020492+00:00",
+   "n_collect_runs": 1,
+   "last_collect": {
+    "started_utc": "2026-11-12T14:37:34.927233+00:00",
+    "finished_utc": "2026-11-12T14:38:56.976065+00:00",
+    "sources": [
+     "datago",
+     "derived",
+     "ecos",
+     "fred",
+     "krx",
+     "pykrx",
+     "xlsx",
+     "yf"
+    ],
+    "start": "2006-01-01",
+    "end": null,
+    "master_sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed"
+   },
+   "collect_master_sha256": "8655f2ccbbfbb0c1c81642d16a26c48c4a7c91a35710659d25922a84e265beed"
+  },
+  "variables": {
+   "requested": [],
+   "used": [],
+   "substituted": [],
+   "merged": [],
+   "excluded": []
+  },
+  "override_notes": [],
+  "notes": [],
+  "ledger_before": {
+   "seq": 3,
+   "sha": "89e0802a3351c738a92e9499a980d7374aead8df9051bdb3ef92993cdb0e9a94"
+  }
+ }
+}
