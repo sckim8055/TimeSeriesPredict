@@ -204,8 +204,29 @@ def _metrics_table(r: dict) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["구분", "지표", "값", "뜻"])
 
 
-def build_package(stem: str, result_path: Path, *, data_root: Path, registry, log_dir: Path, jobs_dir: Path, config_dir: Path) -> bytes:
-    """결과 꾸러미 zip 의 바이트."""
+MADE_AT_RUN = "실험 직후 자동으로 만들어 저장한 것 — 실행 당시의 데이터·코드·로그 그대로"
+MADE_ON_DOWNLOAD = ("내려받을 때 만든 것 — 이 결과에는 실험 직후 저장한 꾸러미가 없습니다(2026-11-21 이전 결과이거나 명령줄로 실행). "
+                    "숫자(결과·지표·폴드)는 결과 파일 그대로지만, 입력 자료·단계표·설명은 내려받은 때의 데이터 버전·코드로 다시 만든 것입니다")
+
+
+def package_path(result_path: Path) -> Path:
+    return result_path.with_name(f"{result_path.stem}_package.zip")
+
+
+def save_package(result_path: Path, **kw) -> Path:
+    """실험 직후: 꾸러미를 결과 옆(<stem>_package.zip)에 저장. 임시 파일에 쓴 뒤 이름을 바꿔 반쯤 쓴 파일이 남지 않게."""
+    import os
+    out = package_path(result_path)
+    data = build_package(result_path.stem, result_path, made=MADE_AT_RUN, **kw)
+    tmp = out.with_name(f".{out.name}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, out)
+    return out
+
+
+def build_package(stem: str, result_path: Path, *, data_root: Path, registry, log_dir: Path, jobs_dir: Path, config_dir: Path,
+                  made: str = MADE_ON_DOWNLOAD) -> bytes:
+    """결과 꾸러미 zip 의 바이트. made = 언제 만든 것인지(README·보고서 맨 위에 적힘)."""
     from engine.experiment import ExperimentConfig, load_plugin, prepare
     from engine.features import describe_feature
     from engine.store import DataVersion
@@ -382,7 +403,7 @@ def build_package(stem: str, result_path: Path, *, data_root: Path, registry, lo
     from engine.datatrace import pipeline_steps
     steps_all = pipeline_steps(r, cfg, ds, var_sum, n_tech)
     files[P1 + "데이터_흐름_전체.csv"] = _csv(pd.DataFrame(steps_all, columns=["단계", "무엇을 했나", "이 결과에서", "확인할 파일"]))
-    ctx = dict(steps_all=steps_all, var_sum=var_sum, expl=expl, stem=stem, r=r, cfg=cfg, rr=rr, mode=mode, model_name=model_name, model_doc=model_doc, cfg_df=cfg_df, par_df=par_df,
+    ctx = dict(made=made, steps_all=steps_all, var_sum=var_sum, expl=expl, stem=stem, r=r, cfg=cfg, rr=rr, mode=mode, model_name=model_name, model_doc=model_doc, cfg_df=cfg_df, par_df=par_df,
                var_rows=var_rows, data_check=data_check, ds=ds, plan=plan, fold_df=fold_df, linfo=linfo, missing=missing, met_df=met_df, notes=notes)
     try:
         files["보고서.docx"] = _report_docx(ctx)
@@ -589,6 +610,7 @@ def _report_docx(ctx) -> bytes:
     st.element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")   # 한글 글꼴
     doc.add_heading(f"결과 보고서 — {ctx['stem']}", 0)
     doc.add_paragraph(f"만든 시각 {datetime.now():%Y-%m-%d %H:%M} · TimeSeriesPredict 결과 꾸러미. 숫자는 결과 파일·데이터·로그의 값 그대로입니다.")
+    doc.add_paragraph(f"만든 때: {ctx.get('made', '')}")
     for title, blocks in _sections(ctx):
         doc.add_heading(title, 1)
         for b in blocks:
@@ -617,7 +639,7 @@ def _report_html(ctx) -> str:
     e = lambda x: html.escape("" if x is None or (isinstance(x, float) and x != x) else str(x))  # noqa: E731
     parts = [f"<html><head><meta charset='utf-8'><title>결과 보고서 {e(ctx['stem'])}</title>"
              "<style>body{font-family:'Malgun Gothic',sans-serif;font-size:13px}table{border-collapse:collapse;margin:6px 0}td,th{border:1px solid #999;padding:3px 6px;vertical-align:top}</style></head><body>",
-             f"<h1>결과 보고서 — {e(ctx['stem'])}</h1>"]
+             f"<h1>결과 보고서 — {e(ctx['stem'])}</h1>", f"<p>만든 때: {e(ctx.get('made', ''))}</p>"]
     for title, blocks in _sections(ctx):
         parts.append(f"<h2>{e(title)}</h2>")
         for b in blocks:
@@ -663,7 +685,7 @@ def _readme(ctx, names: list[str]) -> str:
         "3_사후_결과/일별_결과_열설명.csv": "일별 결과 각 열의 뜻",
         "3_사후_결과/변수_중요도.csv": "입력별 중요도(폴드 평균)와 뜻",
     }
-    lines = [f"TimeSeriesPredict 결과 꾸러미 — {ctx['stem']}", f"만든 시각 {datetime.now():%Y-%m-%d %H:%M:%S}", "",
+    lines = [f"TimeSeriesPredict 결과 꾸러미 — {ctx['stem']}", f"만든 시각 {datetime.now():%Y-%m-%d %H:%M:%S}", f"만든 때: {ctx.get('made', '')}", "",
              "이 zip 하나로 이 결과가 언제, 어떤 데이터로, 어떤 방법으로, 어떻게 진행되어, 무엇이 나왔는지 알 수 있게 모았습니다.",
              "읽는 순서: 보고서 → 1_사전_입력 → 2_사중_진행 → 3_사후_결과. CSV 는 엑셀에서 바로 열립니다(UTF-8).", "",
              "파일:"]

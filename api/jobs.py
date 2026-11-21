@@ -30,6 +30,8 @@ def _now() -> str:
 
 
 class JobStore:
+    after_done = None   # 작업이 성공해 결과가 저장된 뒤 부를 함수(job dict) — api/main 이 결과 꾸러미 저장을 단다(2026-11-21)
+
     def __init__(self):
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -135,6 +137,16 @@ class JobStore:
             except Exception:  # noqa: BLE001
                 pass
             self._write(job)
+            if job["status"] == "done" and job.get("result_path") and self.after_done is not None:
+                # 결과 꾸러미: 작업 출력 로그까지 다 쓴 뒤에 만들어야 '실행 당시 그대로'가 된다. 실패해도 작업 결과는 그대로(알림만)
+                try:
+                    pk = self.after_done(job)
+                    if pk:
+                        job = self.get(job_id); job["package_path"] = str(pk); self._write(job)
+                        print(f"[결과 꾸러미 저장] {pk}", flush=True)
+                except Exception as e:  # noqa: BLE001
+                    jlog.warning("결과 꾸러미를 만들지 못함 %s: %s: %s", job_id, type(e).__name__, e)
+                    print(f"[결과 꾸러미 실패] {job_id}: {e} — 결과 화면에서 내려받으면 그때 만듭니다", flush=True)
             if job["status"] == "failed":
                 print(f"[작업 실패] {job_id} — 전체 로그: {JOBS_DIR / (job_id + '.log')}", flush=True)
             with self._lock:

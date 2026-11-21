@@ -223,7 +223,9 @@ function Detail({ stem, onDeleted }: { stem: string; onDeleted: () => void }) {
           <details><summary className="hint">설정 전체와 뜻 — 모든 칸의 이 결과 값·기본값·뜻 (굵게 = 기본값에서 바꾼 칸)</summary><ConfigTable config={c} /></details>
           <details><summary className="hint">모델 파라미터 전체와 뜻 — 실제로 쓰인 값</summary><ParamTable modelFile={c.model} params={r.model.params} /></details>
           <details><summary className="hint">설정 JSON (원본 그대로)</summary><pre className="log">{JSON.stringify(c, null, 1)}</pre></details>
-          <div style={{ marginTop: 10 }}><a className="btn" href={`/api/results/${encodeURIComponent(stem)}/package.zip`} download>결과 꾸러미 내려받기 (zip · Word 보고서)</a> <span className="hint">사전(설정·모델·입력 자료와 뜻·데이터 변화 단계·검증 계획) · 사중(실행 기록·폴드별 기간·눈금·계산 따라가기·로그) · 사후(결과·지표와 뜻·일별 결과) — 이 zip 하나로 결과의 모든 것</span></div>
+          <div style={{ marginTop: 10 }}><a className="btn" href={`/api/results/${encodeURIComponent(stem)}/package.zip`} download>결과 꾸러미 내려받기 (zip · Word 보고서)</a> {r.package_saved
+            ? <span className="badge pass" title="실험이 끝난 직후 자동으로 만들어 저장한 꾸러미를 그대로 내려받습니다(실행 당시의 데이터·코드·로그 그대로)">실행 당시 저장본</span>
+            : <span className="badge warn" title="이 결과에는 실험 직후 저장한 꾸러미가 없어(2026-11-21 이전 결과 등) 누를 때 지금의 데이터 버전·코드로 만듭니다. 숫자는 결과 파일 그대로">저장본 없음 — 누를 때 만듦</span>} <span className="hint">사전(설정·모델·입력 자료와 뜻·데이터 변화 단계·검증 계획) · 사중(실행 기록·폴드별 기간·눈금·계산 따라가기·로그) · 사후(결과·지표와 뜻·일별 결과) — 이 zip 하나로 결과의 모든 것</span></div>
           <div style={{ marginTop: 6 }}><a className="btn" href={`/api/results/${encodeURIComponent(stem)}/logs.zip`} download>로그만 내려받기 (zip)</a> <span className="hint">결과·작업 설정·작업 출력·개발 로그(이 실행 줄)·실행 기록·실행 시간대 접속 기록</span></div>
           <div style={{ marginTop: 10 }}><button onClick={async () => { if (confirm('이 결과 파일을 지웁니다. 실험 카운터는 줄지 않습니다.')) { await api.remove(stem); onDeleted() } }}>결과 삭제</button></div>
         </div>

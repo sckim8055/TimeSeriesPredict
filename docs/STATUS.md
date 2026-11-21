@@ -11,7 +11,7 @@
 
 ### 2026-11-20 결과 화면: 모든 폴드 기간·설정 전체와 뜻·로그 내려받기 (근거 DECISIONS 같은 날)
 - 새 결과부터 periods.folds(모든 폴드). 결과 '설정' 칸에 설정 전체·모델 파라미터 표(뜻 포함)와 '로그 전체 내려받기 (zip)'.
-- 2026-11-21 결과 꾸러미(`/api/results/{stem}/package.zip`, engine/report_pack.py): 사전·사중·사후 폴더 + Word 보고서. 노트북에 `pip install python-docx` 필요(없으면 HTML 보고서). 같은 날 '데이터 변화 단계'(변수별 단계표·폴드별 눈금·계산 따라가기) 추가 — engine/datatrace.py.
+- 2026-11-21 결과 꾸러미(`/api/results/{stem}/package.zip`, engine/report_pack.py): 사전·사중·사후 폴더 + Word 보고서. 노트북에 `pip install python-docx` 필요(없으면 HTML 보고서). 같은 날 '데이터 변화 단계'(변수별 단계표·폴드별 눈금·계산 따라가기) 추가 — engine/datatrace.py. 꾸러미는 작업이 끝난 직후 결과 옆에 저장(실행 당시 그대로), 내려받기는 저장본을 그대로. 시험용 httpx2 를 requirements 에.
 
 ### 2026-11-20 워크포워드 계획 표·도식 숫자 (근거 DECISIONS '2026-11-20')
 - 워크포워드 = 밀려가는 창. 화면 '실제로 쓰이는 구간' 표가 두 모드 모두 첫·마지막 폴드의 자르는 순서와 개수를 보여 줌(실행 기록과 같음). 도식 '학습 N' 바로잡음.

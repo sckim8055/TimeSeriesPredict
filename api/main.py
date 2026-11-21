@@ -179,6 +179,21 @@ def auth_check() -> dict:
 jobs = JobStore()
 
 
+def _save_package_after_job(job: dict):
+    """작업이 끝난 직후 결과 꾸러미를 결과 옆에 저장(2026-11-21) — 실행 당시 상태 그대로 굳히고, 내려받기는 그 파일을 그대로 준다."""
+    from engine.logs import LOG_DIR
+    from engine.report_pack import save_package
+    from api.jobs import CONFIG_DIR, JOBS_DIR
+    rp = _find_result(Path(str(job["result_path"]).replace("\\", "/")).stem)   # cli 가 출력한 저장 경로의 이름 → 결과 폴더의 그 결과
+    if rp is None:
+        return None
+    reg, _ = _registry()
+    return save_package(rp, data_root=DATA, registry=reg, log_dir=LOG_DIR, jobs_dir=JOBS_DIR, config_dir=CONFIG_DIR)
+
+
+jobs.after_done = _save_package_after_job
+
+
 # ---------------------------------------------------------------------------
 # 메타: 변수·모델·데이터 버전
 # ---------------------------------------------------------------------------
@@ -1240,11 +1255,16 @@ def result_package_zip(stem: str):
     from engine.logs import LOG_DIR
     from engine.report_pack import build_package
     from api.jobs import CONFIG_DIR, JOBS_DIR
+    from engine.report_pack import package_path
     p = _find_result(stem)
     if p is None:
         raise HTTPException(404, "결과 없음")
-    reg, _ = _registry()
-    data = build_package(stem, p, data_root=DATA, registry=reg, log_dir=LOG_DIR, jobs_dir=JOBS_DIR, config_dir=CONFIG_DIR)
+    saved = package_path(p)
+    if saved.exists():   # 실험 직후 저장한 꾸러미 = 실행 당시 그대로
+        data = saved.read_bytes()
+    else:                # 저장본이 없는 결과(옛 결과·명령줄 실행): 지금 만든다(README·보고서에 그렇게 적힘)
+        reg, _ = _registry()
+        data = build_package(stem, p, data_root=DATA, registry=reg, log_dir=LOG_DIR, jobs_dir=JOBS_DIR, config_dir=CONFIG_DIR)
     return Response(data, media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{stem}_package.zip"'})
 
@@ -1257,6 +1277,7 @@ def result_detail(stem: str):
     r = json.loads(p.read_text(encoding="utf-8"))
     reg, _ = _registry()
     r["feature_descriptions"] = {n: describe_feature(n, reg) for n in r.get("feature_names", [])}
+    r["package_saved"] = p.with_name(f"{stem}_package.zip").exists()   # 실험 직후 저장한 결과 꾸러미가 있는가(화면 표시용)
     return r
 
 

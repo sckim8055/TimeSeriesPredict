@@ -122,14 +122,15 @@ def archive_existing(out_dir: Path, stem: str, tag: str = "") -> list[str]:
     """같은 이름의 결과(json·일별 parquet)를 history/<stem>__<옛 저장 시각>[_tag].* 로 옮기고 옮긴 파일 목록을 돌려준다.
     둘 중 하나만 남아 있어도(짝 잃은 parquet) 옮긴다. 도중에 실패하면 이미 옮긴 것을 되돌리고 오류를 올린다 — 반쯤 옮겨진 상태를 남기지 않는다."""
     j, q = out_dir / f"{stem}.json", out_dir / f"{stem}_daily.parquet"
-    present = [p for p in (q, j) if p.exists()]  # parquet 먼저: json 이 남아 있는 한 '결과가 있다'로 보인다
+    z = out_dir / f"{stem}_package.zip"   # 결과 꾸러미(2026-11-21) — 결과와 함께 옮겨야 같은 이름의 새 결과에 옛 꾸러미가 붙지 않는다
+    present = [p for p in (z, q, j) if p.exists()]  # json 은 맨 끝: json 이 남아 있는 한 '결과가 있다'로 보인다
     if not present:
         return []
     ts = datetime.fromtimestamp((j if j.exists() else q).stat().st_mtime, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     hist = out_dir / "history"
     hist.mkdir(exist_ok=True)
     label, n = f"{stem}__{ts}" + (f"_{tag}" if tag else ""), 1
-    while any((hist / p.name.replace(stem, label if n == 1 else f"{label}_{n}", 1)).exists() for p in (q, j)):
+    while any((hist / p.name.replace(stem, label if n == 1 else f"{label}_{n}", 1)).exists() for p in (z, q, j)):
         n += 1
     label = label if n == 1 else f"{label}_{n}"
     moved: list[tuple[Path, Path]] = []

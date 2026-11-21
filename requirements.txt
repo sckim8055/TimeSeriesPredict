@@ -14,6 +14,7 @@ pydantic>=2
 python-dotenv
 requests
 pytest
+httpx2              # 시험용: FastAPI TestClient 가 쓴다(서버 실행에는 필요 없음)
 # 수집용
 pykrx
 yfinance

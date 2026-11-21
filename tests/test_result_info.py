@@ -220,3 +220,41 @@ def test_window_fold_record_has_scale_and_blank_counts(tmp_path):
     z = zipfile.ZipFile(io.BytesIO(build_package(p.stem, p, data_root=dv.root, registry=reg, log_dir=tmp_path / "l", jobs_dir=tmp_path / "j", config_dir=tmp_path / "c")))
     assert "2_사중_진행/폴드별_눈금.csv" in z.namelist()
     assert not any("계산_따라가기" in n for n in z.namelist()) and "창 모델" in z.read("README.txt").decode()
+
+
+def test_package_saved_after_job_is_served_frozen_and_archived_with_result(tmp_path, monkeypatch):
+    """실험 직후 저장(2026-11-21): 작업이 끝나면 결과 옆에 <stem>_package.zip 을 저장하고, 내려받기는 그 파일을 그대로(바이트까지 같게) 준다.
+    저장본이 없는 결과는 누를 때 만들고 README 에 그렇게 적는다. 결과를 지우면(history 로 옮기면) 꾸러미도 함께 옮겨진다."""
+    import api.jobs as jobs
+    import api.main as m
+    import engine.logs as lg
+    from engine import runlog
+    from engine.experiment import ExperimentConfig, run_experiment, save_result
+    from engine.report_pack import MADE_AT_RUN, MADE_ON_DOWNLOAD
+    from tests.test_splitplan import _data
+    dv, reg = _data(tmp_path, late=0)
+    res_dir = tmp_path / "results"
+    monkeypatch.setattr(m, "RESULTS", res_dir); monkeypatch.setattr(m, "DATA", dv.root)
+    monkeypatch.setattr(m, "_registry", lambda: (reg, []))
+    monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "j"); monkeypatch.setattr(jobs, "CONFIG_DIR", tmp_path / "c"); monkeypatch.setattr(lg, "LOG_DIR", tmp_path / "logs")
+    assert m.jobs.after_done is m._save_package_after_job
+    mk = lambda seed: save_result(run_experiment(ExperimentConfig(ticker="TEST", model="ridge", variable_ids=["S_signal"], use_technical=False, seed=seed,  # noqa: E731
+                                                                  validation=dict(mode="walkforward", train_len=200, test_len=100)), dv, reg), res_dir / "trading")
+    p = mk(1)
+    pk = m._save_package_after_job({"result_path": str(p).replace("/", "\\\\")})   # 윈도 cli 출력처럼 역슬래시 두 겹이어도
+    assert pk == p.with_name(p.stem + "_package.zip") and pk.exists()
+    c = TestClient(m.app)
+    assert c.get(f"/api/results/{p.stem}").json()["package_saved"] is True
+    got = c.get(f"/api/results/{p.stem}/package.zip").content
+    assert got == pk.read_bytes()                       # 저장본 그대로(다시 만들지 않음)
+    assert MADE_AT_RUN in zipfile.ZipFile(io.BytesIO(got)).read("README.txt").decode()
+    # 저장본이 없는 결과: 누를 때 만들고 그렇게 적는다
+    q = mk(2)
+    assert c.get(f"/api/results/{q.stem}").json()["package_saved"] is False
+    z2 = zipfile.ZipFile(io.BytesIO(c.get(f"/api/results/{q.stem}/package.zip").content))
+    assert MADE_ON_DOWNLOAD in z2.read("README.txt").decode()
+    assert not q.with_name(q.stem + "_package.zip").exists()   # 내려받기만으로는 저장하지 않는다
+    # 결과를 history 로 옮기면 꾸러미도 함께 — 같은 이름의 새 결과에 옛 꾸러미가 붙지 않게
+    moved = runlog.archive_existing(p.parent, p.stem, tag="deleted")
+    assert any(x.endswith("_package.zip") for x in moved) and not pk.exists()
+    assert m._save_package_after_job({"result_path": str(tmp_path / "nope.json")}) is None
